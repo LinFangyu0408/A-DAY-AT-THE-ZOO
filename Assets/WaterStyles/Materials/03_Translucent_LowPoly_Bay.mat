@@ -1,0 +1,54 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 03_Translucent_LowPoly_Bay
+  m_Shader: {fileID: 4800000, guid: db085620fb017b943835f04437afa9a8, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 1
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Ints: []
+    m_Floats:
+    - _DepthFade: 13.1
+    - _FacetStrength: 1
+    - _FoamDepth: 0.28
+    - _FoamScale: 1.9
+    - _FoamStrength: 0.38
+    - _NormalStrength: 0.18
+    - _Opacity: 0.656
+    - _ReflectionStrength: 0.32
+    - _SparkleScale: 0.52
+    - _SparkleSpeed: 0.72
+    - _SparkleStrength: 0.22
+    - _SpecularPower: 120
+    - _SpecularStrength: 2.7
+    - _ToonLighting: 0
+    - _WaveAmplitude: 0.22
+    - _WaveFrequency: 2.6
+    - _WaveSpeed: 0.24
+    m_Colors:
+    - _DeepColor: {r: 0.5473477, g: 0.8130317, b: 0.8490566, a: 1}
+    - _FlowDirection: {r: 1, g: 0.15, b: 0, a: 0}
+    - _FoamColor: {r: 0.92, g: 1, b: 1, a: 1}
+    - _ShallowColor: {r: 0.6913887, g: 0.9685534, b: 0.8513436, a: 1}
+    - _SkyColor: {r: 0.24807163, g: 0.6981132, b: 0.44656956, a: 1}
+    - _SparkleColor: {r: 1, g: 1, b: 1, a: 1}
+    - _SpecularColor: {r: 1, g: 1, b: 1, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

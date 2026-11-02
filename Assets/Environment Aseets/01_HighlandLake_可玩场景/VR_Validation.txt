@@ -1,0 +1,23 @@
+Highland Lake VR validation
+Scene: Assets/Environment Aseets/01_HighlandLake_可玩场景/Scenes/HighlandLake.unity
+Desktop player: True
+Desktop CharacterController: True
+Desktop controller script: True
+Meta XR player: True
+OVR Camera Rig: True
+FirstPersonLocomotor: True
+MovingSetting: True
+Meta movement mode: Teleport
+Dreamcore locomotion: True
+Dreamcore move speed: 1.20 m/s
+Dreamcore snap turn: 30 degrees
+Dreamcore teleport launch: 7.00
+Flat meadow height: 0.000 m
+Lake water height: -0.180 m
+Lake floor height: -1.250 m
+Animated wind grass: True
+Terrain teleport surface: False
+Water teleport blocker: True
+Active AudioListeners: 1
+Locomotor Player Origin: True
+Locomotor Player Eyes: True

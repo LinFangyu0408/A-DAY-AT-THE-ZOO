@@ -1,0 +1,5 @@
+Animated low-poly grass: 8000 tufts, 35995 blades
+Styled materials: 0
+Renderers in scene: 723
+Camera: 0, 23.5, -42
+Style: flat meadow, recessed opaque deep-blue lake, low-poly wind grass
