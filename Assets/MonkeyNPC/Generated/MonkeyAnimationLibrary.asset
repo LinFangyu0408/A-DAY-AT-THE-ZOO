@@ -19,6 +19,12 @@ MonoBehaviour:
   - action: 1
     clip: {fileID: 7400000, guid: ba2fc2538562de8418f13ed75fa043ba, type: 2}
     source: Assets/Suriyun/Animations/Pspsps Animations/Character Animations/Anim_Chibi@Sit.fbx
+  - action: 2
+    clip: {fileID: 7400000, guid: 945dcd64736b7534c893a82b9efb6821, type: 2}
+    source: Assets/MonkeyNPC/Animations/Mixamo/Hungry.fbx
+  - action: 3
+    clip: {fileID: 7400000, guid: 603b0802bb977ee4ba046aae497e0bf9, type: 2}
+    source: Assets/MonkeyNPC/Animations/Mixamo/Eating.fbx
   - action: 4
     clip: {fileID: 7400000, guid: 871798be602b0654c98dcaff085f662a, type: 2}
     source: Assets/Suriyun/Animations/Pspsps Animations/Character Animations/Anim_Chibi@Victory.fbx
@@ -28,6 +34,9 @@ MonoBehaviour:
   - action: 6
     clip: {fileID: 7400000, guid: 4a60fddea20e6bc42915a8ddf56f7134, type: 2}
     source: Assets/Suriyun/Animations/Pspsps Animations/Character Animations/Anim_Chibi@Run.fbx
+  - action: 7
+    clip: {fileID: 7400000, guid: 51b515e07cc5ad44584590f7b4e164e7, type: 2}
+    source: Assets/MonkeyNPC/Animations/Mixamo/Scratching.fbx
   - action: 8
     clip: {fileID: 7400000, guid: 798ca1dab647c6e40afd2570ee67b582, type: 2}
     source: Assets/Suriyun/Animations/Pspsps Animations/Character Animations/Anim_Chibi@Hi.fbx

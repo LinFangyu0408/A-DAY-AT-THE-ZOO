@@ -18,20 +18,20 @@ Unity 项目的版本配置保持为 `6000.3.23f1`。功能分支：`feat/monkey
 
 ## 接入 Mixamo
 
-公开分支附带可直接预览的 6 个已有动作。另 3 个动作由项目成员登录 [Mixamo](https://www.mixamo.com/) 下载到本地。Adobe 允许项目组内共享这些素材，并限制公开分发源文件。参见 [Adobe 的 Mixamo 素材分发说明](https://community.adobe.com/questions-696/mixamo-faq-licensing-royalties-ownership-eula-and-tos-589400)。
+组内版本包含全部 9 个动作、生成后的控制器和猴子 Prefab。拉取分支并等待 Unity 导入后即可预览。三段 Mixamo 源文件供项目组成员协作使用。参见 [Adobe 的 Mixamo 素材分发说明](https://community.adobe.com/questions-696/mixamo-faq-licensing-royalties-ownership-eula-and-tos-589400)。
 
 - `Assets/MonkeyNPC/Animations/Mixamo/Hungry.fbx`
 - `Assets/MonkeyNPC/Animations/Mixamo/Eating.fbx`
 - `Assets/MonkeyNPC/Animations/Mixamo/Scratching.fbx`
 
-下载时选择 30 FPS。Unity 导入面板的 Animation 页签中，将 Hungry 裁取到第 8–35 帧，将 Eating 裁取到第 10–92 帧，Scratching 使用整段。应用设置后运行 `Tools > Monkey NPC > Build Complete Library`。生成的完整控制器、Prefab 和动作库用于本地或组内协作。更新公开分支前，在不含 Mixamo FBX 的工作副本运行 `Preview Available Animations`，确保控制器和库只引用可公开的动作。
+源文件以 30 FPS 导出。Hungry 的第 8–35 帧和 Eating 的第 10–92 帧已在 FBX 导入设置中裁好，Scratching 使用整段。修改动作后可运行 `Tools > Monkey NPC > Build Complete Library` 重新生成。
 
 生成器为每个 Mixamo 骨骼创建自己的 Humanoid Avatar，再重定向到猴子的 Avatar。生成的猴子 Prefab 使用 Suriyun 棕色 `01` 外观。`MonkeyHandContact` 根据猴子手臂长度修正捂肚子和进食时的手部落点。`MonkeyFace` 根据当前动作切换原包面部材质，包括待机眨眼、饥饿、咀嚼、开心、困惑和打招呼。
 
 ## 在 Unity 中生成和预览
 
 1. 等待资源导入、C# 编译完成。
-2. 运行 `Tools > Monkey NPC > Preview Available Animations`。准备好组内 Mixamo 文件后，可运行 `Build Complete Library`。
+2. 使用已提交的 Prefab，或运行 `Tools > Monkey NPC > Build Complete Library` 重新生成。
 3. 在 `Generated` 目录中查看动作 `.anim`、`MonkeyNPC.controller`、动作库 `.asset` 和猴子 Prefab 变体。
 4. 运行 `Tools > Monkey NPC > Create Demo Scene`，进入 Play Mode，逐项检查动作按钮及喂食流程。
 5. 在主场景选中猴子，运行 `Tools > Monkey NPC > Apply Library to Selected Monkeys`，检查后保存场景。此操作支持 Undo。
