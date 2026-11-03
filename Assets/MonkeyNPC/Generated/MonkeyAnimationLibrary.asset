@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 84ce77c438444078bf23dd20157658ab, type: 3}
+  m_Name: MonkeyAnimationLibrary
+  m_EditorClassIdentifier: 
+  entries:
+  - action: 0
+    clip: {fileID: 7400000, guid: 10f71a7787f13da4aa230e4480ad45a4, type: 2}
+    source: Assets/Suriyun/Animations/Pspsps Animations/Character Animations/Anim_Chibi@IdleA.fbx
+  - action: 1
+    clip: {fileID: 7400000, guid: ba2fc2538562de8418f13ed75fa043ba, type: 2}
+    source: Assets/Suriyun/Animations/Pspsps Animations/Character Animations/Anim_Chibi@Sit.fbx
+  - action: 4
+    clip: {fileID: 7400000, guid: 871798be602b0654c98dcaff085f662a, type: 2}
+    source: Assets/Suriyun/Animations/Pspsps Animations/Character Animations/Anim_Chibi@Victory.fbx
+  - action: 5
+    clip: {fileID: 7400000, guid: a1b0a4fcc2f9e334a94e4f624e1d8786, type: 2}
+    source: Assets/Suriyun/Animations/Pspsps Animations/Character Animations/Anim_Chibi@Walk.fbx
+  - action: 6
+    clip: {fileID: 7400000, guid: 4a60fddea20e6bc42915a8ddf56f7134, type: 2}
+    source: Assets/Suriyun/Animations/Pspsps Animations/Character Animations/Anim_Chibi@Run.fbx
+  - action: 8
+    clip: {fileID: 7400000, guid: 798ca1dab647c6e40afd2570ee67b582, type: 2}
+    source: Assets/Suriyun/Animations/Pspsps Animations/Character Animations/Anim_Chibi@Hi.fbx
