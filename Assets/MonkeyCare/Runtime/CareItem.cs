@@ -15,9 +15,13 @@ namespace ADayAtTheZoo.Monkeys.Care
         [InspectorName("虚影高度（米）")] public float ghostHeight = .23f;
         [InspectorName("虚影晃动幅度（米）")] public float ghostAmplitude = .04f;
         [InspectorName("虚影晃动速度")] public float ghostSpeed = 3;
+        [InspectorName("手套模式")] public bool gloveMode;
+        [InspectorName("未命中返回（秒）"), Min(.1f)] public float missedThrowSeconds = 2.5f;
+        [InspectorName("默认投掷速度（米/秒）"), Min(.1f)] public float throwSpeed = 9;
         public bool Held { get; private set; }
         public bool Available { get; private set; } = true;
         public bool Caring { get; private set; }
+        public bool Thrown { get; private set; }
         public MonkeyCareNpc Target { get; private set; }
         Vector3 homePosition, homeScale;
         Quaternion homeRotation;
@@ -38,16 +42,28 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
         public bool Grab(Transform hand)
         {
-            if (!Available || Held || !hand) return false;
+            if (gloveMode || !Available || Held || !hand) return false;
+            return Equip(hand);
+        }
+        public bool EquipFromGlove(Transform hand)
+        {
+            if (!gloveMode || !Available || Held || !hand) return false;
+            return Equip(hand);
+        }
+        bool Equip(Transform hand)
+        {
             returnAt = float.PositiveInfinity;
             Held = true;
+            Thrown = false;
             if (!body.isKinematic) { body.linearVelocity = Vector3.zero; body.angularVelocity = Vector3.zero; }
             body.isKinematic = true;
+            SetVisible(true, true);
             transform.SetParent(hand, true); transform.localPosition = gripPosition; transform.localEulerAngles = gripRotation;
             // Keep authored world scale when attaching to differently scaled rigs.
             Vector3 handScale = hand.lossyScale;
             transform.localScale = new Vector3(homeScale.x / handScale.x, homeScale.y / handScale.y, homeScale.z / handScale.z) * heldScale;
-            touching.Clear(); stroke.Reset(); BuildGhost();
+            touching.Clear(); stroke.Reset();
+            if (!gloveMode) BuildGhost();
             MonkeyCareSession.Instance?.audioFeedback.Grab(hand, kind);
             return true;
         }
@@ -55,37 +71,80 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             if (!Held) return;
             Held = false; Caring = false; Target = null;
+            if (gloveMode) { RestoreSupply(); return; }
             transform.SetParent(homeParent, true); transform.localScale = homeScale;
             body.isKinematic = false; stroke.Reset(); previousScratchTarget = null;
             if (kind == CareNeed.Itch) returnAt = Time.time + respawnSeconds;
             if (ghost) Destroy(ghost);
         }
+        public void ThrowAt(MonkeyCareNpc target)
+        {
+            if (!Held) return;
+            Vector3 destination = target ? TargetPoint(target) : transform.position + transform.forward * 5;
+            Vector3 origin = transform.position;
+            Throw(BallisticVelocity(origin, destination, throwSpeed));
+        }
+        public static Vector3 BallisticVelocity(Vector3 origin, Vector3 destination, float speed)
+        {
+            float flight = Mathf.Clamp(Vector3.Distance(origin, destination) / Mathf.Max(4f, speed), .25f, .7f);
+            return (destination - origin) / flight - Physics.gravity * (.5f * flight);
+        }
+        public void Throw(Vector3 velocity)
+        {
+            if (!Held) return;
+            Held = false; Caring = false; Target = null;
+            transform.SetParent(homeParent, true); transform.localScale = homeScale;
+            transform.position += velocity.normalized * .08f;
+            body.isKinematic = false;
+            body.useGravity = true;
+            body.linearVelocity = velocity;
+            body.angularVelocity = UnityEngine.Random.onUnitSphere * 7f;
+            Thrown = true;
+            returnAt = Time.time + missedThrowSeconds;
+            if (ghost) Destroy(ghost);
+            if (kind == CareNeed.Hunger) MonkeyCareSession.Instance?.ConsumeThrownBanana();
+            MonkeyCareSession.Instance?.StopHaptics();
+        }
         public void Consume()
         {
             if (!Available) return;
             Available = false; Held = false; Caring = false; Target = null;
+            Thrown = false;
             transform.SetParent(homeParent, true); body.isKinematic = true; touching.Clear(); stroke.Reset();
             if (ghost) Destroy(ghost);
-            foreach (var r in renderers) r.enabled = false;
-            foreach (var c in colliders) c.enabled = false;
+            SetVisible(false, false);
             returnAt = Time.time + respawnSeconds;
             MonkeyCareSession.Instance?.StopHaptics();
         }
         public void RestoreSupply()
         {
-            if (Held) Release();
+            if (Held) { Held = false; Caring = false; Target = null; }
             returnAt = float.PositiveInfinity;
             Available = true; Caring = false; Target = null;
+            Thrown = false;
             transform.SetParent(homeParent, true); transform.SetPositionAndRotation(homePosition, homeRotation); transform.localScale = homeScale;
             body.isKinematic = true;
-            foreach (var r in renderers) r.enabled = true;
-            foreach (var c in colliders) c.enabled = true;
+            body.linearVelocity = Vector3.zero; body.angularVelocity = Vector3.zero;
+            SetVisible(!gloveMode, !gloveMode);
             touching.Clear(); stroke.Reset();
+        }
+        public void EnterGloveSupply(Transform supplyRoot, Vector3 hiddenPosition)
+        {
+            gloveMode = true;
+            homeParent = supplyRoot;
+            homePosition = hiddenPosition;
+            homeRotation = supplyRoot ? supplyRoot.rotation : Quaternion.identity;
+            RestoreSupply();
         }
         void Update()
         {
+            if (Thrown && Time.time >= returnAt)
+            {
+                RestoreSupply();
+                return;
+            }
             if (!Held && (Time.time >= returnAt ||
-                (Available && (transform.position.y < -.4f || Vector3.Distance(transform.position, homePosition) > 45))))
+                (!gloveMode && Available && (transform.position.y < -.4f || Vector3.Distance(transform.position, homePosition) > 45))))
             {
                 RestoreSupply();
                 return;
@@ -96,7 +155,14 @@ namespace ADayAtTheZoo.Monkeys.Care
             var session = MonkeyCareSession.Instance;
             if (!Target && Held && kind == CareNeed.Hunger && session && session.RayNpc && session.RayNpc.Accepts(kind)) Target = session.RayNpc;
             Caring = Target && Target.Accepts(kind) && (kind == CareNeed.Hunger || Held);
-            if (Caring && kind == CareNeed.Hunger) Target.OfferFood(this);
+            if (Caring && kind == CareNeed.Hunger)
+            {
+                if (!Held && Thrown)
+                {
+                    CatchAtTarget();
+                    Target.OfferFood(this);
+                }
+            }
             else if (Caring && kind == CareNeed.Itch)
             {
                 if (previousScratchTarget != Target) stroke.Reset();
@@ -121,6 +187,15 @@ namespace ADayAtTheZoo.Monkeys.Care
                 ghost.transform.rotation = transform.rotation;
             }
         }
+        void CatchAtTarget()
+        {
+            // Keep the thrown state active while the monkey eats so each frame can
+            // continue advancing satisfaction until Consume() clears the banana.
+            returnAt = float.PositiveInfinity;
+            body.linearVelocity = Vector3.zero; body.angularVelocity = Vector3.zero; body.isKinematic = true;
+            transform.position = TargetPoint(Target);
+            transform.rotation = Quaternion.LookRotation(Target.transform.forward, Vector3.up);
+        }
         MonkeyCareNpc ContactTarget()
         {
             touching.RemoveWhere(c => !c || !c.enabled || !c.gameObject.activeInHierarchy || !AcceptContact(c));
@@ -138,6 +213,21 @@ namespace ADayAtTheZoo.Monkeys.Care
         void OnTriggerEnter(Collider other) { if (AcceptContact(other)) touching.Add(other); }
         void OnTriggerStay(Collider other) { if (AcceptContact(other)) touching.Add(other); }
         void OnTriggerExit(Collider other) { touching.Remove(other); }
+        void OnCollisionEnter(Collision collision)
+        {
+            if (collision.collider && AcceptContact(collision.collider)) touching.Add(collision.collider);
+        }
+        static Vector3 TargetPoint(MonkeyCareNpc npc)
+        {
+            var contact = npc.transform.Find("Care Contact");
+            var collider = contact ? contact.GetComponent<Collider>() : null;
+            return collider ? collider.bounds.center : npc.transform.position + Vector3.up * .8f;
+        }
+        void SetVisible(bool visible, bool collide)
+        {
+            foreach (var r in renderers) if (r) r.enabled = visible;
+            foreach (var c in colliders) if (c) c.enabled = collide;
+        }
         void BuildGhost()
         {
             if (ghost) Destroy(ghost);

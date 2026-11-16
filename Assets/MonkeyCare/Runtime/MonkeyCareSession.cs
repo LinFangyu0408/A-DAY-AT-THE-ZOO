@@ -22,6 +22,11 @@ namespace ADayAtTheZoo.Monkeys.Care
         public Sprite readyGo;
         [InspectorName("开场显示时间（秒）"), Min(.1f)] public float readySeconds = 3;
         public CareEffect readyEffect = new() { duration = 2, position = new Vector3(0, -.35f, 1.8f), scale = Vector3.one * .12f };
+        [Header("当前玩法")]
+        [InspectorName("只喂香蕉")] public bool feedingOnly = true;
+        [InspectorName("显示新手导览")] public bool showTutorial = true;
+        [InspectorName("新手练习猴子")] public int tutorialMonkeyIndex = 2;
+        [InspectorName("空手投掷速度（米/秒）"), Min(.1f)] public float throwSpeed = 9;
         [Header("射线与反馈")]
         [InspectorName("射线距离（米）"), Min(1)] public float rayDistance = 30;
         [InspectorName("直线宽度（米）"), Min(.001f)] public float lineWidth = .006f;
@@ -48,18 +53,32 @@ namespace ADayAtTheZoo.Monkeys.Care
 #if UNITY_EDITOR
                 if (recordingHand) return recordingHand;
 #endif
-                return rig && rig.gameObject.activeInHierarchy && rig.rightControllerAnchor
-                    ? rig.rightControllerAnchor : playerCamera ? playerCamera.transform : null;
+                bool tracked = OVRInput.IsControllerConnected(OVRInput.Controller.RTouch) ||
+                               InputDevices.GetDeviceAtXRNode(XRNode.RightHand).isValid;
+                return tracked && rig && rig.gameObject.activeInHierarchy && rig.rightControllerAnchor
+                    ? rig.rightControllerAnchor : DesktopRightHand();
             }
         }
 #if UNITY_EDITOR
         internal Transform recordingHand;
-        internal bool recordingTrigger, recordingGrip;
+        internal bool recordingTrigger, recordingGrip, recordingA, recordingB;
+        bool previousRecordingTrigger, previousRecordingA, previousRecordingB;
 #endif
         public MonkeyCareNpc RayNpc { get; private set; }
         public CareItem HeldItem => held;
         public bool Begun => begun;
+        public bool TutorialActive { get; private set; }
+        public MonkeyCareNpc TutorialMonkey =>
+            monkeys != null && monkeys.Length > 0
+                ? monkeys[Mathf.Clamp(tutorialMonkeyIndex, 0, monkeys.Length - 1)]
+                : null;
+        public bool TutorialHungerSatisfied => TutorialMonkey && TutorialMonkey.TutorialSatisfied;
+        public bool RoundStarted { get; private set; }
+        public CareInputSnapshot Input { get; private set; }
+        public CareGloveInventory GloveInventory { get; private set; }
         Camera playerCamera;
+        DesktopPlayerController desktopController;
+        Transform desktopRightHand;
         CareItem held;
         CareTeleportPoint highlighted;
         LineRenderer pointer, arc;
@@ -69,7 +88,9 @@ namespace ADayAtTheZoo.Monkeys.Care
         readonly List<CareTaskRecord> records = new();
         Vector3 rigStartPosition;
         Quaternion rigStartRotation;
-        bool begun, focused = true, previousTrigger, previousGrip, arcAiming, arcValid, supplyEnabled, suppressUntilRelease;
+        bool begun, focused = true, arcAiming, arcValid, supplyEnabled, suppressUntilRelease;
+        Vector3 lastThrowVelocity;
+        bool hasThrowSolution;
         Vector3 landing;
         float gameTime;
         readonly Vector3[] arcPoints = new Vector3[40];
@@ -85,18 +106,123 @@ namespace ADayAtTheZoo.Monkeys.Care
             // A frame after the game camera becomes available also works with Scene view focused.
             yield return null;
             if (!trackingSpace) trackingSpace = rig ? rig.trackingSpace : transform;
+            desktopController = Object.FindFirstObjectByType<DesktopPlayerController>(FindObjectsInactive.Include);
+            DesktopRightHand();
             pointer = MakeLine("Care Straight Ray"); arc = MakeLine("Care Teleport Arc");
             if (locomotion) locomotion.externalRightHandControl = true;
             begun = true;
-            Round = new CareRound(monkeys.Select(n => n.firstNeed).ToArray());
+            Round = new CareRound(MonkeyStartingNeeds(), feedingOnly);
             rigStartPosition = rig.transform.position; rigStartRotation = rig.transform.rotation;
+            SetupFeedingOnlyScene();
             roundView = new CareRoundView(playerCamera, roundArtwork);
-            readyCanvas = CareUi.Canvas("Care READY GO", playerCamera.transform, new Vector3(0, 0, 1.8f), 1.0f, new Vector2(800, 470));
-            CareUi.Image("READY GO", readyCanvas, readyGo, new Vector2(800, 470), Vector2.zero);
-            CareReadyView.Decorate(readyCanvas, roundArtwork.star, readySeconds);
+            GloveInventory = new CareGloveInventory(this, playerCamera);
+            // The guided first run starts immediately. Keep the Ready/Go flourish only for unguided rounds.
+            if (!showTutorial)
+            {
+                readyCanvas = CareUi.Canvas("Care READY GO", playerCamera.transform,
+                    new Vector3(0, 0, 1.8f), 1.0f, new Vector2(800, 470));
+                CareUi.Image("READY GO", readyCanvas, readyGo, new Vector2(800, 470), Vector2.zero);
+                CareReadyView.Decorate(readyCanvas, roundArtwork.star, readySeconds);
+            }
             audioFeedback.FollowCamera(playerCamera);
             audioFeedback.StartMusic(transform);
-            foreach (var npc in monkeys) if (npc) npc.BeginSession();
+            TutorialActive = showTutorial;
+            if (showTutorial)
+                gameObject.AddComponent<CareTutorial>().Begin(this, playerCamera, Time.unscaledTime);
+            else
+            {
+                RoundStarted = true;
+                foreach (var npc in monkeys) if (npc) npc.BeginSession();
+            }
+        }
+        CareNeed[] MonkeyStartingNeeds()
+        {
+            if (monkeys == null) return new[] { CareNeed.Hunger, CareNeed.Hunger, CareNeed.Hunger };
+            return monkeys.Select(npc => feedingOnly || !npc ? CareNeed.Hunger : npc.firstNeed).ToArray();
+        }
+        void SetupFeedingOnlyScene()
+        {
+            if (!feedingOnly) return;
+            Vector3 hidden = transform.position + Vector3.down * 3f;
+            if (items != null)
+            {
+                foreach (var item in items)
+                {
+                    if (!item) continue;
+                    if (item.kind == CareNeed.Hunger)
+                    {
+                        item.throwSpeed = throwSpeed;
+                        item.EnterGloveSupply(transform, hidden);
+                    }
+                    else item.gameObject.SetActive(false);
+                }
+            }
+            HideSupplyToolbox("banana box");
+            HideSupplyToolbox("Sractch");
+            roundArtwork.bananaAnchor = playerCamera.transform;
+            roundArtwork.bananaOffset = new Vector3(.43f, .37f, 1.35f);
+            roundArtwork.bananaWidth = .32f;
+        }
+        static void HideSupplyToolbox(string objectName)
+        {
+            foreach (var root in Object.FindObjectsByType<Transform>(
+                         FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (root.name != objectName) continue;
+                foreach (var renderer in root.GetComponentsInChildren<Renderer>(true)) renderer.enabled = false;
+                foreach (var collider in root.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
+            }
+        }
+        public void FinishTutorial()
+        {
+            if (RoundStarted) return;
+            TutorialActive = false;
+            RoundStarted = true;
+            gameTime = 0;
+            supplyEnabled = true;
+            if (readyCanvas) Destroy(readyCanvas.gameObject);
+            if (readyFx) Destroy(readyFx);
+            GloveInventory?.Close();
+            roundView.ShowHud();
+            foreach (var npc in monkeys)
+            {
+                if (!npc) continue;
+                npc.EndGuidedTutorial();
+                npc.BeginSession();
+            }
+        }
+        public void BeginTutorialHunger()
+        {
+            if (!TutorialActive || RoundStarted) return;
+            TutorialMonkey?.BeginGuidedTutorial(CareNeed.Hunger);
+        }
+        public void SetGloveMenuOpen(bool open)
+        {
+            if (locomotion) locomotion.inputLocked = open;
+            if (desktopController) desktopController.inputLocked = open;
+        }
+        public bool EquipBananaFromGlove()
+        {
+            if (!Playing || Round.Frozen || Round.Bananas <= 0 || held || items == null) return false;
+            CareItem banana = items.FirstOrDefault(item => item && item.kind == CareNeed.Hunger && item.Available);
+            if (!banana || !banana.EquipFromGlove(RightHand)) return false;
+            held = banana;
+            hasThrowSolution = false;
+            arcAiming = arcValid = false;
+            return true;
+        }
+        public bool ConsumeThrownBanana() => Round != null && Round.ConsumeBanana();
+        Transform DesktopRightHand()
+        {
+            if (!playerCamera) return null;
+            if (!desktopRightHand)
+            {
+                desktopRightHand = new GameObject("Care Desktop Right Hand").transform;
+                desktopRightHand.SetParent(playerCamera.transform, false);
+                desktopRightHand.localPosition = new Vector3(.34f, -.24f, .52f);
+                desktopRightHand.localRotation = Quaternion.Euler(4f, -3f, -3f);
+            }
+            return desktopRightHand;
         }
         LineRenderer MakeLine(string name)
         {
@@ -122,100 +248,135 @@ namespace ADayAtTheZoo.Monkeys.Care
                 StopHaptics(); return;
             }
             gameTime = Mathf.Min(CareRound.Duration, gameTime + Time.deltaTime);
+            Input = ReadSessionInput();
             if (!supplyEnabled && gameTime >= readySeconds)
             {
                 supplyEnabled = true; if (readyCanvas) Destroy(readyCanvas.gameObject); if (readyFx) Destroy(readyFx);
-                roundView.ShowHud();
+                if (RoundStarted) roundView.ShowHud();
             }
+            GloveInventory?.Tick(Input, Round, !Round.Frozen && gameTime >= .1f);
             Transform hand = RightHand; if (!hand) return;
-            ReadInput(out bool trigger, out bool grip);
             if (suppressUntilRelease)
             {
-                if (trigger || grip) { previousTrigger = trigger; previousGrip = grip; return; }
+                if (Input.TriggerHeld || Input.GripHeld) return;
                 suppressUntilRelease = false;
             }
-            bool triggerDown = trigger && !previousTrigger;
-            previousTrigger = trigger; previousGrip = grip;
             if (held && (!held.Available || !held.Held)) { held = null; StopHaptics(); }
-            bool justReleased = held && !grip;
-            if (justReleased) { held.Release(); held = null; StopHaptics(); }
+            bool menuOpen = GloveInventory != null && GloveInventory.IsOpen;
 
-            RaycastHit? hit = Cast(hand.position, hand.forward, rayDistance, true);
-            RayNpc = hit.HasValue ? hit.Value.collider.GetComponentInParent<MonkeyCareNpc>() : null;
+            RaycastHit? hit;
+            Vector3 throwVelocity = Vector3.zero;
+            int throwPointCount = 0;
+            bool hasThrowArc = held && !menuOpen && Input.TriggerHeld;
+            if (hasThrowArc)
+            {
+                Vector3 destination = ThrowAimPoint(hand);
+                throwVelocity = hand == desktopRightHand
+                    ? CareItem.BallisticVelocity(hand.position, destination, throwSpeed)
+                    : hand.forward * throwSpeed;
+                throwPointCount = TraceThrowArc(hand, throwVelocity, out hit, out MonkeyCareNpc trajectoryNpc);
+                RayNpc = trajectoryNpc;
+                lastThrowVelocity = throwVelocity;
+                hasThrowSolution = true;
+            }
+            else
+            {
+                hit = Cast(hand.position, hand.forward, rayDistance, true);
+                RayNpc = hit.HasValue ? hit.Value.collider.GetComponentInParent<MonkeyCareNpc>() : null;
+            }
             var itemTarget = hit.HasValue ? hit.Value.collider.GetComponentInParent<CareItem>() : null;
             var point = hit.HasValue ? hit.Value.collider.GetComponent<CareTeleportPoint>() : null;
             var resultButton = hit.HasValue ? hit.Value.collider.GetComponent<CareResultButton>() : null;
             if (highlighted && highlighted != point) highlighted.Highlight(false);
             highlighted = point; if (highlighted) highlighted.Highlight(true);
 
-            if (resultButton && triggerDown)
+            if (!menuOpen && held && Input.TriggerReleased)
+            {
+                held.Throw(hasThrowSolution ? lastThrowVelocity : hand.forward * throwSpeed);
+                held = null;
+                hasThrowSolution = false;
+                pointer.enabled = false;
+                StopHaptics();
+            }
+
+            if (!menuOpen && resultButton && Input.TriggerPressed)
             {
                 resultButton.Activate(); arcAiming = false; arcValid = false;
             }
-            else if (point && triggerDown && locomotion)
+            else if (!menuOpen && point && Input.TriggerPressed && !held && locomotion)
             {
                 if (locomotion.TryTeleport(point.Landing)) foreach (var item in items) item.ResetStroke();
                 arcAiming = false; arcValid = false;
             }
-            else if (!Round.Frozen && !held && !justReleased && itemTarget && trigger && grip)
+            else if (!feedingOnly && !menuOpen && !Round.Frozen && !held && itemTarget && Input.TriggerHeld && Input.GripHeld)
             {
                 if (itemTarget.Grab(hand)) held = itemTarget;
                 arcAiming = false; arcValid = false;
             }
 
-            bool groundAim = !held && !justReleased && !itemTarget && !point && trigger && grip && hit.HasValue && hit.Value.normal.y >= .45f;
+            bool groundAim = !menuOpen && !held && !itemTarget && !point && Input.TriggerHeld && Input.GripHeld &&
+                hit.HasValue && hit.Value.normal.y >= .45f;
             if (groundAim)
             {
                 arcAiming = true; BuildArc(hand);
             }
             else
             {
-                if (arcAiming && (!trigger || !grip) && arcValid && locomotion) locomotion.TryTeleport(landing);
+                if (arcAiming && (!Input.TriggerHeld || !Input.GripHeld) && arcValid && locomotion) locomotion.TryTeleport(landing);
                 arcAiming = false; arcValid = false; arc.enabled = false;
             }
-            pointer.enabled = !arcAiming;
-            pointer.SetPosition(0, hand.position);
-            pointer.SetPosition(1, hit.HasValue ? hit.Value.point : hand.position + hand.forward * rayDistance);
-            pointer.startColor = pointer.endColor = point || itemTarget || RayNpc ? new Color(.3f, 1f, .8f) : new Color(.7f, .9f, 1, .65f);
+            pointer.enabled = !arcAiming && !menuOpen && (held != null || point || itemTarget || RayNpc);
+            if (hasThrowArc)
+            {
+                pointer.positionCount = throwPointCount;
+                for (int i = 0; i < throwPointCount; i++) pointer.SetPosition(i, arcPoints[i]);
+            }
+            else
+            {
+                pointer.positionCount = 2;
+                pointer.SetPosition(0, hand.position);
+                pointer.SetPosition(1, hit.HasValue ? hit.Value.point : hand.position + hand.forward * rayDistance);
+            }
+            bool validTarget = held && RayNpc && RayNpc.Accepts(CareNeed.Hunger);
+            pointer.startColor = pointer.endColor = validTarget ? new Color(1f, .63f, .18f, 1) :
+                point || itemTarget || RayNpc ? new Color(.3f, 1f, .8f) : new Color(.7f, .9f, 1, .65f);
         }
         void LateUpdate()
         {
             // All NPC Update calls have settled the final clipped frame before freezing.
-            if (begun && !Round.Frozen && gameTime >= CareRound.Cutoff)
+            if (RoundStarted && begun && !Round.Frozen && gameTime >= CareRound.Cutoff)
             {
                 Round.Freeze();
                 foreach (var npc in monkeys) npc.StopAtCutoff();
                 if (held) held.Release(); held = null; StopHaptics();
                 roundView.ShowResults(); SaveRoundRecord();
             }
-            if (begun && roundView != null) roundView.Update(Round, gameTime);
+            if (RoundStarted && begun && roundView != null) roundView.Update(Round, gameTime);
             audioFeedback.UpdateMusic(Round.Frozen);
-            if (Playing && held && held.Held && !held.Caring) SetHaptics(hapticAmplitude);
+            bool foodAimed = held && held.Held && Input.TriggerHeld &&
+                             RayNpc && RayNpc.Accepts(CareNeed.Hunger);
+            if (Playing && foodAimed && (GloveInventory == null || !GloveInventory.IsOpen)) SetHaptics(hapticAmplitude);
             else StopHaptics();
         }
-        void ReadInput(out bool trigger, out bool grip)
+        CareInputSnapshot ReadSessionInput()
         {
 #if UNITY_EDITOR
             if (recordingHand)
             {
-                trigger = recordingTrigger;
-                grip = recordingGrip;
-                return;
+                var result = new CareInputSnapshot(
+                    recordingA && !previousRecordingA,
+                    recordingB && !previousRecordingB,
+                    recordingTrigger,
+                    recordingTrigger && !previousRecordingTrigger,
+                    !recordingTrigger && previousRecordingTrigger,
+                    recordingGrip, Vector2.zero, Vector2.zero);
+                previousRecordingTrigger = recordingTrigger;
+                previousRecordingA = recordingA;
+                previousRecordingB = recordingB;
+                return result;
             }
 #endif
-            trigger = OVRInput.Get(OVRInput.Axis1D.PrimaryIndexTrigger, OVRInput.Controller.RTouch) > .55f;
-            grip = OVRInput.Get(OVRInput.Axis1D.PrimaryHandTrigger, OVRInput.Controller.RTouch) > .55f;
-            var device = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
-            if (device.isValid)
-            {
-                if (device.TryGetFeatureValue(CommonUsages.triggerButton, out bool t)) trigger |= t;
-                if (device.TryGetFeatureValue(CommonUsages.gripButton, out bool g)) grip |= g;
-            }
-            if (desktopPreview && !device.isValid && !OVRInput.IsControllerConnected(OVRInput.Controller.RTouch))
-            {
-                trigger |= Mouse.current != null && Mouse.current.leftButton.isPressed;
-                grip |= Mouse.current != null && Mouse.current.rightButton.isPressed;
-            }
+            return CareInput.Read(desktopPreview);
         }
         RaycastHit? Cast(Vector3 origin, Vector3 direction, float distance, bool includeTriggers)
         {
@@ -231,6 +392,37 @@ namespace ADayAtTheZoo.Monkeys.Care
                 if (!nearest.HasValue || hit.distance < nearest.Value.distance) nearest = hit;
             }
             return nearest;
+        }
+        Vector3 ThrowAimPoint(Transform hand)
+        {
+            if (hand != desktopRightHand)
+                return hand.position + hand.forward * Mathf.Max(3f, rayDistance * .5f);
+            var aimHit = Cast(playerCamera.transform.position, playerCamera.transform.forward, rayDistance, true);
+            return aimHit.HasValue
+                ? aimHit.Value.point
+                : playerCamera.transform.position + playerCamera.transform.forward * Mathf.Max(8f, rayDistance * .5f);
+        }
+        int TraceThrowArc(Transform hand, Vector3 velocity, out RaycastHit? impact, out MonkeyCareNpc npc)
+        {
+            int count = 1;
+            impact = null;
+            npc = null;
+            arcPoints[0] = hand.position;
+            for (int i = 1; i < arcPoints.Length; i++)
+            {
+                float t = i * .065f;
+                Vector3 next = hand.position + velocity * t + Physics.gravity * (.5f * t * t);
+                Vector3 segment = next - arcPoints[i - 1];
+                if (segment.sqrMagnitude < .000001f) break;
+                var hit = Cast(arcPoints[i - 1], segment.normalized, segment.magnitude, true);
+                arcPoints[i] = hit.HasValue ? hit.Value.point : next;
+                count++;
+                if (!hit.HasValue) continue;
+                impact = hit;
+                npc = hit.Value.collider.GetComponentInParent<MonkeyCareNpc>();
+                break;
+            }
+            return count;
         }
         void BuildArc(Transform hand)
         {
@@ -256,6 +448,12 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
         void SetHaptics(float amplitude)
         {
+            CareXboxInput.SetMotorSpeeds(amplitude * .3f, amplitude);
+            if (Gamepad.current != null)
+            {
+                Gamepad.current.SetMotorSpeeds(amplitude * .3f, amplitude);
+                return;
+            }
             if (OVRInput.IsControllerConnected(OVRInput.Controller.RTouch))
                 OVRInput.SetControllerVibration(hapticFrequency, amplitude, OVRInput.Controller.RTouch);
             else
@@ -266,6 +464,8 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
         public void StopHaptics()
         {
+            CareXboxInput.SetMotorSpeeds(0, 0);
+            Gamepad.current?.SetMotorSpeeds(0, 0);
             if (OVRInput.IsControllerConnected(OVRInput.Controller.RTouch)) OVRInput.SetControllerVibration(0, 0, OVRInput.Controller.RTouch);
             var device = InputDevices.GetDeviceAtXRNode(XRNode.RightHand); if (device.isValid) device.StopHaptics();
         }
@@ -285,20 +485,26 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             if (!Round.Frozen) return;
             StopHaptics(); if (held) held.Release(); held = null;
-            Round = new CareRound(monkeys.Select(n => n.firstNeed).ToArray()); records.Clear(); gameTime = 0; supplyEnabled = false;
+            Round = new CareRound(MonkeyStartingNeeds(), feedingOnly);
+            records.Clear(); gameTime = 0; supplyEnabled = false;
+            TutorialActive = false; RoundStarted = true;
             rig.transform.SetPositionAndRotation(rigStartPosition, rigStartRotation);
             roundView.Reset();
+            GloveInventory?.Reset(Round);
+            if (locomotion) locomotion.inputLocked = false;
+            if (desktopController) desktopController.inputLocked = false;
             foreach (var item in items) item.RestoreSupply();
             foreach (var npc in monkeys) npc.ResetForRound();
             readyCanvas = CareUi.Canvas("Care READY GO", playerCamera.transform, new Vector3(0, 0, 1.8f), 1, new Vector2(800, 470));
             CareUi.Image("READY GO", readyCanvas, readyGo, new Vector2(800, 470), Vector2.zero);
             CareReadyView.Decorate(readyCanvas, roundArtwork.star, readySeconds);
             suppressUntilRelease = true; arcAiming = false;
+            CareInput.ForgetEdges();
         }
         [System.Serializable]
         sealed class RoundReport
         {
-            public string version = "1.0";
+            public string version = "2.0-feeding-only";
             public int tasksCompleted, feedingsCompleted, scratchesCompleted, bananasRemaining, stars;
             public double score;
             public CareTaskRecord[] tasks;
@@ -322,6 +528,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (!value)
             {
                 if (held) held.Release(); held = null;
+                GloveInventory?.Close();
                 arcAiming = arcValid = false; suppressUntilRelease = true; StopHaptics();
                 if (highlighted) highlighted.Highlight(false);
             }
@@ -330,7 +537,10 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             audioFeedback.Stop();
             StopHaptics(); if (held) held.Release();
+            GloveInventory?.Close();
             if (locomotion) locomotion.externalRightHandControl = false;
+            if (locomotion) locomotion.inputLocked = false;
+            if (desktopController) desktopController.inputLocked = false;
             if (Instance == this) Instance = null;
         }
     }

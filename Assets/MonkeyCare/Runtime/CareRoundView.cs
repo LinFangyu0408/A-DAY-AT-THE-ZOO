@@ -23,12 +23,10 @@ namespace ADayAtTheZoo.Monkeys.Care
         readonly Image[] stars = new Image[3];
         readonly Text score, bananas, zeroGrade, clock, feedings, resolved, tasks, total, next;
         readonly CareResultButton[] buttons;
-        static Font font;
         public static Text Label(string name, Transform parent, string value, Vector2 size, Vector2 pos, int fontSize, TextAnchor align = TextAnchor.MiddleCenter)
         {
-            if (!font) font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             var r = CareUi.Rect(name, parent, size, pos); var t = r.gameObject.AddComponent<Text>();
-            t.font = font; t.fontSize = fontSize; t.fontStyle = FontStyle.Bold; t.color = new Color(.25f, .16f, .22f);
+            t.font = CareFont.Load(); t.fontSize = fontSize; t.fontStyle = FontStyle.Bold; t.color = new Color(.25f, .16f, .22f);
             t.alignment = align; t.raycastTarget = false; t.text = value; t.horizontalOverflow = HorizontalWrapMode.Overflow;
             return t;
         }
@@ -50,12 +48,12 @@ namespace ADayAtTheZoo.Monkeys.Care
 
             results = CareUi.Canvas("Care RESULTS", camera.transform, new Vector3(0, -.02f, 1.5f), .92f, new Vector2(1368, 2000));
             var panel = CareUi.Image("Results panel", results, art.resultsPanel, new Vector2(1368, 1800), new Vector2(0, 100)).rectTransform;
-            ReplaceLabel(panel, "Feedings Completed", 400);
-            ReplaceLabel(panel, "Resolved Status", 265);
-            ReplaceLabel(panel, "Tasks Completed", 130);
+            ReplaceLabel(panel, "喂食完成", 400);
+            ReplaceLabel(panel, "满足进度", 265);
+            ReplaceLabel(panel, "任务完成", 130);
             feedings = Label("Feedings value", panel, "0/9", new Vector2(280, 100), new Vector2(475, 400), 76, TextAnchor.MiddleRight);
             resolved = Label("Resolved value", panel, "0.0%", new Vector2(280, 100), new Vector2(475, 265), 76, TextAnchor.MiddleRight);
-            tasks = Label("Tasks value", panel, "0/18", new Vector2(280, 100), new Vector2(475, 130), 76, TextAnchor.MiddleRight);
+            tasks = Label("Tasks value", panel, "0/9", new Vector2(280, 100), new Vector2(475, 130), 76, TextAnchor.MiddleRight);
             total = Label("Total score value", panel, "48.00", new Vector2(350, 130), new Vector2(440, -115), 104, TextAnchor.MiddleRight);
             for (int i = 0; i < 3; i++) stars[i] = CareUi.Image("Star " + (i + 1), panel, art.star, new Vector2(300, 300), new Vector2((i - 1) * 350, -430));
             next = Label("Next star value", panel, "2.00", new Vector2(500, 100), new Vector2(300, -675), 68, TextAnchor.MiddleRight);
@@ -86,7 +84,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             }
             score.text = round.Score.ToString("F2", CultureInfo.InvariantCulture); bananas.text = "×" + round.Bananas;
             int remaining = Mathf.CeilToInt(Mathf.Max(0, CareRound.Cutoff - elapsed));
-            clock.text = round.Frozen ? "ROUND COMPLETE" : (remaining / 60).ToString("00") + ":" + (remaining % 60).ToString("00");
+            clock.text = round.Frozen ? "本关结束" : (remaining / 60).ToString("00") + ":" + (remaining % 60).ToString("00");
             grade.sprite = round.Stars == 1 ? art.level1 : round.Stars == 2 ? art.level2 : round.Stars == 3 ? art.level3 : art.star;
             grade.color = round.Stars == 0 ? new Color(.55f, .55f, .55f, 1) : Color.white;
             grade.rectTransform.anchoredPosition = new Vector2(Mathf.Lerp(-335, 335, (float)round.Score / 100), -25);
@@ -94,7 +92,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (!round.Frozen) return;
             feedings.text = round.FeedingTotal + "/9";
             resolved.text = round.ResolvedPercent.ToString("F1", CultureInfo.InvariantCulture) + "%";
-            tasks.text = round.CompletedTotal + "/18"; total.text = round.Score.ToString("F2", CultureInfo.InvariantCulture);
+            tasks.text = round.CompletedTotal + "/" + round.TaskTotal; total.text = round.Score.ToString("F2", CultureInfo.InvariantCulture);
             next.text = round.Stars == 3 ? "MAX" : round.NextStarPoints.ToString("F2", CultureInfo.InvariantCulture);
             for (int i = 0; i < 3; i++) stars[i].color = i < round.Stars ? Color.white : new Color(.38f, .38f, .38f, .65f);
             foreach (var b in buttons) { b.available = elapsed >= CareRound.Duration; b.image.color = b.available ? Color.white : new Color(.65f, .65f, .65f); }

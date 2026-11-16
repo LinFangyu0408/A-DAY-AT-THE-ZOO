@@ -60,7 +60,8 @@ public static class MonkeyCareInstaller
         session.locomotion = Object.FindFirstObjectByType<Locomotion>(FindObjectsInactive.Include);
         if (!session.rig || !session.locomotion) throw new InvalidOperationException("缺少现有VR Rig或Locomotion组件。");
         session.trackingSpace = session.rig.trackingSpace;
-        bool migrateRules = session.rulesVersion < 1;
+        bool migrateRules = session.rulesVersion < 2;
+        session.feedingOnly = true;
         session.readyGo = Sprite("readygo.png");
         session.roundArtwork.scorePanel = Sprite("UI SCORE.png");
         session.roundArtwork.bananaPanel = Sprite("banana.png");
@@ -93,7 +94,7 @@ public static class MonkeyCareInstaller
             driver.Configure(library);
             if (fresh || migrateRules)
             {
-                npc.firstDelay = delays[i]; npc.firstNeed = i == 1 ? CareNeed.Itch : CareNeed.Hunger;
+                npc.firstDelay = delays[i]; npc.firstNeed = CareNeed.Hunger;
                 npc.hungerInterval = npc.itchInterval = 18; npc.recoveryWait = 4; npc.patienceSeconds = 30;
                 npc.feedingSeconds = 8; npc.lateFeedingSeconds = 10; npc.scratchCount = 3; npc.lateScratchCount = 4;
                 npc.victory.repeats = 3; npc.cute.repeats = 2;
@@ -200,7 +201,7 @@ public static class MonkeyCareInstaller
             { behaviour.enabled = false; PrefabUtility.RecordPrefabInstancePropertyModifications(behaviour); report.AppendLine("Disabled old right input: " + path + " / " + type); }
         }
         foreach (var old in Object.FindObjectsByType<ChibiMonkeyHiRayInteraction>(FindObjectsInactive.Include, FindObjectsSortMode.None)) old.enabled = false;
-        session.rulesVersion = 1;
+        session.rulesVersion = 2;
         EditorUtility.SetDirty(session); EditorSceneManager.MarkSceneDirty(scene); AssetDatabase.SaveAssets();
         if (!EditorSceneManager.SaveScene(scene)) throw new IOException("保存场景失败");
         CareSelfTests.Run();

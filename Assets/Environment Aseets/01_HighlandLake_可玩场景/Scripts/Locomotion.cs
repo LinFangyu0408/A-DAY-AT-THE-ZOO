@@ -1,6 +1,10 @@
 using Oculus.Interaction;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.XR;
+using Gamepad = UnityEngine.InputSystem.Gamepad;
+using XRCommonUsages = UnityEngine.XR.CommonUsages;
+using XRInputDevice = UnityEngine.XR.InputDevice;
 
 // The base Dreamcore controls walk and teleport. The tuning below also adds
 // strafing, hold-to-turn, full-stick sprint, crouch and view recentering.
@@ -29,6 +33,7 @@ public sealed class Locomotion : MonoBehaviour
     public bool sprintToggleByLeftClick = true;
     public bool crouchToggleByRightClick = true;
     public bool resetViewByYButton = true;
+    [System.NonSerialized] public bool inputLocked;
 
     [Header("Crouch and teleport angles")]
     [Min(0.1f)] public float crouchDrop = 0.55f;
@@ -86,9 +91,15 @@ public sealed class Locomotion : MonoBehaviour
     {
         Vector2 leftStick = ReadThumbstick(OVRInput.Controller.LTouch, XRNode.LeftHand);
         Vector2 rightStick = ReadThumbstick(OVRInput.Controller.RTouch, XRNode.RightHand);
+        if (inputLocked)
+        {
+            leftStick = Vector2.zero;
+            rightStick = Vector2.zero;
+        }
         bool rightConnected =
             OVRInput.IsControllerConnected(OVRInput.Controller.RTouch) ||
-            InputDevices.GetDeviceAtXRNode(XRNode.RightHand).isValid;
+            InputDevices.GetDeviceAtXRNode(XRNode.RightHand).isValid ||
+            Gamepad.current != null;
         bool leftClick = ReadThumbstickClick(
             OVRInput.Controller.LTouch,
             XRNode.LeftHand,
@@ -111,10 +122,18 @@ public sealed class Locomotion : MonoBehaviour
     private static Vector2 ReadThumbstick(OVRInput.Controller controller, XRNode node)
     {
         Vector2 value = OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick, controller);
-        InputDevice device = InputDevices.GetDeviceAtXRNode(node);
+        Gamepad pad = Gamepad.current;
+        if (pad != null)
+        {
+            Vector2 padValue = node == XRNode.LeftHand
+                ? pad.leftStick.ReadValue()
+                : pad.rightStick.ReadValue();
+            if (padValue.sqrMagnitude > value.sqrMagnitude) value = padValue;
+        }
+        XRInputDevice device = InputDevices.GetDeviceAtXRNode(node);
         if (value.sqrMagnitude < 0.0001f &&
             device.isValid &&
-            device.TryGetFeatureValue(CommonUsages.primary2DAxis, out Vector2 xrValue))
+            device.TryGetFeatureValue(XRCommonUsages.primary2DAxis, out Vector2 xrValue))
         {
             return xrValue;
         }
@@ -131,10 +150,10 @@ public sealed class Locomotion : MonoBehaviour
             return OVRInput.GetDown(OVRInput.Button.PrimaryThumbstick, controller);
         }
 
-        InputDevice device = InputDevices.GetDeviceAtXRNode(node);
+        XRInputDevice device = InputDevices.GetDeviceAtXRNode(node);
         bool pressed =
             device.isValid &&
-            device.TryGetFeatureValue(CommonUsages.primary2DAxisClick, out bool current) &&
+            device.TryGetFeatureValue(XRCommonUsages.primary2DAxisClick, out bool current) &&
             current;
         bool clicked = pressed && !previous;
         previous = pressed;
@@ -145,9 +164,10 @@ public sealed class Locomotion : MonoBehaviour
     {
         bool currentlyPressed =
             OVRInput.Get(OVRInput.RawButton.Y) ||
+            (Gamepad.current != null && Gamepad.current.buttonNorth.isPressed) ||
             (InputDevices.GetDeviceAtXRNode(XRNode.LeftHand).isValid &&
              InputDevices.GetDeviceAtXRNode(XRNode.LeftHand)
-                 .TryGetFeatureValue(CommonUsages.secondaryButton, out bool current) &&
+                 .TryGetFeatureValue(XRCommonUsages.secondaryButton, out bool current) &&
              current);
         bool clicked =
             OVRInput.GetDown(OVRInput.RawButton.Y) ||
@@ -190,33 +210,14 @@ public sealed class Locomotion : MonoBehaviour
                        arc != null && landingMarker != null &&
                        rig.rightControllerAnchor != null;
         teleportStickY = rightStick.y;
-        // Right-stick turning disabled temporarily.
-        // float turn = rightConnected ? rightStick.x : 0f;
-        // if (Mathf.Abs(turn) < 0.3f)
-        // {
-        //     turnLatched = false;
-        //     turnHoldTime = 0f;
-        // }
-        //
-        // if (Mathf.Abs(turn) > flickThreshold && !turnLatched &&
-        //     !nextAim && !aiming)
-        // {
-        //     SnapTurn(Mathf.Sign(turn));
-        //     turnLatched = true;
-        //     turnHoldTime = deltaTime;
-        // }
-        // else if (turnLatched && !nextAim && !aiming)
-        // {
-        //     turnHoldTime += deltaTime;
-        //     if (turnHoldTime >= turnHoldDelay)
-        //     {
-        //         transform.RotateAround(
-        //             rig.centerEyeAnchor.position,
-        //             Vector3.up,
-        //             Mathf.Sign(turn) * continuousTurnSpeed *
-        //             Mathf.Min(deltaTime, 0.1f));
-        //     }
-        // }
+        float turn = rightConnected && !inputLocked ? rightStick.x : 0f;
+        if (Mathf.Abs(turn) > moveDeadzone && !nextAim && !aiming)
+        {
+            transform.RotateAround(
+                rig.centerEyeAnchor.position,
+                Vector3.up,
+                turn * continuousTurnSpeed * Mathf.Min(deltaTime, 0.1f));
+        }
 
         bool wasAiming = aiming;
         if (aiming && !nextAim && rightConnected && valid)
@@ -239,13 +240,11 @@ public sealed class Locomotion : MonoBehaviour
             valid = false;
             if (!wasAiming)
             {
-                // Joystick forward/lateral movement disabled temporarily.
-                // bool sprinting = sprintToggled ||
-                //                  leftStick.magnitude >= sprintThreshold;
-                // TrySmoothMove(
-                //     leftStick,
-                //     deltaTime,
-                //     sprinting ? sprintMultiplier : 1f);
+                bool sprinting = sprintToggled || leftStick.magnitude >= sprintThreshold;
+                TrySmoothMove(
+                    leftStick,
+                    deltaTime,
+                    sprinting ? sprintMultiplier : 1f);
             }
             return;
         }

@@ -138,3 +138,9 @@ crashlytics-build.properties
 
 # Local analysis and review files
 /work/
+
+# Locally supplied Unity packages (not committed)
+/Packages/UnityPackages/
+
+# Local editor and package backups
+*.bak

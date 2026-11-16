@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/Environment Aseets/01_HighlandLake_可玩场景/Scenes/HighlandLake_Backup_2026-11-03.unity
+    guid: 4fb0b36461308714685cb5ad961a3c6d
+  - enabled: 1
     path: Assets/Scenes/Monekey Mountain.unity
     guid: 2ba513ad159bbdb479aefb3ba361f3a6
   m_configObjects:

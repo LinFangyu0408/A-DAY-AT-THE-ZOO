@@ -1,0 +1,10 @@
+=== Quest3 Setup via Meta OVRProjectSetup ===
+Unity: 6000.3.28f1
+Time: 2026-11-16T18:05:35
+OVRProjectSetup found: True
+FixAllAsync found: True
+FixAll(Android)...
+FixAll(Android) done, completed=False
+FixAll(Standalone)...
+FixAll(Standalone) done, completed=False
+RESULT: SUCCESS

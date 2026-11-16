@@ -1,26 +1,54 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.XR;
 
+[DefaultExecutionOrder(-1000)]
 public sealed class VrPlatformSwitcher : MonoBehaviour
 {
     [SerializeField] private GameObject desktopPlayer;
     [SerializeField] private GameObject vrPlayer;
     [SerializeField] private GameObject presentationCamera;
+    [SerializeField] private bool requireTrackedHeadset = true;
+    [Tooltip("Unity Editor 固定使用桌面/Xbox 预览，不尝试启动未连接的头显。")]
+    [SerializeField] private bool editorDesktopPreview = true;
 
     private bool wasXrActive;
+    private static readonly List<XRDisplaySubsystem> displays = new();
 
     private void Awake()
     {
-        Apply(XRSettings.isDeviceActive);
+        bool xrActive = ShouldUseXr();
+        Apply(xrActive);
+        Debug.Log("[Zoo Platform] " + (xrActive ? "XR 已启动" : "桌面/Xbox 预览已启动"));
     }
 
     private void Update()
     {
-        bool xrActive = XRSettings.isDeviceActive;
+        bool xrActive = ShouldUseXr();
         if (xrActive != wasXrActive)
         {
             Apply(xrActive);
         }
+    }
+
+    private bool ShouldUseXr()
+    {
+#if UNITY_EDITOR
+        if (editorDesktopPreview) return false;
+#endif
+        if (!XRSettings.isDeviceActive) return false;
+        displays.Clear();
+        SubsystemManager.GetSubsystems(displays);
+        bool displayRunning = false;
+        foreach (var display in displays)
+        {
+            if (!display.running) continue;
+            displayRunning = true;
+            break;
+        }
+        if (!displayRunning) return false;
+        if (!requireTrackedHeadset) return true;
+        return InputDevices.GetDeviceAtXRNode(XRNode.Head).isValid;
     }
 
     private void Apply(bool xrActive)
@@ -39,6 +67,18 @@ public sealed class VrPlatformSwitcher : MonoBehaviour
         if (presentationCamera != null)
         {
             presentationCamera.SetActive(false);
+        }
+
+        if (!xrActive && desktopPlayer != null)
+        {
+            foreach (var camera in desktopPlayer.GetComponentsInChildren<Camera>(true))
+            {
+                camera.enabled = true;
+            }
+            foreach (var listener in desktopPlayer.GetComponentsInChildren<AudioListener>(true))
+            {
+                listener.enabled = true;
+            }
         }
     }
 }
