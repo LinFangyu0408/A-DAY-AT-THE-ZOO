@@ -1,0 +1,13 @@
+{
+  "source_triangles": 4088,
+  "sample_triangles": 2656,
+  "bones": 91,
+  "weighted_vertices": 1376,
+  "vertices": 1376,
+  "uv_layers": 1,
+  "animation_frames": [
+    312,
+    335
+  ],
+  "notes": "Sample only. Original Unity assets and scene untouched. Separate expression atlas retained. Unity retargeting not yet verified."
+}

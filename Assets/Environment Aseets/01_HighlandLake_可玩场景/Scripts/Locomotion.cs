@@ -7,6 +7,8 @@ using UnityEngine.XR;
 [DisallowMultipleComponent]
 public sealed class Locomotion : MonoBehaviour
 {
+    // Only the configured care scene delegates its right-hand teleport input.
+    [System.NonSerialized] public bool externalRightHandControl;
     public OVRCameraRig rig;
     public LineRenderer arc;
     public Transform landingMarker;
@@ -184,36 +186,37 @@ public sealed class Locomotion : MonoBehaviour
         }
         UpdateCrouch(deltaTime);
 
-        bool nextAim = rightConnected && Mathf.Abs(rightStick.y) > 0.65f &&
+        bool nextAim = !externalRightHandControl && rightConnected && Mathf.Abs(rightStick.y) > 0.65f &&
                        arc != null && landingMarker != null &&
                        rig.rightControllerAnchor != null;
         teleportStickY = rightStick.y;
-        float turn = rightConnected ? rightStick.x : 0f;
-        if (Mathf.Abs(turn) < 0.3f)
-        {
-            turnLatched = false;
-            turnHoldTime = 0f;
-        }
-
-        if (Mathf.Abs(turn) > flickThreshold && !turnLatched &&
-            !nextAim && !aiming)
-        {
-            SnapTurn(Mathf.Sign(turn));
-            turnLatched = true;
-            turnHoldTime = deltaTime;
-        }
-        else if (turnLatched && !nextAim && !aiming)
-        {
-            turnHoldTime += deltaTime;
-            if (turnHoldTime >= turnHoldDelay)
-            {
-                transform.RotateAround(
-                    rig.centerEyeAnchor.position,
-                    Vector3.up,
-                    Mathf.Sign(turn) * continuousTurnSpeed *
-                    Mathf.Min(deltaTime, 0.1f));
-            }
-        }
+        // Right-stick turning disabled temporarily.
+        // float turn = rightConnected ? rightStick.x : 0f;
+        // if (Mathf.Abs(turn) < 0.3f)
+        // {
+        //     turnLatched = false;
+        //     turnHoldTime = 0f;
+        // }
+        //
+        // if (Mathf.Abs(turn) > flickThreshold && !turnLatched &&
+        //     !nextAim && !aiming)
+        // {
+        //     SnapTurn(Mathf.Sign(turn));
+        //     turnLatched = true;
+        //     turnHoldTime = deltaTime;
+        // }
+        // else if (turnLatched && !nextAim && !aiming)
+        // {
+        //     turnHoldTime += deltaTime;
+        //     if (turnHoldTime >= turnHoldDelay)
+        //     {
+        //         transform.RotateAround(
+        //             rig.centerEyeAnchor.position,
+        //             Vector3.up,
+        //             Mathf.Sign(turn) * continuousTurnSpeed *
+        //             Mathf.Min(deltaTime, 0.1f));
+        //     }
+        // }
 
         bool wasAiming = aiming;
         if (aiming && !nextAim && rightConnected && valid)
@@ -236,12 +239,13 @@ public sealed class Locomotion : MonoBehaviour
             valid = false;
             if (!wasAiming)
             {
-                bool sprinting = sprintToggled ||
-                                 leftStick.magnitude >= sprintThreshold;
-                TrySmoothMove(
-                    leftStick,
-                    deltaTime,
-                    sprinting ? sprintMultiplier : 1f);
+                // Joystick forward/lateral movement disabled temporarily.
+                // bool sprinting = sprintToggled ||
+                //                  leftStick.magnitude >= sprintThreshold;
+                // TrySmoothMove(
+                //     leftStick,
+                //     deltaTime,
+                //     sprinting ? sprintMultiplier : 1f);
             }
             return;
         }
@@ -367,12 +371,11 @@ public sealed class Locomotion : MonoBehaviour
 
     public bool IsLandingClear(Vector3 point)
     {
-        return !Physics.CheckCapsule(
-            point + Vector3.up * (floorClearance + 0.32f),
-            point + Vector3.up * (floorClearance + bodyEyeHeight - 0.15f),
-            bodyRadius,
-            ~0,
-            QueryTriggerInteraction.Ignore);
+        var hits = Physics.OverlapCapsule(point + Vector3.up * (floorClearance + .32f),
+            point + Vector3.up * (floorClearance + bodyEyeHeight - .15f), bodyRadius, ~0, QueryTriggerInteraction.Ignore);
+        foreach (var hit in hits)
+            if (!OwnCollider(hit) && !hit.GetComponent<Oculus.Interaction.Surfaces.ColliderSurface>()) return false;
+        return true;
     }
 
     public bool TrySmoothMove(

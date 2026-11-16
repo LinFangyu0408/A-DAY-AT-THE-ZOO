@@ -100,6 +100,7 @@ public sealed class ChibiMonkeyHiRayInteraction : MonoBehaviour
 
     private void PlayHi(Animator animator)
     {
+        if (animator.GetComponent<ADayAtTheZoo.Monkeys.Care.MonkeyCareNpc>() != null) return;
         int hiStateHash = Animator.StringToHash(hiStateName);
         if (!animator.HasState(0, hiStateHash))
         {
@@ -219,6 +220,7 @@ public sealed class ChibiMonkeyHiRayInteraction : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void EnsureSceneInteraction()
     {
+        if (FindFirstObjectByType<ADayAtTheZoo.Monkeys.Care.MonkeyCareSession>() != null) return;
         ChibiMonkeyHiRayInteraction existing =
             FindFirstObjectByType<ChibiMonkeyHiRayInteraction>();
         if (existing != null)

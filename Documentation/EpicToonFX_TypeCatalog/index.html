@@ -1,0 +1,1010 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Epic Toon FX 特效类型总览</title>
+  <style>
+    :root {
+      --bg: #070c14;
+      --panel: #0e1725;
+      --text: #f4f7fd;
+      --muted: #93a2b9;
+      --line: rgba(179, 204, 237, .15);
+      --combat: #ff667a;
+      --environment: #48d8a5;
+      --interactive: #ffc65b;
+      --two-d: #5db8ff;
+      --misc: #c38cff;
+    }
+    * { box-sizing: border-box; }
+    html { min-width: 320px; background: var(--bg); }
+    body {
+      margin: 0; color: var(--text);
+      background:
+        radial-gradient(circle at 50% -10%, rgba(66, 96, 168, .27), transparent 34rem),
+        linear-gradient(180deg, #0a1220, #060a11 68%);
+      font-family: "Segoe UI", "Microsoft YaHei UI", "Noto Sans SC", sans-serif;
+      line-height: 1.45;
+    }
+    button, input { font: inherit; }
+    .shell { width: min(1500px, calc(100% - 40px)); margin: 0 auto; padding: 38px 0 64px; }
+    .hero { display: grid; gap: 16px; padding-bottom: 28px; text-align: center; }
+    .brand {
+      justify-self: center; color: #b9c7da; font-size: 12px; font-weight: 750;
+      letter-spacing: .18em; text-transform: uppercase;
+    }
+    h1 { margin: 0; font-size: clamp(34px, 5vw, 68px); line-height: 1.02; letter-spacing: -.055em; }
+    .lead { max-width: 760px; margin: 0 auto; color: var(--muted); font-size: 16px; }
+    .summary { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; margin-top: 4px; }
+    .summary span {
+      padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px;
+      color: #c1ccdc; background: rgba(15, 24, 39, .7); font-size: 12px;
+    }
+    .summary b { color: var(--text); font-weight: 750; }
+    .toolbar {
+      position: sticky; z-index: 5; top: 0; display: grid; gap: 12px;
+      margin: 0 0 28px; padding: 14px; border: 1px solid var(--line); border-radius: 17px;
+      background: rgba(9, 15, 25, .9); box-shadow: 0 18px 50px rgba(0,0,0,.28);
+      backdrop-filter: blur(18px);
+    }
+    .search-wrap { position: relative; }
+    #search {
+      width: 100%; min-height: 49px; padding: 11px 16px 11px 45px; color: var(--text);
+      background: #121d2d; border: 1px solid transparent; border-radius: 12px; outline: none;
+      font-size: 15px;
+    }
+    #search:focus { border-color: #809cff; box-shadow: 0 0 0 4px rgba(128,156,255,.13); }
+    .search-icon {
+      position: absolute; left: 16px; top: 50%; width: 17px; height: 17px;
+      transform: translateY(-50%); color: var(--muted); pointer-events: none;
+    }
+    .filters { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+    .filter {
+      min-height: 37px; padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px;
+      color: var(--muted); background: transparent; cursor: pointer;
+    }
+    .filter:hover { color: var(--text); background: #142033; }
+    .filter.active { color: #07101a; background: #eaf0ff; border-color: #eaf0ff; }
+    .family-section { margin-top: 34px; }
+    .section-head {
+      display: flex; justify-content: space-between; align-items: end; gap: 20px;
+      margin-bottom: 14px; padding: 0 2px 12px; border-bottom: 1px solid var(--line);
+    }
+    .section-kicker { color: var(--muted); font-size: 11px; font-weight: 750; letter-spacing: .16em; text-transform: uppercase; }
+    h2 { margin: 3px 0 2px; font-size: clamp(23px, 3vw, 34px); letter-spacing: -.035em; }
+    .section-head p { margin: 0; color: var(--muted); font-size: 13px; }
+    .section-count { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
+    .fx-grid {
+      display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px; padding: 8px; border: 1px solid var(--line); background: rgba(9, 15, 25, .64);
+    }
+    .fx-card {
+      min-width: 0; padding: 0; overflow: hidden; text-align: left; cursor: pointer;
+      border: 1px solid rgba(177, 201, 235, .10); background: #0c1421;
+      transition: transform .18s ease, border-color .18s ease, background .18s ease;
+    }
+    .fx-card:hover { z-index: 2; transform: translateY(-2px); border-color: rgba(189, 210, 242, .42); background: #111c2d; }
+    .fx-card:focus-visible { outline: 3px solid #8da5ff; outline-offset: 2px; }
+    .fx-image {
+      position: relative; aspect-ratio: 1.28 / 1; overflow: hidden; background: #050a12;
+    }
+    .fx-image img {
+      width: 100%; height: 100%; object-fit: cover;
+      transition: transform .3s ease;
+    }
+    .fx-card:hover .fx-image img { transform: scale(1.035); }
+    .combination-count {
+      position: absolute; top: 8px; right: 8px; padding: 3px 7px;
+      border-radius: 999px; background: rgba(4, 8, 14, .66); color: #c6d2e2;
+      font-size: 10px; backdrop-filter: blur(8px);
+    }
+    .fx-copy { padding: 11px 12px 14px; border-top: 1px solid rgba(179, 204, 237, .09); }
+    .fx-label {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      color: var(--text); font-size: 12px; font-weight: 780; letter-spacing: .055em; text-transform: uppercase;
+    }
+    .fx-cn { margin-top: 3px; color: #aebbd0; font-size: 12px; }
+    .fx-variants {
+      margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      color: #74849b; font-size: 10px;
+    }
+    .hidden { display: none !important; }
+    .empty { padding: 70px 20px; text-align: center; color: var(--muted); }
+    .footer {
+      display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px;
+      margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line);
+      color: var(--muted); font-size: 12px;
+    }
+    dialog {
+      width: min(1000px, calc(100% - 28px)); max-height: calc(100vh - 34px); padding: 0;
+      overflow: auto; color: var(--text); background: #101a29; border: 1px solid var(--line);
+      border-radius: 20px; box-shadow: 0 28px 100px rgba(0,0,0,.62);
+    }
+    dialog::backdrop { background: rgba(2,5,10,.82); backdrop-filter: blur(9px); }
+    .dialog-head {
+      position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; gap: 16px;
+      padding: 17px 20px; border-bottom: 1px solid var(--line); background: rgba(16,26,41,.94);
+      backdrop-filter: blur(18px);
+    }
+    .dialog-kicker { color: var(--muted); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+    .dialog-title { margin: 2px 0 0; font-size: clamp(22px, 4vw, 34px); }
+    .close {
+      flex: 0 0 auto; width: 42px; height: 42px; border: 1px solid var(--line);
+      border-radius: 11px; color: var(--text); background: #172337; cursor: pointer; font-size: 22px;
+    }
+    .dialog-body { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(260px, .8fr); gap: 22px; padding: 22px; }
+    .dialog-image { width: 100%; border-radius: 16px; background: #07101b; }
+    .detail { display: grid; align-content: start; gap: 15px; }
+    .detail-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .09em; }
+    .detail-value { font-size: 14px; }
+    .variant-list { display: flex; flex-wrap: wrap; gap: 6px; max-height: 255px; overflow: auto; }
+    .variant-list span { padding: 5px 8px; border-radius: 7px; color: #c4cfdf; background: #172337; font-size: 11px; }
+    code { display: block; padding: 10px 11px; border-radius: 9px; background: #0a121e; overflow-wrap: anywhere; font: 12px/1.55 Consolas, monospace; }
+    @media (max-width: 1100px) { .fx-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    @media (max-width: 760px) {
+      .shell { width: calc(100% - 24px); padding-top: 24px; }
+      .fx-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .section-head { align-items: start; }
+      .section-count { display: none; }
+      .dialog-body { grid-template-columns: 1fr; }
+      .toolbar { top: 0; }
+    }
+    @media (max-width: 430px) {
+      .fx-grid { grid-template-columns: 1fr; }
+      .filter { flex: 1 1 auto; }
+      .section-head p { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div class="brand">Epic Toon FX · Unity Particle Collection</div>
+      <h1>600+ 特效组合<br>类型总览</h1>
+      <p class="lead">按原始效果类型展示，一个画面代表一组完整粒子组合；名称、颜色与风格变体统一归入对应类型。</p>
+      <div class="summary">
+        <span><b>43</b> 个特效类型</span>
+        <span><b>915</b> 个颜色/风格组合</span>
+        <span><b>4</b> 个内容分类</span>
+        <span>Unity 1.7 实机渲染</span>
+      </div>
+    </header>
+
+    <section class="toolbar" aria-label="筛选特效类型">
+      <div class="search-wrap">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path></svg>
+        <input id="search" type="search" placeholder="搜索 Fire、Explosion、Portal、治疗…" aria-label="搜索特效类型">
+      </div>
+      <div class="filters">
+        <button class="filter active" type="button" data-family="全部">全部</button>
+        <button class="filter" type="button" data-family="战斗">战斗</button>
+        <button class="filter" type="button" data-family="环境">环境</button>
+        <button class="filter" type="button" data-family="互动">互动</button>
+        <button class="filter" type="button" data-family="2D">2D</button>
+        <button class="filter" type="button" data-family="其他">其他</button>
+      </div>
+    </section>
+
+    <div id="catalog-sections">
+            <section class="family-section" data-family="战斗">
+              <div class="section-head">
+                <div>
+                  <div class="section-kicker">Combat FX</div>
+                  <h2>战斗特效</h2>
+                  <p>爆炸、刀剑、枪口火焰、飞行弹体与打击反馈</p>
+                </div>
+                <span class="section-count">14 个类型</span>
+              </div>
+              <div class="fx-grid">
+                <button class="fx-card" type="button" data-name="bloodexplosionroundanimated"
+                  data-type="blood" data-family="战斗"
+                  data-two-d="1"
+                  data-count="51" data-slug="blood"
+                  aria-label="Blood，51 个组合">
+                  <div class="fx-image">
+                    <img src="images/blood.webp" loading="lazy" alt="Blood 完整 Unity 特效预览">
+                    <span class="combination-count">51 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Blood</div>
+                    <div class="fx-cn">血液飞溅</div>
+                    <div class="fx-variants">Green · Red · Yellow</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="bombfuse"
+                  data-type="bombfuse" data-family="战斗"
+                  data-two-d="0"
+                  data-count="2" data-slug="bombfuse"
+                  aria-label="BombFuse，2 个组合">
+                  <div class="fx-image">
+                    <img src="images/bombfuse.webp" loading="lazy" alt="BombFuse 完整 Unity 特效预览">
+                    <span class="combination-count">2 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">BombFuse</div>
+                    <div class="fx-cn">炸弹引线</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="cartoonybodyslam"
+                  data-type="brawling" data-family="战斗"
+                  data-two-d="0"
+                  data-count="20" data-slug="brawling"
+                  aria-label="Brawling，20 个组合">
+                  <div class="fx-image">
+                    <img src="images/brawling.webp" loading="lazy" alt="Brawling 完整 Unity 特效预览">
+                    <span class="combination-count">20 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Brawling</div>
+                    <div class="fx-cn">近战打击</div>
+                    <div class="fx-variants">Cartoony · RoundHit · Soft · Stun</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="firedeath"
+                  data-type="death" data-family="战斗"
+                  data-two-d="0"
+                  data-count="10" data-slug="death"
+                  aria-label="Death，10 个组合">
+                  <div class="fx-image">
+                    <img src="images/death.webp" loading="lazy" alt="Death 完整 Unity 特效预览">
+                    <span class="combination-count">10 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Death</div>
+                    <div class="fx-cn">死亡消散</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="explosiondecalfire"
+                  data-type="decals" data-family="战斗"
+                  data-two-d="0"
+                  data-count="14" data-slug="decals"
+                  aria-label="Decals，14 个组合">
+                  <div class="fx-image">
+                    <img src="images/decals.webp" loading="lazy" alt="Decals 完整 Unity 特效预览">
+                    <span class="combination-count">14 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Decals</div>
+                    <div class="fx-cn">命中贴花</div>
+                    <div class="fx-variants">Bullet Decal · Energy Decal · Explosion Decal</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="megaexplosionred"
+                  data-type="explosions" data-family="战斗"
+                  data-two-d="1"
+                  data-count="124" data-slug="explosions"
+                  aria-label="Explosions，124 个组合">
+                  <div class="fx-image">
+                    <img src="images/explosions.webp" loading="lazy" alt="Explosions 完整 Unity 特效预览">
+                    <span class="combination-count">124 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Explosions</div>
+                    <div class="fx-cn">爆炸</div>
+                    <div class="fx-variants">- Misc · BulletExplosion · BulletFatExplosion · FireballExplosion · FrostExplosion</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="flamethrowercartoonyfire"
+                  data-type="flamethrower" data-family="战斗"
+                  data-two-d="0"
+                  data-count="17" data-slug="flamethrower"
+                  aria-label="Flamethrower，17 个组合">
+                  <div class="fx-image">
+                    <img src="images/flamethrower.webp" loading="lazy" alt="Flamethrower 完整 Unity 特效预览">
+                    <span class="combination-count">17 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Flamethrower</div>
+                    <div class="fx-cn">喷火</div>
+                    <div class="fx-variants">Cartoon · Soft / Additive · Soft / Alpha Blend · Spiky</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="magiccirclesimpleblue"
+                  data-type="magic" data-family="战斗"
+                  data-two-d="0"
+                  data-count="38" data-slug="magic"
+                  aria-label="Magic，38 个组合">
+                  <div class="fx-image">
+                    <img src="images/magic.webp" loading="lazy" alt="Magic 完整 Unity 特效预览">
+                    <span class="combination-count">38 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Magic</div>
+                    <div class="fx-cn">魔法</div>
+                    <div class="fx-variants">Aura · Aura Soft · Buff · Charge · Circle</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="stormmissile"
+                  data-type="missiles" data-family="战斗"
+                  data-two-d="0"
+                  data-count="72" data-slug="missiles"
+                  aria-label="Missiles，72 个组合">
+                  <div class="fx-image">
+                    <img src="images/missiles.webp" loading="lazy" alt="Missiles 完整 Unity 特效预览">
+                    <span class="combination-count">72 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Missiles</div>
+                    <div class="fx-cn">飞行弹体</div>
+                    <div class="fx-variants">Bullet · FatBullet · Fireball · Frost · Gas</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="nukemuzzlefire"
+                  data-type="muzzleflash" data-family="战斗"
+                  data-two-d="0"
+                  data-count="72" data-slug="muzzleflash"
+                  aria-label="Muzzleflash，72 个组合">
+                  <div class="fx-image">
+                    <img src="images/muzzleflash.webp" loading="lazy" alt="Muzzleflash 完整 Unity 特效预览">
+                    <span class="combination-count">72 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Muzzleflash</div>
+                    <div class="fx-cn">枪口火焰</div>
+                    <div class="fx-variants">- Misc / GunFire · BulletFatMuzzle · BulletMuzzle · EnergyNovaMuzzle · EnergyNovaSmallMuzzle</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="novafireblue"
+                  data-type="nova" data-family="战斗"
+                  data-two-d="0"
+                  data-count="13" data-slug="nova"
+                  aria-label="Nova，13 个组合">
+                  <div class="fx-image">
+                    <img src="images/nova.webp" loading="lazy" alt="Nova 完整 Unity 特效预览">
+                    <span class="combination-count">13 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Nova</div>
+                    <div class="fx-cn">能量新星</div>
+                    <div class="fx-variants">Fire · Frost · Lightning · Standard</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="shieldsoftblue"
+                  data-type="shield" data-family="战斗"
+                  data-two-d="0"
+                  data-count="4" data-slug="shield"
+                  aria-label="Shield，4 个组合">
+                  <div class="fx-image">
+                    <img src="images/shield.webp" loading="lazy" alt="Shield 完整 Unity 特效预览">
+                    <span class="combination-count">4 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Shield</div>
+                    <div class="fx-cn">护盾</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="swordhitred"
+                  data-type="sword" data-family="战斗"
+                  data-two-d="0"
+                  data-count="52" data-slug="sword"
+                  aria-label="Sword，52 个组合">
+                  <div class="fx-image">
+                    <img src="images/sword.webp" loading="lazy" alt="Sword 完整 Unity 特效预览">
+                    <span class="combination-count">52 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Sword</div>
+                    <div class="fx-cn">刀剑命中</div>
+                    <div class="fx-variants">- Legacy / SwordHitCriticalLegacy · - Legacy / SwordHitLegacy · Hit / SwordHit · Hit / SwordHitCritical · Hit / SwordHitMagic</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="kapow"
+                  data-type="text" data-family="战斗"
+                  data-two-d="0"
+                  data-count="4" data-slug="text"
+                  aria-label="Text，4 个组合">
+                  <div class="fx-image">
+                    <img src="images/text.webp" loading="lazy" alt="Text 完整 Unity 特效预览">
+                    <span class="combination-count">4 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Text</div>
+                    <div class="fx-cn">漫画文字</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                </div>
+            </section>
+            
+            <section class="family-section" data-family="环境">
+              <div class="section-head">
+                <div>
+                  <div class="section-kicker">Environment FX</div>
+                  <h2>环境特效</h2>
+                  <p>火焰、天气、水流、烟雾与自然粒子</p>
+                </div>
+                <span class="section-count">13 个类型</span>
+              </div>
+              <div class="fx-grid">
+                <button class="fx-card" type="button" data-name="soapbubbleblast"
+                  data-type="bubbles" data-family="环境"
+                  data-two-d="0"
+                  data-count="2" data-slug="bubbles"
+                  aria-label="Bubbles，2 个组合">
+                  <div class="fx-image">
+                    <img src="images/bubbles.webp" loading="lazy" alt="Bubbles 完整 Unity 特效预览">
+                    <span class="combination-count">2 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Bubbles</div>
+                    <div class="fx-cn">气泡</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="confettiblastrainbow"
+                  data-type="confetti" data-family="环境"
+                  data-two-d="0"
+                  data-count="18" data-slug="confetti"
+                  aria-label="Confetti，18 个组合">
+                  <div class="fx-image">
+                    <img src="images/confetti.webp" loading="lazy" alt="Confetti 完整 Unity 特效预览">
+                    <span class="combination-count">18 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Confetti</div>
+                    <div class="fx-cn">彩色纸屑</div>
+                    <div class="fx-variants">Blast · Directional · Shower</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="dustdirtypoof"
+                  data-type="dust" data-family="环境"
+                  data-two-d="0"
+                  data-count="4" data-slug="dust"
+                  aria-label="Dust，4 个组合">
+                  <div class="fx-image">
+                    <img src="images/dust.webp" loading="lazy" alt="Dust 完整 Unity 特效预览">
+                    <span class="combination-count">4 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Dust</div>
+                    <div class="fx-cn">灰尘</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="cartoonfiretorchred"
+                  data-type="fire" data-family="环境"
+                  data-two-d="0"
+                  data-count="50" data-slug="fire"
+                  aria-label="Fire，50 个组合">
+                  <div class="fx-image">
+                    <img src="images/fire.webp" loading="lazy" alt="Fire 完整 Unity 特效预览">
+                    <span class="combination-count">50 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Fire</div>
+                    <div class="fx-cn">火焰</div>
+                    <div class="fx-variants">Candle / CandleLight · Candle / CandleLightSoft · Cartoon / Field · Cartoon / Field Intense · Cartoon / Torch</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="firefliesgreen"
+                  data-type="fireflies" data-family="环境"
+                  data-two-d="0"
+                  data-count="5" data-slug="fireflies"
+                  aria-label="Fireflies，5 个组合">
+                  <div class="fx-image">
+                    <img src="images/fireflies.webp" loading="lazy" alt="Fireflies 完整 Unity 特效预览">
+                    <span class="combination-count">5 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Fireflies</div>
+                    <div class="fx-cn">萤火虫</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="fireworkbluecluster"
+                  data-type="firework" data-family="环境"
+                  data-two-d="0"
+                  data-count="10" data-slug="firework"
+                  aria-label="Firework，10 个组合">
+                  <div class="fx-image">
+                    <img src="images/firework.webp" loading="lazy" alt="Firework 完整 Unity 特效预览">
+                    <span class="combination-count">10 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Firework</div>
+                    <div class="fx-cn">烟花</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="fogheavywhite"
+                  data-type="fog" data-family="环境"
+                  data-two-d="0"
+                  data-count="12" data-slug="fog"
+                  aria-label="Fog，12 个组合">
+                  <div class="fx-image">
+                    <img src="images/fog.webp" loading="lazy" alt="Fog 完整 Unity 特效预览">
+                    <span class="combination-count">12 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Fog</div>
+                    <div class="fx-cn">雾</div>
+                    <div class="fx-variants">Black · Grey · White</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="lightningorbsharpblue"
+                  data-type="lightning" data-family="环境"
+                  data-two-d="0"
+                  data-count="12" data-slug="lightning"
+                  aria-label="Lightning，12 个组合">
+                  <div class="fx-image">
+                    <img src="images/lightning.webp" loading="lazy" alt="Lightning 完整 Unity 特效预览">
+                    <span class="combination-count">12 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Lightning</div>
+                    <div class="fx-cn">闪电</div>
+                    <div class="fx-variants">Sharp · Soft</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="smokeburstwhite"
+                  data-type="smoke" data-family="环境"
+                  data-two-d="0"
+                  data-count="15" data-slug="smoke"
+                  aria-label="Smoke，15 个组合">
+                  <div class="fx-image">
+                    <img src="images/smoke.webp" loading="lazy" alt="Smoke 完整 Unity 特效预览">
+                    <span class="combination-count">15 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Smoke</div>
+                    <div class="fx-cn">烟雾</div>
+                    <div class="fx-variants">Dark · White</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="sparkexplosionblue"
+                  data-type="sparks" data-family="环境"
+                  data-two-d="0"
+                  data-count="6" data-slug="sparks"
+                  aria-label="Sparks，6 个组合">
+                  <div class="fx-image">
+                    <img src="images/sparks.webp" loading="lazy" alt="Sparks 完整 Unity 特效预览">
+                    <span class="combination-count">6 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Sparks</div>
+                    <div class="fx-cn">火花</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="bubbleblastunderwater"
+                  data-type="underwater" data-family="环境"
+                  data-two-d="0"
+                  data-count="4" data-slug="underwater"
+                  aria-label="Underwater，4 个组合">
+                  <div class="fx-image">
+                    <img src="images/underwater.webp" loading="lazy" alt="Underwater 完整 Unity 特效预览">
+                    <span class="combination-count">4 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Underwater</div>
+                    <div class="fx-cn">水下气泡</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="waterfallsharp"
+                  data-type="water" data-family="环境"
+                  data-two-d="1"
+                  data-count="26" data-slug="water"
+                  aria-label="Water，26 个组合">
+                  <div class="fx-image">
+                    <img src="images/water.webp" loading="lazy" alt="Water 完整 Unity 特效预览">
+                    <span class="combination-count">26 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Water</div>
+                    <div class="fx-cn">水流</div>
+                    <div class="fx-variants">Boiling · Flowing · Flowing / Sharp · Flowing / Soft · Other</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="whirlwind"
+                  data-type="weather" data-family="环境"
+                  data-two-d="1"
+                  data-count="19" data-slug="weather"
+                  aria-label="Weather，19 个组合">
+                  <div class="fx-image">
+                    <img src="images/weather.webp" loading="lazy" alt="Weather 完整 Unity 特效预览">
+                    <span class="combination-count">19 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Weather</div>
+                    <div class="fx-cn">天气</div>
+                    <div class="fx-variants">Rain · Snow · Wind & Leaves</div>
+                  </div>
+                </button>
+                </div>
+            </section>
+            
+            <section class="family-section" data-family="互动">
+              <div class="section-head">
+                <div>
+                  <div class="section-kicker">Interactive FX</div>
+                  <h2>互动特效</h2>
+                  <p>传送门、奖励、表情、治疗与界面反馈</p>
+                </div>
+                <span class="section-count">15 个类型</span>
+              </div>
+              <div class="fx-grid">
+                <button class="fx-card" type="button" data-name="cardglowtype01"
+                  data-type="cards" data-family="互动"
+                  data-two-d="0"
+                  data-count="4" data-slug="cards"
+                  aria-label="Cards，4 个组合">
+                  <div class="fx-image">
+                    <img src="images/cards.webp" loading="lazy" alt="Cards 完整 Unity 特效预览">
+                    <span class="combination-count">4 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Cards</div>
+                    <div class="fx-cn">卡牌光效</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="emojilaughcry"
+                  data-type="emojis" data-family="互动"
+                  data-two-d="0"
+                  data-count="23" data-slug="emojis"
+                  aria-label="Emojis，23 个组合">
+                  <div class="fx-image">
+                    <img src="images/emojis.webp" loading="lazy" alt="Emojis 完整 Unity 特效预览">
+                    <span class="combination-count">23 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Emojis</div>
+                    <div class="fx-cn">表情符号</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="emojimad"
+                  data-type="emojis 2" data-family="互动"
+                  data-two-d="0"
+                  data-count="29" data-slug="emojis-2"
+                  aria-label="Emojis 2，29 个组合">
+                  <div class="fx-image">
+                    <img src="images/emojis-2.webp" loading="lazy" alt="Emojis 2 完整 Unity 特效预览">
+                    <span class="combination-count">29 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Emojis 2</div>
+                    <div class="fx-cn">表情符号 2</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="featherexplosion"
+                  data-type="feathers" data-family="互动"
+                  data-two-d="0"
+                  data-count="2" data-slug="feathers"
+                  aria-label="Feathers，2 个组合">
+                  <div class="fx-image">
+                    <img src="images/feathers.webp" loading="lazy" alt="Feathers 完整 Unity 特效预览">
+                    <span class="combination-count">2 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Feathers</div>
+                    <div class="fx-cn">羽毛</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="flaresoftblue"
+                  data-type="flares" data-family="互动"
+                  data-two-d="0"
+                  data-count="10" data-slug="flares"
+                  aria-label="Flares，10 个组合">
+                  <div class="fx-image">
+                    <img src="images/flares.webp" loading="lazy" alt="Flares 完整 Unity 特效预览">
+                    <span class="combination-count">10 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Flares</div>
+                    <div class="fx-cn">信号光</div>
+                    <div class="fx-variants">Sharp · Soft</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="healfield"
+                  data-type="healing" data-family="互动"
+                  data-two-d="0"
+                  data-count="8" data-slug="healing"
+                  aria-label="Healing，8 个组合">
+                  <div class="fx-image">
+                    <img src="images/healing.webp" loading="lazy" alt="Healing 完整 Unity 特效预览">
+                    <span class="combination-count">8 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Healing</div>
+                    <div class="fx-cn">治疗</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="heartpoof"
+                  data-type="hearts" data-family="互动"
+                  data-two-d="0"
+                  data-count="5" data-slug="hearts"
+                  aria-label="Hearts，5 个组合">
+                  <div class="fx-image">
+                    <img src="images/hearts.webp" loading="lazy" alt="Hearts 完整 Unity 特效预览">
+                    <span class="combination-count">5 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Hearts</div>
+                    <div class="fx-cn">爱心</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="chestappearblue"
+                  data-type="loot" data-family="互动"
+                  data-two-d="0"
+                  data-count="31" data-slug="loot"
+                  aria-label="Loot，31 个组合">
+                  <div class="fx-image">
+                    <img src="images/loot.webp" loading="lazy" alt="Loot 完整 Unity 特效预览">
+                    <span class="combination-count">31 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Loot</div>
+                    <div class="fx-cn">掉落拾取</div>
+                    <div class="fx-variants">ChestAppear · GlowOrb · ItemSkewedGlow · ItemSparkle · ItemSparkleSoft</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="goldcoinblast"
+                  data-type="money" data-family="互动"
+                  data-two-d="0"
+                  data-count="12" data-slug="money"
+                  aria-label="Money，12 个组合">
+                  <div class="fx-image">
+                    <img src="images/money.webp" loading="lazy" alt="Money 完整 Unity 特效预览">
+                    <span class="combination-count">12 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Money</div>
+                    <div class="fx-cn">金币纸币</div>
+                    <div class="fx-variants">Bills · Coins</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="spinportalblue"
+                  data-type="portals" data-family="互动"
+                  data-two-d="0"
+                  data-count="25" data-slug="portals"
+                  aria-label="Portals，25 个组合">
+                  <div class="fx-image">
+                    <img src="images/portals.webp" loading="lazy" alt="Portals 完整 Unity 特效预览">
+                    <span class="combination-count">25 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Portals</div>
+                    <div class="fx-cn">传送门</div>
+                    <div class="fx-variants">SimplePortal · SoftPortal · SpinPortal · VortexPortal · WavePortal</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="powerorbfireelemental"
+                  data-type="powerups" data-family="互动"
+                  data-two-d="0"
+                  data-count="30" data-slug="powerups"
+                  aria-label="Powerups，30 个组合">
+                  <div class="fx-image">
+                    <img src="images/powerups.webp" loading="lazy" alt="Powerups 完整 Unity 特效预览">
+                    <span class="combination-count">30 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Powerups</div>
+                    <div class="fx-cn">强化能量</div>
+                    <div class="fx-variants">PowerOrb · PowerOrbElemental · PowerOrbSciFi · PowerOrbSmall · PowerupActivate</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="sparkleareablue"
+                  data-type="sparkle" data-family="互动"
+                  data-two-d="0"
+                  data-count="11" data-slug="sparkle"
+                  aria-label="Sparkle，11 个组合">
+                  <div class="fx-image">
+                    <img src="images/sparkle.webp" loading="lazy" alt="Sparkle 完整 Unity 特效预览">
+                    <span class="combination-count">11 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Sparkle</div>
+                    <div class="fx-cn">闪光</div>
+                    <div class="fx-variants">SparkleArea · SparkleSolo</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="starexplosion"
+                  data-type="stars" data-family="互动"
+                  data-two-d="0"
+                  data-count="18" data-slug="stars"
+                  aria-label="Stars，18 个组合">
+                  <div class="fx-image">
+                    <img src="images/stars.webp" loading="lazy" alt="Stars 完整 Unity 特效预览">
+                    <span class="combination-count">18 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Stars</div>
+                    <div class="fx-cn">星星</div>
+                    <div class="fx-variants">StarFog · StarFogFlow · StarVortex</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="firefloortrail"
+                  data-type="trails" data-family="互动"
+                  data-two-d="0"
+                  data-count="5" data-slug="trails"
+                  aria-label="Trails，5 个组合">
+                  <div class="fx-image">
+                    <img src="images/trails.webp" loading="lazy" alt="Trails 完整 Unity 特效预览">
+                    <span class="combination-count">5 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Trails</div>
+                    <div class="fx-cn">地面拖尾</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                
+                <button class="fx-card" type="button" data-name="magiczoneblue"
+                  data-type="zone" data-family="互动"
+                  data-two-d="0"
+                  data-count="18" data-slug="zone"
+                  aria-label="Zone，18 个组合">
+                  <div class="fx-image">
+                    <img src="images/zone.webp" loading="lazy" alt="Zone 完整 Unity 特效预览">
+                    <span class="combination-count">18 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">Zone</div>
+                    <div class="fx-cn">区域光圈</div>
+                    <div class="fx-variants">BasicZone · BasicZoneWall · MagicZone · SpinZone</div>
+                  </div>
+                </button>
+                </div>
+            </section>
+            
+            <section class="family-section" data-family="其他">
+              <div class="section-head">
+                <div>
+                  <div class="section-kicker">Other FX</div>
+                  <h2>其他特效</h2>
+                  <p>补充互动特效与演示型组合</p>
+                </div>
+                <span class="section-count">1 个类型</span>
+              </div>
+              <div class="fx-grid">
+                <button class="fx-card" type="button" data-name="musicalnoteexplosion"
+                  data-type="互动杂项" data-family="其他"
+                  data-two-d="0"
+                  data-count="8" data-slug="misc"
+                  aria-label="互动杂项，8 个组合">
+                  <div class="fx-image">
+                    <img src="images/misc.webp" loading="lazy" alt="互动杂项 完整 Unity 特效预览">
+                    <span class="combination-count">8 个组合</span>
+                  </div>
+                  <div class="fx-copy">
+                    <div class="fx-label">互动杂项</div>
+                    <div class="fx-cn">互动杂项</div>
+                    <div class="fx-variants">基础效果</div>
+                  </div>
+                </button>
+                </div>
+            </section>
+            </div>
+    <div id="empty" class="empty hidden">没有找到匹配的特效类型。</div>
+    <footer class="footer">
+      <span>预览由 Unity 6 实际加载 1.7 包内 Prefab 后渲染</span>
+      <span>图片经过亮度与辉光处理以接近商店展示效果</span>
+    </footer>
+  </main>
+
+  <dialog id="detail">
+    <div class="dialog-head">
+      <div><div class="dialog-kicker" id="detail-kicker"></div><h2 class="dialog-title" id="detail-title"></h2></div>
+      <button class="close" id="close-detail" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="dialog-body">
+      <img class="dialog-image" id="detail-image" alt="">
+      <div class="detail">
+        <div><div class="detail-label">颜色 / 风格组合</div><div class="detail-value" id="detail-count"></div></div>
+        <div><div class="detail-label">代表 Prefab</div><code id="detail-prefab"></code></div>
+        <div><div class="detail-label">变体清单</div><div class="variant-list" id="detail-variants"></div></div>
+      </div>
+    </div>
+  </dialog>
+
+  <script id="catalog-data" type="application/json">{"records":[{"guid":"01949c12a89de284792dc4b7b7128404","name":"BloodExplosionRoundAnimated","path":"Assets/Epic Toon FX/Prefabs/Combat/Blood/Red/BloodExplosionRoundAnimated.prefab","type":"Blood","slug":"blood","count":51,"variants":["Green","Red","Yellow"],"family":"战斗","twoDCount":15,"image":"images/blood.webp"},{"guid":"0b4ea991852d6984aab98759fa8d4ebb","name":"BombFuse","path":"Assets/Epic Toon FX/Prefabs/Combat/BombFuse/BombFuse.prefab","type":"BombFuse","slug":"bombfuse","count":2,"variants":[],"family":"战斗","twoDCount":0,"image":"images/bombfuse.webp"},{"guid":"56c3274d2f9ec214ab584a80b5ce2d6d","name":"CartoonyBodySlam","path":"Assets/Epic Toon FX/Prefabs/Combat/Brawling/Cartoony/CartoonyBodySlam.prefab","type":"Brawling","slug":"brawling","count":20,"variants":["Cartoony","RoundHit","Soft","Stun"],"family":"战斗","twoDCount":0,"image":"images/brawling.webp"},{"guid":"48b70001f3e22c7429ee06b99087e45e","name":"SoapBubbleBlast","path":"Assets/Epic Toon FX/Prefabs/Environment/Bubbles/SoapBubbleBlast.prefab","type":"Bubbles","slug":"bubbles","count":2,"variants":[],"family":"环境","twoDCount":0,"image":"images/bubbles.webp"},{"guid":"1fd0b4a9d5aa7e049a14955abe32d4c1","name":"CardglowType01","path":"Assets/Epic Toon FX/Prefabs/Interactive/Cards/CardglowType01.prefab","type":"Cards","slug":"cards","count":4,"variants":[],"family":"互动","twoDCount":0,"image":"images/cards.webp"},{"guid":"36bdc02b23d9ca94d93bd715c0cca5c0","name":"ConfettiBlastRainbow","path":"Assets/Epic Toon FX/Prefabs/Environment/Confetti/Blast/ConfettiBlastRainbow.prefab","type":"Confetti","slug":"confetti","count":18,"variants":["Blast","Directional","Shower"],"family":"环境","twoDCount":0,"image":"images/confetti.webp"},{"guid":"2e30d40b54f77704d815fabce00d7b2e","name":"FireDeath","path":"Assets/Epic Toon FX/Prefabs/Combat/Death/FireDeath.prefab","type":"Death","slug":"death","count":10,"variants":[],"family":"战斗","twoDCount":0,"image":"images/death.webp"},{"guid":"628d050c815a3a3448ce1dcdf0578f21","name":"ExplosionDecalFire","path":"Assets/Epic Toon FX/Prefabs/Combat/Decals/Explosion Decal/ExplosionDecalFire.prefab","type":"Decals","slug":"decals","count":14,"variants":["Bullet Decal","Energy Decal","Explosion Decal"],"family":"战斗","twoDCount":0,"image":"images/decals.webp"},{"guid":"c05e92eaee7a00844867e5edc8e0dde1","name":"DustDirtyPoof","path":"Assets/Epic Toon FX/Prefabs/Environment/Dust/DustDirtyPoof.prefab","type":"Dust","slug":"dust","count":4,"variants":[],"family":"环境","twoDCount":0,"image":"images/dust.webp"},{"guid":"92cf35f623d72fc448f4d0661c9284f5","name":"EmojiLaughCry","path":"Assets/Epic Toon FX/Prefabs/Interactive/Emojis/EmojiLaughCry.prefab","type":"Emojis","slug":"emojis","count":23,"variants":[],"family":"互动","twoDCount":0,"image":"images/emojis.webp"},{"guid":"de89eb4d167e00b4fab157953b8d3894","name":"EmojiMad","path":"Assets/Epic Toon FX/Prefabs/Interactive/Emojis 2/EmojiMad.prefab","type":"Emojis 2","slug":"emojis-2","count":29,"variants":[],"family":"互动","twoDCount":0,"image":"images/emojis-2.webp"},{"guid":"5a28ab12a60431942ac754ec3f39c551","name":"MegaExplosionRed","path":"Assets/Epic Toon FX/Prefabs/Combat/Explosions/MegaExplosion/MegaExplosionRed.prefab","type":"Explosions","slug":"explosions","count":124,"variants":["- Misc","BulletExplosion","BulletFatExplosion","FireballExplosion","FrostExplosion","GasExplosion","GlitterExplosion","GrenadeExplosion","LaserExplosion","LightningExplosion","LiquidExplosion","MagicExplosion","MagicSoftExplosion","MegaExplosion","MysticExplosion","NovaExplosion","NovaSmallExplosion","NukeConeExplosion","NukeExplosion","NukeVerticalExplosion","RoundExplosion","ShadowExplosion","SmallExplosion","SoulExplosion","SparkleExplosion","SpikyExplosion","StarExplosion","StarIntenseExplosion","StormExplosion"],"family":"战斗","twoDCount":3,"image":"images/explosions.webp"},{"guid":"4924b9135249e0d448901a81875768c6","name":"FeatherExplosion","path":"Assets/Epic Toon FX/Prefabs/Interactive/Feathers/FeatherExplosion.prefab","type":"Feathers","slug":"feathers","count":2,"variants":[],"family":"互动","twoDCount":0,"image":"images/feathers.webp"},{"guid":"0b5e7793d4d1e854385c5ce9b1e79f47","name":"CartoonFireTorchRed","path":"Assets/Epic Toon FX/Prefabs/Environment/Fire/Cartoon/Torch/CartoonFireTorchRed.prefab","type":"Fire","slug":"fire","count":50,"variants":["Candle / CandleLight","Candle / CandleLightSoft","Cartoon / Field","Cartoon / Field Intense","Cartoon / Torch","Cartoon / Torch Intense","Soft / SoftFireAB","Soft / SoftFireADD","Soft / SoftFireBig","Soft / SoftTallFire","Spiky / Additive","Trails"],"family":"环境","twoDCount":0,"image":"images/fire.webp"},{"guid":"648a454b0bdfd8c47a5cf48e1f8a3736","name":"FireFliesGreen","path":"Assets/Epic Toon FX/Prefabs/Environment/Fireflies/FireFliesGreen.prefab","type":"Fireflies","slug":"fireflies","count":5,"variants":[],"family":"环境","twoDCount":0,"image":"images/fireflies.webp"},{"guid":"8f6a3d95cdec3f148b48cc4604a41a59","name":"FireworkBlueCluster","path":"Assets/Epic Toon FX/Prefabs/Environment/Firework/FireworkBlueCluster.prefab","type":"Firework","slug":"firework","count":10,"variants":[],"family":"环境","twoDCount":0,"image":"images/firework.webp"},{"guid":"7c1b627e705f998448adac9689c44505","name":"FlamethrowerCartoonyFire","path":"Assets/Epic Toon FX/Prefabs/Combat/Flamethrower/Cartoon/FlamethrowerCartoonyFire.prefab","type":"Flamethrower","slug":"flamethrower","count":17,"variants":["Cartoon","Soft / Additive","Soft / Alpha Blend","Spiky"],"family":"战斗","twoDCount":0,"image":"images/flamethrower.webp"},{"guid":"f6a42ec60fcc77846b43d478e1ec4734","name":"FlareSoftBlue","path":"Assets/Epic Toon FX/Prefabs/Interactive/Flares/Soft/FlareSoftBlue.prefab","type":"Flares","slug":"flares","count":10,"variants":["Sharp","Soft"],"family":"互动","twoDCount":0,"image":"images/flares.webp"},{"guid":"5c44ffd6bd009b5478488ee0c5e53673","name":"FogHeavyWhite","path":"Assets/Epic Toon FX/Prefabs/Environment/Fog/White/FogHeavyWhite.prefab","type":"Fog","slug":"fog","count":12,"variants":["Black","Grey","White"],"family":"环境","twoDCount":0,"image":"images/fog.webp"},{"guid":"5128d0fb523fca6439fa131a1063c074","name":"HealField","path":"Assets/Epic Toon FX/Prefabs/Interactive/Healing/HealField.prefab","type":"Healing","slug":"healing","count":8,"variants":[],"family":"互动","twoDCount":0,"image":"images/healing.webp"},{"guid":"836a6e787e3b11941b38b8fff2af4e5b","name":"HeartPoof","path":"Assets/Epic Toon FX/Prefabs/Interactive/Hearts/HeartPoof.prefab","type":"Hearts","slug":"hearts","count":5,"variants":[],"family":"互动","twoDCount":0,"image":"images/hearts.webp"},{"guid":"992c31aa5088a9649851c996f2a08b7e","name":"LightningOrbSharpBlue","path":"Assets/Epic Toon FX/Prefabs/Environment/Lightning/Sharp/LightningOrbSharpBlue.prefab","type":"Lightning","slug":"lightning","count":12,"variants":["Sharp","Soft"],"family":"环境","twoDCount":0,"image":"images/lightning.webp"},{"guid":"56444d1aef63b664caefd0998460ef03","name":"ChestAppearBlue","path":"Assets/Epic Toon FX/Prefabs/Interactive/Loot/ChestAppear/ChestAppearBlue.prefab","type":"Loot","slug":"loot","count":31,"variants":["ChestAppear","GlowOrb","ItemSkewedGlow","ItemSparkle","ItemSparkleSoft"],"family":"互动","twoDCount":0,"image":"images/loot.webp"},{"guid":"92f1a4b7c0101cb4f84455289ac65548","name":"MagicCircleSimpleBlue","path":"Assets/Epic Toon FX/Prefabs/Combat/Magic/Circle Simple/MagicCircleSimpleBlue.prefab","type":"Magic","slug":"magic","count":38,"variants":["Aura","Aura Soft","Buff","Charge","Circle","Circle Simple","Enchant","Field","Nova","PillarBlast","Shield","Sphere"],"family":"战斗","twoDCount":0,"image":"images/magic.webp"},{"guid":"425d927f9eb0a72428aed6bb4c72fba1","name":"StormMissile","path":"Assets/Epic Toon FX/Prefabs/Combat/Missiles/Storm/StormMissile.prefab","type":"Missiles","slug":"missiles","count":72,"variants":["Bullet","FatBullet","Fireball","Frost","Gas","Grenade","Laser","Lightning","Liquid","Magic","MagicSoft","Mystic","NovaMissile","NovaSmall","Nuke","Rocket","Shadow","Soul","Sparkle","Storm"],"family":"战斗","twoDCount":0,"image":"images/missiles.webp"},{"guid":"09d9de58ef3bf5444ac94afa0e6013cb","name":"GoldCoinBlast","path":"Assets/Epic Toon FX/Prefabs/Interactive/Money/Coins/GoldCoinBlast.prefab","type":"Money","slug":"money","count":12,"variants":["Bills","Coins"],"family":"互动","twoDCount":0,"image":"images/money.webp"},{"guid":"5c129ddc4d253164a8e65c5e372cf150","name":"NukeMuzzleFire","path":"Assets/Epic Toon FX/Prefabs/Combat/Muzzleflash/NukeMuzzle/NukeMuzzleFire.prefab","type":"Muzzleflash","slug":"muzzleflash","count":72,"variants":["- Misc / GunFire","BulletFatMuzzle","BulletMuzzle","EnergyNovaMuzzle","EnergyNovaSmallMuzzle","FireballMuzzle","FrostMuzzle","GrenadeMuzzle","LaserMuzzle","LightningMuzzle","LiquidMuzzle","MagicMuzzle","MagicSoftMuzzle","MysticMuzzle","NukeMuzzle","RocketMuzzle","ShadowMuzzle","SoulMuzzle","SparkleMuzzle","StormMuzzle"],"family":"战斗","twoDCount":0,"image":"images/muzzleflash.webp"},{"guid":"2aca4c37fa723b4489a42288a1356056","name":"NovaFireBlue","path":"Assets/Epic Toon FX/Prefabs/Combat/Nova/Fire/NovaFireBlue.prefab","type":"Nova","slug":"nova","count":13,"variants":["Fire","Frost","Lightning","Standard"],"family":"战斗","twoDCount":0,"image":"images/nova.webp"},{"guid":"6749a1da7a6538e4bae6c320db525d94","name":"SpinPortalBlue","path":"Assets/Epic Toon FX/Prefabs/Interactive/Portals/SpinPortal/SpinPortalBlue.prefab","type":"Portals","slug":"portals","count":25,"variants":["SimplePortal","SoftPortal","SpinPortal","VortexPortal","WavePortal"],"family":"互动","twoDCount":0,"image":"images/portals.webp"},{"guid":"e3341cd0b29d79a4895de26f271c310d","name":"PowerOrbFireElemental","path":"Assets/Epic Toon FX/Prefabs/Interactive/Powerups/PowerOrbElemental/PowerOrbFireElemental.prefab","type":"Powerups","slug":"powerups","count":30,"variants":["PowerOrb","PowerOrbElemental","PowerOrbSciFi","PowerOrbSmall","PowerupActivate","PowerupGlow"],"family":"互动","twoDCount":0,"image":"images/powerups.webp"},{"guid":"c105577ec49dfb3408a7a89c3b7730be","name":"ShieldSoftBlue","path":"Assets/Epic Toon FX/Prefabs/Combat/Shield/ShieldSoftBlue.prefab","type":"Shield","slug":"shield","count":4,"variants":[],"family":"战斗","twoDCount":0,"image":"images/shield.webp"},{"guid":"56346542eb69e3444bc72d177bc462d8","name":"SmokeBurstWhite","path":"Assets/Epic Toon FX/Prefabs/Environment/Smoke/White/SmokeBurstWhite.prefab","type":"Smoke","slug":"smoke","count":15,"variants":["Dark","White"],"family":"环境","twoDCount":0,"image":"images/smoke.webp"},{"guid":"db1ef0db102f5864986443fb43fd0f64","name":"SparkleAreaBlue","path":"Assets/Epic Toon FX/Prefabs/Interactive/Sparkle/SparkleArea/SparkleAreaBlue.prefab","type":"Sparkle","slug":"sparkle","count":11,"variants":["SparkleArea","SparkleSolo"],"family":"互动","twoDCount":0,"image":"images/sparkle.webp"},{"guid":"d8375ffafb92bd54da393edded479abb","name":"SparkExplosionBlue","path":"Assets/Epic Toon FX/Prefabs/Environment/Sparks/SparkExplosionBlue.prefab","type":"Sparks","slug":"sparks","count":6,"variants":[],"family":"环境","twoDCount":0,"image":"images/sparks.webp"},{"guid":"cc4edba986607ba48b17927b27d25e4e","name":"StarExplosion","path":"Assets/Epic Toon FX/Prefabs/Interactive/Stars/StarExplosion.prefab","type":"Stars","slug":"stars","count":18,"variants":["StarFog","StarFogFlow","StarVortex"],"family":"互动","twoDCount":0,"image":"images/stars.webp"},{"guid":"4889039938a567444827eafcfbc2b267","name":"SwordHitRed","path":"Assets/Epic Toon FX/Prefabs/Combat/Sword/Hit/SwordHit/SwordHitRed.prefab","type":"Sword","slug":"sword","count":52,"variants":["- Legacy / SwordHitCriticalLegacy","- Legacy / SwordHitLegacy","Hit / SwordHit","Hit / SwordHitCritical","Hit / SwordHitMagic","Hit / SwordHitMini","Slash / SwordSlashMini","Slash / SwordSlashThick","Slash / SwordSlashThin","Spin","Wave","Whirlwind"],"family":"战斗","twoDCount":0,"image":"images/sword.webp"},{"guid":"30a1ca85182ce3e439e8d6cb843ab9ad","name":"KaPow","path":"Assets/Epic Toon FX/Prefabs/Combat/Text/KaPow.prefab","type":"Text","slug":"text","count":4,"variants":[],"family":"战斗","twoDCount":0,"image":"images/text.webp"},{"guid":"ede42a52a2caa594dbc67cd13f591f5a","name":"FireFloorTrail","path":"Assets/Epic Toon FX/Prefabs/Interactive/Trails/FireFloorTrail.prefab","type":"Trails","slug":"trails","count":5,"variants":[],"family":"互动","twoDCount":0,"image":"images/trails.webp"},{"guid":"caf388c7338cc0c4b9187283f10a304a","name":"BubbleBlastUnderwater","path":"Assets/Epic Toon FX/Prefabs/Environment/Underwater/BubbleBlastUnderwater.prefab","type":"Underwater","slug":"underwater","count":4,"variants":[],"family":"环境","twoDCount":0,"image":"images/underwater.webp"},{"guid":"5e6b78bb4b4d6d34e970c19c9577f070","name":"WaterfallSharp","path":"Assets/Epic Toon FX/Prefabs/Environment/Water/Flowing/Sharp/WaterfallSharp.prefab","type":"Water","slug":"water","count":26,"variants":["Boiling","Flowing","Flowing / Sharp","Flowing / Soft","Other"],"family":"环境","twoDCount":4,"image":"images/water.webp"},{"guid":"e83fb83871ed1ac4d978b22b0f2a4d71","name":"Whirlwind","path":"Assets/Epic Toon FX/Prefabs/Environment/Weather/Whirlwind.prefab","type":"Weather","slug":"weather","count":19,"variants":["Rain","Snow","Wind & Leaves"],"family":"环境","twoDCount":1,"image":"images/weather.webp"},{"guid":"5d24c8b5c9abd754d877d25ebd733bdf","name":"MagicZoneBlue","path":"Assets/Epic Toon FX/Prefabs/Interactive/Zone/MagicZone/MagicZoneBlue.prefab","type":"Zone","slug":"zone","count":18,"variants":["BasicZone","BasicZoneWall","MagicZone","SpinZone"],"family":"互动","twoDCount":0,"image":"images/zone.webp"},{"guid":"ed6b8128683f4094f92b7a556760b26b","name":"MusicalNoteExplosion","path":"Assets/Epic Toon FX/Prefabs/Misc/MusicalNoteExplosion.prefab","type":"互动杂项","slug":"misc","count":8,"variants":[],"family":"其他","twoDCount":0,"image":"images/misc.webp"}]}</script>
+  <script>
+    (() => {
+      const data = JSON.parse(document.getElementById("catalog-data").textContent);
+      const cards = [...document.querySelectorAll(".fx-card")];
+      const sections = [...document.querySelectorAll(".family-section")];
+      const search = document.getElementById("search");
+      const filters = [...document.querySelectorAll(".filter")];
+      const empty = document.getElementById("empty");
+      const detail = document.getElementById("detail");
+      let activeFamily = "全部";
+
+      filters.forEach(button => button.addEventListener("click", () => {
+        activeFamily = button.dataset.family;
+        filters.forEach(item => item.classList.toggle("active", item === button));
+        applyFilters();
+      }));
+      search.addEventListener("input", applyFilters);
+
+      function applyFilters() {
+        const query = search.value.trim().toLowerCase();
+        let visible = 0;
+        for (const card of cards) {
+          const matchesFamily = activeFamily === "全部" ||
+            (activeFamily === "2D" ? card.dataset.twoD === "1" : card.dataset.family === activeFamily);
+          const matchesText = !query || (card.dataset.name + " " + card.dataset.type).includes(query);
+          const show = matchesFamily && matchesText;
+          card.classList.toggle("hidden", !show);
+          if (show) visible++;
+        }
+        for (const section of sections) {
+          section.classList.toggle("hidden", !section.querySelector(".fx-card:not(.hidden)"));
+        }
+        empty.classList.toggle("hidden", visible !== 0);
+      }
+
+      function showDetail(slug) {
+        const record = data.records.find(item => item.slug === slug);
+        if (!record) return;
+        document.getElementById("detail-kicker").textContent = record.family;
+        document.getElementById("detail-title").textContent = record.type;
+        document.getElementById("detail-image").src = record.image;
+        document.getElementById("detail-image").alt = record.type + " 完整特效预览";
+        document.getElementById("detail-count").textContent = record.count + " 个颜色 / 风格组合";
+        document.getElementById("detail-prefab").textContent = record.path;
+        const variants = document.getElementById("detail-variants");
+        variants.replaceChildren();
+        for (const value of record.variants.length ? record.variants : ["基础组合"]) {
+          const chip = document.createElement("span");
+          chip.textContent = value;
+          variants.append(chip);
+        }
+        detail.showModal();
+      }
+
+      cards.forEach(card => card.addEventListener("click", () => showDetail(card.dataset.slug)));
+      document.getElementById("close-detail").addEventListener("click", () => detail.close());
+      detail.addEventListener("click", event => { if (event.target === detail) detail.close(); });
+    })();
+  </script>
+</body>
+</html>

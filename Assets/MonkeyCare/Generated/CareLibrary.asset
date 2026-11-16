@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 84ce77c438444078bf23dd20157658ab, type: 3}
+  m_Name: CareLibrary
+  m_EditorClassIdentifier: Assembly-CSharp::ADayAtTheZoo.Monkeys.MonkeyAnimationLibrary
+  entries:
+  - action: 0
+    clip: {fileID: 7400000, guid: 70288c92868f2584283b43a8832fcfe2, type: 2}
+    source: Assets/MonkeyNPC/Generated/StandingIdle.anim
+  - action: 1
+    clip: {fileID: 7400000, guid: 0f78472c45b16e84faefd6e3f01529ee, type: 2}
+    source: Assets/MonkeyNPC/Generated/SittingIdle.anim
+  - action: 2
+    clip: {fileID: 7400000, guid: 8d33384e1f511484b8690ccc2f05cbe7, type: 2}
+    source: Assets/MonkeyNPC/Generated/Hungry.anim
+  - action: 3
+    clip: {fileID: 7400000, guid: 7a102bdbc1956ba40b0d8a89bcc12837, type: 2}
+    source: Assets/MonkeyNPC/Generated/Eating.anim
+  - action: 4
+    clip: {fileID: 7400000, guid: 1b0a4dfcb3c0fd944ac8e3a25a630707, type: 2}
+    source: Assets/MonkeyNPC/Generated/Happy.anim
+  - action: 5
+    clip: {fileID: 7400000, guid: 02486f8a6e6449d4a88945c4eb5821e8, type: 2}
+    source: Assets/MonkeyNPC/Generated/Walking.anim
+  - action: 6
+    clip: {fileID: 7400000, guid: 31689010c7165754fbc7ff9e2c0381d7, type: 2}
+    source: Assets/MonkeyNPC/Generated/Running.anim
+  - action: 7
+    clip: {fileID: 7400000, guid: 76c9cf378477e4b43b6bb2b5c2c1909d, type: 2}
+    source: Assets/MonkeyNPC/Generated/Scratching.anim
+  - action: 8
+    clip: {fileID: 7400000, guid: a5053c4e8fec8bd468759e89ea024ccc, type: 2}
+    source: Assets/MonkeyNPC/Generated/Hi.anim
+  - action: 9
+    clip: {fileID: 7400000, guid: 663cf348f364599439defd8e7bb92beb, type: 2}
+    source: Assets/Suriyun/Animations/Pspsps Animations/Character Animations/Anim_Chibi@Cute1.fbx
