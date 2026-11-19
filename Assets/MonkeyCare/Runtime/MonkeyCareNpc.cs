@@ -60,6 +60,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         RuntimeAnimatorController originalController;
         AnimationClip currentClip;
         CareAnimation currentAnimation;
+        MonkeyFace face;
         float animationStarted, animationLength, waitUntil, shownSatisfaction, fillFrom, fillTarget, fillStarted;
         int feedingFrame = -1;
         CareItem feedingItem;
@@ -75,6 +76,15 @@ namespace ADayAtTheZoo.Monkeys.Care
             overrides = new AnimatorOverrideController(originalController);
             animator.runtimeAnimatorController = overrides;
             animator.applyRootMotion = false;
+            face = GetComponent<MonkeyFace>();
+            if (CareUiSkin.SvgStaminaPanel) ui.stamina = CareUiSkin.SvgStaminaPanel;
+            if (CareUiSkin.SvgSatisfactionPanel) ui.satisfaction = CareUiSkin.SvgSatisfactionPanel;
+            if (CareUiSkin.SvgStaminaFill) ui.staminaFill = CareUiSkin.SvgStaminaFill;
+            if (CareUiSkin.SvgSatisfactionFill) ui.satisfactionFill = CareUiSkin.SvgSatisfactionFill;
+            if (CareUiSkin.SvgStaminaLogo) ui.staminaLogo = CareUiSkin.SvgStaminaLogo;
+            if (CareUiSkin.SvgSatisfactionLogo) ui.satisfactionLogo = CareUiSkin.SvgSatisfactionLogo;
+            if (CareUiSkin.SvgSad) ui.sad = CareUiSkin.SvgSad;
+            if (CareUiSkin.SvgHappy) ui.happy = CareUiSkin.SvgHappy;
             panel = new CarePanel(transform, ui);
             statusText = CareRoundView.Label("Care Status", panel.Root, "", new Vector2(900, 70), new Vector2(0, -170), 36);
             statusText.color = Color.white; statusText.gameObject.AddComponent<Shadow>();
@@ -114,6 +124,8 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (teleportPoint) teleportPoint.gameObject.SetActive(false);
             panel.Root.gameObject.SetActive(true);
             RefreshUi();
+            if (need == CareNeed.Hunger)
+                MonkeyCareSession.Instance?.audioFeedback.Whistle(transform);
         }
         public void EndGuidedTutorial()
         {
@@ -133,6 +145,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             {
                 PlayPhase(MonkeyAction.Hi, wave);
             }
+            face?.ClearReaction();
         }
         void Update()
         {
@@ -144,7 +157,8 @@ namespace ADayAtTheZoo.Monkeys.Care
                 return;
             }
             if (MonkeyCareSession.Instance.Round.Frozen) return;
-            int tasksPerMonkey = MonkeyCareSession.Instance.Round.TasksPerMonkey;
+            int tasksPerMonkey = MonkeyCareSession.Instance.Round.TasksForMonkey(
+                Array.IndexOf(MonkeyCareSession.Instance.monkeys, this));
             if (Celebrating)
             {
                 if (animationFinished || (CurrentTaskIndex < tasksPerMonkey && MonkeyCareSession.TaskTime >= waitUntil))
@@ -224,6 +238,8 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (demandFx && need == CareNeed.Itch) foreach (var r in demandFx.GetComponentsInChildren<ParticleSystemRenderer>(true)) if (r.sharedMaterial && r.sharedMaterial.name == "wave2") r.enabled = false;
             if (teleportPoint) teleportPoint.gameObject.SetActive(true);
             panel.Root.gameObject.SetActive(true); RefreshUi();
+            if (need == CareNeed.Hunger)
+                MonkeyCareSession.Instance?.audioFeedback.Whistle(transform);
         }
         public void OfferFood(CareItem item)
         {
@@ -263,11 +279,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             item.Consume();
             if (demandFx) Destroy(demandFx);
             if (teleportPoint) teleportPoint.gameObject.SetActive(false);
-            PlayPhase(Need == CareNeed.Hunger ? MonkeyAction.Happy : MonkeyAction.Cute1,
-                Need == CareNeed.Hunger ? victory : cute);
-            MonkeyCareSession.Instance.audioFeedback.Complete(transform, Need);
-            // A success animation cannot wait for a state that it must itself finish.
-            if (float.IsPositiveInfinity(animationLength)) animationLength = currentClip.length / Mathf.Max(.01f, currentAnimation.speed);
+            Celebrate(Need);
             RefreshUi();
         }
         void CompleteGuided(CareItem item)
@@ -277,13 +289,22 @@ namespace ADayAtTheZoo.Monkeys.Care
             Celebrating = true;
             smokeShown = true;
             item.Consume();
-            if (panel != null) panel.Root.gameObject.SetActive(false);
-            if (emotion)
-            {
-                emotion.gameObject.SetActive(false);
-            }
-            PlayPhase(MonkeyAction.Happy, victory);
-            MonkeyCareSession.Instance?.audioFeedback.Complete(transform, Need);
+            Celebrate(CareNeed.Hunger);
+            if (panel != null) panel.Root.gameObject.SetActive(true);
+            RefreshUi();
+        }
+        void Celebrate(CareNeed completedNeed)
+        {
+            Celebrating = true;
+            smokeShown = true;
+            CareAnimation reaction = completedNeed == CareNeed.Hunger ? victory : cute;
+            MonkeyAction action = completedNeed == CareNeed.Hunger ? MonkeyAction.Happy : MonkeyAction.Cute1;
+            PlayPhase(action, reaction);
+            if (float.IsPositiveInfinity(animationLength) && currentClip)
+                animationLength = currentClip.length / Mathf.Max(.01f, reaction.speed);
+            face?.ShowReaction(action, Mathf.Max(3.2f, float.IsPositiveInfinity(animationLength)
+                ? 3.2f : animationLength));
+            MonkeyCareSession.Instance?.audioFeedback.Complete(transform, completedNeed);
         }
         void RefreshUi()
         {
@@ -299,15 +320,22 @@ namespace ADayAtTheZoo.Monkeys.Care
             bool showEmotion = Celebrating || Progress.Late;
             emotion.gameObject.SetActive(showEmotion); emotionImage.sprite = Celebrating ? ui.happy : ui.sad;
             float remaining = Progress.Deadline - Progress.Waited;
-            statusText.text = Celebrating ? (Progress.Late ? "补救成功！下一次恢复正常要求" : "喂饱了！") :
-                Progress.Late ? (Need == CareNeed.Hunger ? "补救：吃 " + feedingSeconds.ToString("0") + " → " + lateFeedingSeconds.ToString("0") + " 秒" : "补救：" + scratchCount + " → " + lateScratchCount + " 次") :
-                remaining <= 10 ? "快一点！还剩 " + Mathf.CeilToInt(remaining) + " 秒" : "";
+            statusText.text = Celebrating
+                ? (Progress.Late ? "RESCUED! Normal speed next time." : "FED!")
+                : Progress.Late
+                    ? (Need == CareNeed.Hunger
+                        ? "PATIENCE LOST -1: EAT " + feedingSeconds.ToString("0") +
+                          " → " + lateFeedingSeconds.ToString("0") + " SEC"
+                        : "PATIENCE LOST -1: SCRATCH " + scratchCount +
+                          " → " + lateScratchCount + " TIMES")
+                    : remaining <= 10
+                        ? "HURRY! " + Mathf.CeilToInt(remaining) + " SEC"
+                        : "";
             statusText.color = !Celebrating && remaining <= 10 ? Color.Lerp(Color.white, new Color(1, .65f, .2f), .5f + .5f * Mathf.Sin(MonkeyCareSession.GameTime * 6)) : Color.white;
         }
         void LateUpdate()
         {
             if (panel == null) return;
-            if (MonkeyCareSession.Instance && MonkeyCareSession.Instance.Round.Frozen) return;
             var camera = MonkeyCareSession.PlayerCamera;
             if (!camera) return;
             var view = camera.transform;
@@ -329,7 +357,10 @@ namespace ADayAtTheZoo.Monkeys.Care
             overrides[placeholder.name] = clip;
             animationLength = setting.Length(clip); animationStarted = MonkeyCareSession.GameTime;
             animator.speed = Mathf.Max(.01f, setting.speed);
-            animator.CrossFadeInFixedTime("Base Layer." + phase, .12f, 0, 0);
+            // Play the named state after replacing the override motion. Cross
+            // fades can otherwise remain in Eating when a banana completes in
+            // the same frame, hiding the Happy reaction from the player.
+            animator.Play("Base Layer." + phase, 0, 0);
         }
         bool UpdateAnimation()
         {
@@ -351,11 +382,18 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
         void UpdateRecord()
         {
-            if (record == null || Progress == null) return;
+            if (Progress == null) return;
             if (Progress.Late && !rescueRecorded)
             {
                 rescueRecorded = true; consecutiveRescues++;
-                record.rescueAt = appearedAt + patienceSeconds; record.consecutiveRescues = consecutiveRescues;
+                MonkeyCareSession.Instance?.Round?.RegisterPatiencePenalty(
+                    Array.IndexOf(MonkeyCareSession.Instance.monkeys, this), CurrentTaskIndex);
+            }
+            if (record == null) return;
+            if (rescueRecorded)
+            {
+                record.rescueAt = appearedAt + patienceSeconds;
+                record.consecutiveRescues = consecutiveRescues;
             }
             record.effectiveFeedingSeconds = Progress.Fed; record.effectiveStrokes = Progress.Strokes;
             if (record.startedAt >= 0) record.switchDelay = Mathf.Max(0, record.startedAt - appearedAt);
@@ -369,11 +407,12 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (emotion) emotion.gameObject.SetActive(false);
             if (animator) animator.speed = 0;
         }
-        public void ResetForRound()
+        public void ResetForRound(bool beginImmediately = true)
         {
             guidedTutorial = false;
             StopAtCutoff(); CurrentTaskIndex = 0; Progress = null; consecutiveRescues = 0; currentAnimation = null;
-            started = false; BeginSession();
+            started = false;
+            if (beginImmediately) BeginSession();
         }
         void OnDestroy()
         {

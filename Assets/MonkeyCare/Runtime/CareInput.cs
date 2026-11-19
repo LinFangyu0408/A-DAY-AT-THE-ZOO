@@ -38,9 +38,27 @@ namespace ADayAtTheZoo.Monkeys.Care
     {
         static bool previousA, previousB, previousTrigger;
 
+        public static bool IsPlayStationController
+        {
+            get
+            {
+                if (LooksLikePlayStation(Gamepad.current)) return true;
+                foreach (var device in InputSystem.devices)
+                    if (device.added && LooksLikePlayStation(device)) return true;
+                return false;
+            }
+        }
+        // The current English UI follows the reference screenshots and uses
+        // Xbox-style letter badges. PlayStation face buttons still map to the
+        // same actions: Cross = A and Circle = B.
+        public static string ConfirmLabel => "A";
+        public static string BackLabel => "B";
+        public static bool AnyGamepadConnected => Gamepad.all.Count > 0;
+        public static Vector2 GamepadLeftStick => ReadGamepadStick(true);
+        public static Vector2 GamepadRightStick => ReadGamepadStick(false);
+
         public static CareInputSnapshot Read(bool allowDesktopFallback = true)
         {
-            Gamepad pad = Gamepad.current;
             CareXboxSnapshot xbox = CareXboxInput.Read();
             XRInputDevice right = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
             XRInputDevice left = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
@@ -49,10 +67,18 @@ namespace ADayAtTheZoo.Monkeys.Care
             bool rightOvr = OVRInput.IsControllerConnected(OVRInput.Controller.RTouch);
             bool leftOvr = OVRInput.IsControllerConnected(OVRInput.Controller.LTouch);
 
-            bool a = (pad != null && pad.buttonSouth.isPressed) || xbox.A;
-            bool b = (pad != null && pad.buttonEast.isPressed) || xbox.B;
-            float triggerValue = Mathf.Max(pad != null ? pad.rightTrigger.ReadValue() : 0, xbox.RightTrigger);
-            float gripValue = Mathf.Max(pad != null ? pad.leftTrigger.ReadValue() : 0, xbox.LeftTrigger);
+            bool gamepadConnected = false;
+            bool a = xbox.A, b = xbox.B;
+            float triggerValue = xbox.RightTrigger;
+            float gripValue = xbox.LeftTrigger;
+            foreach (Gamepad pad in Gamepad.all)
+            {
+                gamepadConnected = true;
+                a |= pad.buttonSouth.isPressed;
+                b |= pad.buttonEast.isPressed;
+                triggerValue = Mathf.Max(triggerValue, pad.rightTrigger.ReadValue());
+                gripValue = Mathf.Max(gripValue, pad.leftTrigger.ReadValue());
+            }
 
             if (rightOvr)
             {
@@ -69,8 +95,8 @@ namespace ADayAtTheZoo.Monkeys.Care
                 if (right.TryGetFeatureValue(XRCommonUsages.grip, out float xrGrip)) gripValue = Mathf.Max(gripValue, xrGrip);
             }
 
-            Vector2 leftStick = pad != null ? pad.leftStick.ReadValue() : Vector2.zero;
-            Vector2 rightStick = pad != null ? pad.rightStick.ReadValue() : Vector2.zero;
+            Vector2 leftStick = GamepadLeftStick;
+            Vector2 rightStick = GamepadRightStick;
             leftStick = Expand(leftStick, xbox.LeftStick);
             rightStick = Expand(rightStick, xbox.RightStick);
             if (leftOvr) leftStick = Expand(leftStick, OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick, OVRInput.Controller.LTouch));
@@ -78,7 +104,8 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (leftXr && left.TryGetFeatureValue(XRCommonUsages.primary2DAxis, out Vector2 xrLeft)) leftStick = Expand(leftStick, xrLeft);
             if (rightXr && right.TryGetFeatureValue(XRCommonUsages.primary2DAxis, out Vector2 xrRight)) rightStick = Expand(rightStick, xrRight);
 
-            bool noXrOrPad = pad == null && !xbox.Connected && !rightXr && !leftXr && !rightOvr && !leftOvr;
+            bool noXrOrPad = !gamepadConnected && !xbox.Connected &&
+                             !rightXr && !leftXr && !rightOvr && !leftOvr;
             if (allowDesktopFallback && noXrOrPad && Mouse.current != null)
             {
                 triggerValue = Mathf.Max(triggerValue, Mouse.current.leftButton.isPressed ? 1 : 0);
@@ -118,6 +145,25 @@ namespace ADayAtTheZoo.Monkeys.Care
             previousA = previousB = previousTrigger = false;
         }
 
+        static bool LooksLikePlayStation(UnityEngine.InputSystem.InputDevice device)
+        {
+            if (device == null) return false;
+            string layout = device.layout ?? string.Empty;
+            string display = device.displayName ?? string.Empty;
+            return Contains(layout, "DualSense") || Contains(layout, "DualShock") ||
+                   Contains(display, "DualSense") || Contains(display, "DualShock") ||
+                   Contains(display, "PS5") || Contains(display, "PS4") ||
+                   Contains(display, "PlayStation");
+        }
+        static bool Contains(string value, string token) =>
+            value.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0;
+        static Vector2 ReadGamepadStick(bool left)
+        {
+            Vector2 value = Vector2.zero;
+            foreach (Gamepad pad in Gamepad.all)
+                value = Expand(value, left ? pad.leftStick.ReadValue() : pad.rightStick.ReadValue());
+            return value;
+        }
         static Vector2 Expand(Vector2 current, Vector2 candidate) =>
             candidate.sqrMagnitude > current.sqrMagnitude ? candidate : current;
     }

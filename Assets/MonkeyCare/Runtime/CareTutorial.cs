@@ -13,41 +13,53 @@ namespace ADayAtTheZoo.Monkeys.Care
         int step = -1;
         float shownAt, stepAt, hungerStartedAt;
         bool finished, hungerStarted;
+        string controllerLabels;
 
         public void Begin(MonkeyCareSession owner, Camera camera, float visibleAt)
         {
             session = owner;
             shownAt = visibleAt;
             stepAt = Time.unscaledTime;
-            root = CareUi.Canvas("Care Chinese Tutorial", camera.transform,
-                new Vector3(-.44f, .34f, 1.4f), .72f, new Vector2(720, 400));
+            root = CareUi.Canvas("Care Tutorial", camera.transform,
+                new Vector3(-.48f, .32f, 1.50f), .94f, new Vector2(820, 470));
             group = root.gameObject.AddComponent<CanvasGroup>();
             group.alpha = 0;
             group.interactable = false;
             group.blocksRaycasts = false;
 
-            var panel = CareUi.Image("Tutorial panel", root, null, new Vector2(720, 400), Vector2.zero);
-            panel.color = new Color(.025f, .085f, .11f, .82f);
-            var edge = CareUi.Image("Tutorial accent", root, null, new Vector2(10, 400), new Vector2(-355, 0));
-            edge.color = new Color(1f, .74f, .24f, 1);
-            var badgePanel = CareUi.Image("Key badge", root, null, new Vector2(102, 86), new Vector2(282, 101));
-            badgePanel.color = new Color(1f, .74f, .24f, .20f);
-            keyBadge = Label("Key", badgePanel.transform, string.Empty, new Vector2(102, 86), Vector2.zero,
-                34, TextAnchor.MiddleCenter, new Color(1f, .88f, .53f, 1));
+            var shadow = CareUiSkin.AddSliced(root, "Tutorial shadow", CareUiSkin.Panel,
+                new Vector2(800, 450), new Vector2(0, -12), new Color(.03f, .09f, .16f, .30f));
+            shadow.transform.SetAsFirstSibling();
+            CareUiSkin.AddSliced(root, "Tutorial panel", CareUiSkin.Panel,
+                new Vector2(800, 440), Vector2.zero, new Color(1f, .97f, .88f, .99f));
+            CareUiSkin.AddSliced(root, "Tutorial header", CareUiSkin.Header,
+                new Vector2(758, 110), new Vector2(0, 140), new Color(.90f, .98f, 1f, 1f));
+            var accent = CareUi.Image("Tutorial accent", root, null, new Vector2(758, 7), new Vector2(0, 85));
+            accent.color = new Color(1f, .78f, .20f, 1f);
+            var star = CareUiSkin.Add(root, "Tutorial star", CareUiSkin.Star,
+                new Vector2(82, 76), new Vector2(334, 202), new Color(1f, .82f, .20f, 1f));
+            star.preserveAspect = true;
 
-            stepLabel = Label("Tutorial step", root, "1 / 9", new Vector2(280, 42),
-                new Vector2(-235, 158), 26, TextAnchor.MiddleLeft, new Color(1f, .82f, .42f, 1));
-            title = Label("Tutorial title", root, string.Empty, new Vector2(520, 58),
-                new Vector2(-18, 102), 42, TextAnchor.MiddleLeft, Color.white);
-            body = Label("Tutorial body", root, string.Empty, new Vector2(630, 150),
-                new Vector2(-10, -6), 28, TextAnchor.MiddleLeft, new Color(.92f, .96f, .94f, 1));
+            var badgePanel = CareUiSkin.Add(root, "Key badge", CareUiSkin.RoundButton,
+                new Vector2(132, 132), new Vector2(-318, 140), Color.white);
+            keyBadge = Label("Key", badgePanel.transform, string.Empty, new Vector2(128, 128), Vector2.zero,
+                66, TextAnchor.MiddleCenter, new Color(.08f, .18f, .31f, 1));
+
+            stepLabel = Label("Tutorial step", root, "STEP 1 / 9", new Vector2(170, 38),
+                new Vector2(-205, 142), 28, TextAnchor.MiddleCenter, new Color(.95f, .98f, 1f, 1));
+            stepLabel.gameObject.SetActive(false);
+            title = Label("Tutorial title", root, string.Empty, new Vector2(610, 70),
+                new Vector2(95, 76), 64, TextAnchor.MiddleLeft, Color.white);
+            AddOutline(title, new Color(.08f, .20f, .36f, .95f), new Vector2(2, -2));
+            body = Label("Tutorial body", root, string.Empty, new Vector2(724, 154),
+                new Vector2(0, -8), 56, TextAnchor.MiddleLeft, new Color(.035f, .10f, .19f, 1));
             body.horizontalOverflow = HorizontalWrapMode.Wrap;
             body.verticalOverflow = VerticalWrapMode.Overflow;
-            var actionPanel = CareUi.Image("Tutorial action panel", root, null, new Vector2(630, 70),
-                new Vector2(-10, -145));
-            actionPanel.color = new Color(.06f, .20f, .21f, .92f);
-            action = Label("Tutorial action", root, string.Empty, new Vector2(600, 60),
-                new Vector2(-10, -145), 26, TextAnchor.MiddleLeft, new Color(1f, .88f, .58f, 1));
+            CareUiSkin.AddSliced(root, "Tutorial action panel", CareUiSkin.Button,
+                new Vector2(736, 84), new Vector2(0, -158), new Color(.78f, .94f, 1f, 1f));
+            action = Label("Tutorial action", root, string.Empty, new Vector2(686, 62),
+                new Vector2(0, -158), 50, TextAnchor.MiddleCenter, Color.white);
+            AddOutline(action, new Color(.06f, .16f, .29f, .95f), new Vector2(2, -2));
             action.horizontalOverflow = HorizontalWrapMode.Wrap;
 
             root.gameObject.SetActive(false);
@@ -63,6 +75,12 @@ namespace ADayAtTheZoo.Monkeys.Care
             root.gameObject.SetActive(true);
             group.alpha = Mathf.MoveTowards(group.alpha, 1, Time.unscaledDeltaTime * 5f);
             CareInputSnapshot input = session.Input;
+            string labels = CareInput.ConfirmLabel + "/" + CareInput.BackLabel;
+            if (labels != controllerLabels)
+            {
+                controllerLabels = labels;
+                ShowStep(step);
+            }
             switch (step)
             {
                 case 0:
@@ -94,8 +112,8 @@ namespace ADayAtTheZoo.Monkeys.Care
                     else if (Elapsed >= 1.5f && !HoldingFood &&
                              (session.GloveInventory == null || !session.GloveInventory.IsOpen))
                     {
-                        action.text = "没喂到也没关系：再按 B，按 A 重新拿香蕉";
-                        keyBadge.text = "B/A";
+                        action.text = "RELEASE RT TO TRY AGAIN";
+                        keyBadge.text = "RT";
                     }
                     break;
                 case FinalStep:
@@ -103,12 +121,8 @@ namespace ADayAtTheZoo.Monkeys.Care
                     break;
             }
             if (step == 4 && session.GloveInventory != null && session.GloveInventory.IsOpen)
-                keyBadge.text = "B";
-            if (step >= 3 && step <= 7)
-            {
-                int seconds = Mathf.FloorToInt(Time.unscaledTime - hungerStartedAt);
-                stepLabel.text = (step + 1) + " / " + (FinalStep + 1) + " · A/B " + seconds + "s";
-            }
+                keyBadge.text = CareInput.BackLabel;
+            stepLabel.text = "STEP " + (step + 1) + " / " + (FinalStep + 1);
         }
 
         float Elapsed => Time.unscaledTime - stepAt;
@@ -119,25 +133,25 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             step = Mathf.Clamp(value, 0, FinalStep);
             stepAt = Time.unscaledTime;
-            stepLabel.text = (step + 1) + " / " + (FinalStep + 1);
+            stepLabel.text = "STEP " + (step + 1) + " / " + (FinalStep + 1);
             switch (step)
             {
                 case 0:
-                    title.text = "欢迎来到动物园";
-                    body.text = "这一关只练习喂香蕉。先熟悉走路和手套项目栏，之后再照顾三只猴子。";
-                    action.text = "准备开始";
-                    keyBadge.text = "香蕉";
+                    title.text = "FEED MONKEYS";
+                    body.text = "Learn the controls in under a minute.";
+                    action.text = "GET READY";
+                    keyBadge.text = "GO";
                     break;
                 case 1:
-                    title.text = "先走两步";
-                    body.text = "推动左摇杆向前、向后或左右移动。项目栏打开时移动会暂停。";
-                    action.text = "推动左摇杆，完成后再继续";
+                    title.text = "WALK";
+                    body.text = "Use the left stick.";
+                    action.text = "MOVE TO CONTINUE";
                     keyBadge.text = "L";
                     break;
                 case 2:
-                    title.text = "转身看猴子";
-                    body.text = "左右推动右摇杆转动视角。习惯用视线和身体一起寻找目标。";
-                    action.text = "左右推动右摇杆";
+                    title.text = "LOOK AROUND";
+                    body.text = "Use the right stick.";
+                    action.text = "LOOK TO CONTINUE";
                     keyBadge.text = "R";
                     break;
                 case 3:
@@ -147,39 +161,39 @@ namespace ADayAtTheZoo.Monkeys.Care
                         hungerStartedAt = Time.unscaledTime;
                         session.BeginTutorialHunger();
                     }
-                    title.text = "一只猴子饿了";
-                    body.text = "正前方的猴子已经出现饥饿提示。接下来用约 1 分钟练习 A/B，它会一直等你完成。";
-                    action.text = "看清猴子的耐心条，准备打开手套";
-                    keyBadge.text = "饥饿";
+                    title.text = "A MONKEY IS HUNGRY";
+                    body.text = "Find it and open your bag.";
+                    action.text = "FIND THE MONKEY";
+                    keyBadge.text = "!";
                     break;
                 case 4:
-                    title.text = "打开手套项目栏";
-                    body.text = "B 是手套菜单键。按一下 B 打开项目栏，再按一次 B 可以退出；打开时人物会暂时停止移动。";
-                    action.text = "按 B 打开手套项目栏";
-                    keyBadge.text = "B";
+                    title.text = "OPEN THE BAG";
+                    body.text = "Press " + CareInput.BackLabel + ".";
+                    action.text = "PRESS " + CareInput.BackLabel + " TO OPEN";
+                    keyBadge.text = CareInput.BackLabel;
                     break;
                 case 5:
-                    title.text = "选择香蕉";
-                    body.text = "A 是确认键。项目栏打开时按 A，选择香蕉；菜单会收起，香蕉会出现在右手。";
-                    action.text = "按 A 选择香蕉";
-                    keyBadge.text = "A";
+                    title.text = "TAKE A BANANA";
+                    body.text = "Press " + CareInput.ConfirmLabel + ".";
+                    action.text = "PRESS " + CareInput.ConfirmLabel + " TO SELECT";
+                    keyBadge.text = CareInput.ConfirmLabel;
                     break;
                 case 6:
-                    title.text = "瞄准猴子";
-                    body.text = "现在香蕉已经在手上。转身面对饥饿猴子，把屏幕中心或右手对准它，然后按住 RT。";
-                    action.text = HoldingFood ? "按住 RT / Trigger 瞄准" : "请重新打开项目栏选择香蕉";
+                    title.text = "AIM";
+                    body.text = "Hold RT on the monkey.";
+                    action.text = HoldingFood ? "HOLD RT TO AIM" : "OPEN THE BAG AND TAKE A BANANA";
                     keyBadge.text = "RT";
                     break;
                 case 7:
-                    title.text = "松开投掷，等它吃完";
-                    body.text = "松开 RT 把香蕉投出去。命中后保持片刻，猴子会吃完并出现开心表情。";
-                    action.text = session.TutorialHungerSatisfied ? "喂食成功" : "松开 RT；没命中就重新按 B、A";
-                    keyBadge.text = "松";
+                    title.text = "THROW";
+                    body.text = "Release RT to throw.";
+                    action.text = session.TutorialHungerSatisfied ? "GOOD THROW!" : "RELEASE RT TO THROW";
+                    keyBadge.text = "RT";
                     break;
                 default:
-                    title.text = "A/B 操作练习完成";
-                    body.text = "你已经完成取香蕉和喂食。正式关卡开始后，打开手套取香蕉，按住 RT 瞄准，松开投掷。";
-                    action.text = "每只猴子需要 3 次喂食，共 9 次";
+                    title.text = "GREAT JOB";
+                    body.text = "Keep feeding the monkeys.";
+                    action.text = "TUTORIAL COMPLETE";
                     keyBadge.text = "OK";
                     break;
             }
@@ -202,7 +216,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             var rect = CareUi.Rect(name, parent, size, position);
             var text = rect.gameObject.AddComponent<Text>();
-            text.font = CareFont.Load();
+            text.font = CareFont.LoadReadable();
             text.fontSize = fontSize;
             text.fontStyle = FontStyle.Bold;
             text.alignment = alignment;
@@ -212,6 +226,14 @@ namespace ADayAtTheZoo.Monkeys.Care
             text.verticalOverflow = VerticalWrapMode.Overflow;
             text.text = value;
             return text;
+        }
+
+        static void AddOutline(Graphic graphic, Color color, Vector2 distance)
+        {
+            var outline = graphic.gameObject.AddComponent<Outline>();
+            outline.effectColor = color;
+            outline.effectDistance = distance;
+            outline.useGraphicAlpha = true;
         }
     }
 }

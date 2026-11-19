@@ -9,7 +9,7 @@ public sealed class VrPlatformSwitcher : MonoBehaviour
     [SerializeField] private GameObject vrPlayer;
     [SerializeField] private GameObject presentationCamera;
     [SerializeField] private bool requireTrackedHeadset = true;
-    [Tooltip("Unity Editor 固定使用桌面/Xbox 预览，不尝试启动未连接的头显。")]
+    [Tooltip("Unity Editor 没有可用头显时使用桌面/Xbox 预览；头显出图后自动切换为 VR 控制器。")]
     [SerializeField] private bool editorDesktopPreview = true;
 
     private bool wasXrActive;
@@ -34,7 +34,10 @@ public sealed class VrPlatformSwitcher : MonoBehaviour
     private bool ShouldUseXr()
     {
 #if UNITY_EDITOR
-        if (editorDesktopPreview) return false;
+        // Keep the lightweight desktop preview until an XR display is
+        // actually running. Once the headset is active, the VR rig wins so
+        // gloves can follow the Meta controller anchors.
+        if (editorDesktopPreview && !XRSettings.isDeviceActive) return false;
 #endif
         if (!XRSettings.isDeviceActive) return false;
         displays.Clear();

@@ -11,12 +11,31 @@ namespace ADayAtTheZoo.Monkeys
         private SkinnedMeshRenderer faceRenderer;
         private Material original, applied;
         private int faceSlot = -1;
+        private MonkeyAction? reaction;
+        private float reactionUntil;
 
         private void Awake() => Bind();
 
         private void LateUpdate()
         {
-            ApplyPose(driver.CurrentAction, Time.time);
+            ApplyPose(reaction.HasValue && Time.time < reactionUntil
+                ? reaction.Value : driver.CurrentAction, Time.time);
+        }
+
+        // Gameplay reactions can outlive a short animation transition. Pin the
+        // authored expression long enough for the player to register success,
+        // even while the body animation is cross-fading back to idle.
+        public void ShowReaction(MonkeyAction action, float seconds)
+        {
+            reaction = action;
+            reactionUntil = Time.time + Mathf.Max(.1f, seconds);
+            ApplyPose(action, Time.time);
+        }
+
+        public void ClearReaction()
+        {
+            reaction = null;
+            reactionUntil = 0;
         }
 
         private void Bind()
@@ -58,6 +77,7 @@ namespace ADayAtTheZoo.Monkeys
 
         private void OnDisable()
         {
+            ClearReaction();
             if (faceRenderer != null)
                 SetFace(original);
         }

@@ -144,3 +144,5 @@ crashlytics-build.properties
 
 # Local editor and package backups
 *.bak
+/Assets/MonkeyCare/Backups/
+/ProjectSettings/Packages/com.unity.ai.assistant/

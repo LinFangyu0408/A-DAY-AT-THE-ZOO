@@ -117,6 +117,7 @@ namespace ADayAtTheZoo.Monkeys.Care
     {
         public readonly RectTransform Root;
         readonly Image panel, logo;
+        readonly Text caption;
         readonly RectTransform track;
         readonly CareUiStyle style;
         readonly System.Collections.Generic.List<RectTransform> masks = new();
@@ -128,8 +129,16 @@ namespace ADayAtTheZoo.Monkeys.Care
             style = value;
             Root = CareUi.Canvas("Care Progress", parent, value.barOffset, value.width, new Vector2(640, 290));
             panel = CareUi.Image("Panel", Root, value.stamina, new Vector2(640, 290), Vector2.zero);
-            track = CareUi.Image("Track", Root, value.track, new Vector2(490, 85), new Vector2(30, -35)).rectTransform;
-            logo = CareUi.Image("Logo", Root, value.staminaLogo, new Vector2(122, 122), new Vector2(-210, -35));
+            // Cover the baked English title and the old white separator so the
+            // gameplay caption can switch between patience and satisfaction in
+            // Chinese while keeping the original card's outer frame.
+            CareUi.Image("Localized content", Root, null, new Vector2(594, 236),
+                new Vector2(0, 3)).color = new Color(1f, .972f, .91f, 1f);
+            caption = CareRoundView.Label("Panel title", Root, "STAMINA",
+                new Vector2(420, 62), new Vector2(0, 77), 31,
+                TextAnchor.MiddleCenter, new Color(.38f, .22f, .26f, 1f));
+            track = CareUi.Image("Track", Root, value.track, new Vector2(490, 85), new Vector2(30, -43)).rectTransform;
+            logo = CareUi.Image("Logo", Root, value.staminaLogo, new Vector2(122, 122), new Vector2(-210, -43));
             Show(false, 1, 0);
         }
         public void Show(bool isSatisfaction, float amount, int segments)
@@ -142,6 +151,7 @@ namespace ADayAtTheZoo.Monkeys.Care
                 masks.Clear(); count = Mathf.Max(1, segments); satisfaction = isSatisfaction;
                 panel.sprite = isSatisfaction ? style.satisfaction : style.stamina;
                 logo.sprite = isSatisfaction ? style.satisfactionLogo : style.staminaLogo;
+                caption.text = isSatisfaction ? "SATISFACTION" : "STAMINA";
                 float slot = 490f / count;
                 for (int i = 0; i < count; i++)
                 {

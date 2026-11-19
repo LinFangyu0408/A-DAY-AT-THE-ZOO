@@ -15,6 +15,7 @@ public sealed class DesktopPlayerController : MonoBehaviour
     [SerializeField] private float gravity = -20f;
     [SerializeField] private float gamepadTurnSpeed = 120f;
     [SerializeField] private float gamepadLookSpeed = 80f;
+    [SerializeField, Range(20f, 60f)] private float maxWalkableSlope = 42f;
 
     [System.NonSerialized] public bool inputLocked;
 
@@ -31,6 +32,8 @@ public sealed class DesktopPlayerController : MonoBehaviour
             Camera childCamera = GetComponentInChildren<Camera>(true);
             view = childCamera != null ? childCamera.transform : transform;
         }
+        controller.slopeLimit = maxWalkableSlope;
+        controller.stepOffset = .25f;
         EnablePresentation();
     }
 
@@ -55,7 +58,6 @@ public sealed class DesktopPlayerController : MonoBehaviour
     {
         Keyboard keyboard = Keyboard.current;
         Mouse mouse = Mouse.current;
-        Gamepad pad = Gamepad.current;
         CareXboxSnapshot xbox = CareXboxInput.Read();
         if (xbox.Connected != xboxWasConnected)
         {
@@ -67,8 +69,8 @@ public sealed class DesktopPlayerController : MonoBehaviour
             return;
         }
 
-        Vector2 moveInput = Larger(pad != null ? pad.leftStick.ReadValue() : Vector2.zero, xbox.LeftStick);
-        Vector2 rightStick = Larger(pad != null ? pad.rightStick.ReadValue() : Vector2.zero, xbox.RightStick);
+        Vector2 moveInput = Larger(CareInput.GamepadLeftStick, xbox.LeftStick);
+        Vector2 rightStick = Larger(CareInput.GamepadRightStick, xbox.RightStick);
         Vector2 lookDelta = mouse != null ? mouse.delta.ReadValue() : Vector2.zero;
         if (!inputLocked && Mathf.Abs(rightStick.x) > .15f)
         {
@@ -117,7 +119,15 @@ public sealed class DesktopPlayerController : MonoBehaviour
             planarMotion += forward * (lookDelta.y * middleDragDistance);
         }
 
-        if (controller.isGrounded && verticalVelocity < 0f)
+        bool grounded = controller.isGrounded;
+        if (!grounded)
+        {
+            // No jump/air control in this care level. Gravity keeps the player
+            // attached to terrain instead of letting horizontal input drift away.
+            planarMotion.x = 0f;
+            planarMotion.z = 0f;
+        }
+        else if (verticalVelocity < 0f)
         {
             verticalVelocity = -2f;
         }

@@ -32,22 +32,24 @@ public static class CareSelfTests
         Check(CareRound.NextTime(25, 1, false) == 43, "normal refresh eighteen seconds");
         Check(CareRound.NextTime(25, 1, true) == 47, "rescue refresh twenty-two seconds");
 
-        for (int count = 0; count <= 9; count++)
+        for (int count = 0; count <= 10; count++)
         {
             var round = new CareRound();
             int completed = 0;
-            for (int task = 0; task < round.TasksPerMonkey; task++)
+            for (int monkey = 0; monkey < 3 && completed < count; monkey++)
             {
-                for (int monkey = 0; monkey < 3 && completed < count; monkey++)
+                for (int task = 0; task < round.TasksForMonkey(monkey) && completed < count; task++)
                 {
                     Check(round.Complete(monkey, task, CareNeed.Hunger, 200), "accept unique feeding task");
+                    Check(round.ConsumeBanana(), "successful feeding consumes one banana");
                     completed++;
                 }
             }
             Check(round.FeedingOnly, "new rounds are feeding-only");
             Check(round.CompletedTotal == count, "feeding-only completion count " + count);
-            Check(Math.Abs(round.Score - (48 + 52.0 * count / 9)) < .00001, "score from nine feeding tasks " + count);
-            Check(round.Bananas == 12 - round.FeedingTotal, "only completed feeding consumes a banana");
+            Check(Math.Abs(round.Score - count) < .00001, "ten-point score from feeding tasks " + count);
+            Check(round.Bananas == CareRound.StartingBananas - round.FeedingTotal,
+                "only completed feeding consumes a banana");
             Check(!round.Complete(0, 0, CareNeed.Hunger, 231), "completion after cutoff rejected");
             round.Freeze();
             Check(!round.Complete(0, 0, CareNeed.Hunger, 200), "frozen round rejects changes");
@@ -55,13 +57,36 @@ public static class CareSelfTests
 
         var exact = new CareRound();
         Check(exact.Complete(0, 0, CareNeed.Hunger, 230), "cutoff equality accepted before freeze");
-        Check(exact.TasksPerMonkey == 3 && exact.TaskTotal == 9, "three feedings per monkey / nine total");
+        Check(exact.TasksForMonkey(0) == 4 && exact.TasksForMonkey(1) == 3 &&
+              exact.TasksForMonkey(2) == 3 && exact.TaskTotal == 10,
+            "four plus three plus three feedings / ten total");
         Check(!exact.Complete(0, 1, CareNeed.Itch, 40), "feeding-only round rejects itching");
         var ignoredNeeds = new CareRound(new[] { CareNeed.Itch, CareNeed.Itch, CareNeed.Itch });
         Check(ignoredNeeds.Complete(1, 0, CareNeed.Hunger, 20), "feeding-only mode ignores old scene itch defaults");
 
+        var pickup = new CareRound();
+        Check(!pickup.RefillBananas(), "banana pickup is unavailable while stock remains");
+        for (int i = 0; i < CareRound.StartingBananas; i++)
+            Check(pickup.ConsumeBanana(), "starting banana can be consumed");
+        Check(pickup.Bananas == 0 && pickup.RefillBananas(), "empty stock refills by ten at the pickup point");
+        Check(pickup.Bananas == CareRound.BananaPickupAmount, "pickup restores ten bananas");
+
+        var penalties = new CareRound();
+        Check(penalties.RegisterPatiencePenalty(1, 0), "first patience timeout records a penalty");
+        Check(!penalties.RegisterPatiencePenalty(1, 0), "same timeout cannot deduct twice");
+        Check(penalties.PatiencePenalties == 1 && penalties.Score == 0, "penalty lowers capped score");
+        for (int i = 0; i < 10; i++)
+        {
+            int monkey = i < 4 ? 0 : i < 7 ? 1 : 2;
+            int task = i < 4 ? i : i < 7 ? i - 4 : i - 7;
+            Check(penalties.Complete(monkey, task, CareNeed.Hunger, 100), "completes full ten-banana run");
+        }
+        Check(penalties.Score == 9 && penalties.IsPassing && penalties.Stars == 2,
+            "ten successful feeds with one penalty scores nine and earns two stars");
+
         var mixed = new CareRound(new[] { CareNeed.Hunger, CareNeed.Itch, CareNeed.Hunger }, false);
-        Check(mixed.TasksPerMonkey == 6 && mixed.Complete(1, 0, CareNeed.Itch, 40), "legacy mixed mode remains available");
+        Check(mixed.TasksForMonkey(1) == 6 && mixed.Complete(1, 0, CareNeed.Itch, 40),
+            "legacy mixed mode remains available");
 
         var stroke = new ScratchStroke();
         Check(!stroke.Sample(1, true, .08f, .06f), "initial touch not stroke");

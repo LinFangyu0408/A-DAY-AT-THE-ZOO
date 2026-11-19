@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 using UnityEngine.XR;
 using CommonUsages = UnityEngine.XR.CommonUsages;
 
@@ -30,8 +31,8 @@ namespace ADayAtTheZoo.Monkeys.Care
         [Header("射线与反馈")]
         [InspectorName("射线距离（米）"), Min(1)] public float rayDistance = 30;
         [InspectorName("直线宽度（米）"), Min(.001f)] public float lineWidth = .006f;
-        [InspectorName("震动强度"), Range(0, 1)] public float hapticAmplitude = .15f;
-        [InspectorName("震动频率"), Range(0, 1)] public float hapticFrequency = .3f;
+        [InspectorName("震动强度"), Range(0, 1)] public float hapticAmplitude = .62f;
+        [InspectorName("震动频率"), Range(0, 1)] public float hapticFrequency = .55f;
         [InspectorName("桌面调试输入")] public bool desktopPreview = true;
         public Material pointerMaterial;
         [Header("游戏音频")]
@@ -41,11 +42,23 @@ namespace ADayAtTheZoo.Monkeys.Care
         [HideInInspector] public int rulesVersion;
         [HideInInspector] public bool testAllowUnfocused;
         public static MonkeyCareSession Instance { get; private set; }
-        public static bool Playing => Instance && Instance.begun && (Instance.focused || Instance.testAllowUnfocused) && Time.timeScale > 0;
+        public static bool Playing =>
+            Instance && Instance.begun &&
+#if UNITY_EDITOR
+            // Clicking Console, Hierarchy or Inspector must not hide the game UI
+            // during desktop/controller preview.
+            (Instance.focused || Instance.testAllowUnfocused || Application.isEditor) &&
+#else
+            (Instance.focused || Instance.testAllowUnfocused) &&
+#endif
+            Time.timeScale > 0;
         public static Camera PlayerCamera => Instance ? Instance.playerCamera : null;
         public static float GameTime => Instance ? Instance.gameTime : Time.time;
         public static float TaskTime => Mathf.Min(GameTime, CareRound.Cutoff);
         public CareRound Round { get; private set; } = new CareRound();
+        public bool UsingVrHands =>
+            rig && rig.gameObject.activeInHierarchy &&
+            rig.leftControllerAnchor && rig.rightControllerAnchor;
         public Transform RightHand
         {
             get
@@ -53,10 +66,19 @@ namespace ADayAtTheZoo.Monkeys.Care
 #if UNITY_EDITOR
                 if (recordingHand) return recordingHand;
 #endif
-                bool tracked = OVRInput.IsControllerConnected(OVRInput.Controller.RTouch) ||
-                               InputDevices.GetDeviceAtXRNode(XRNode.RightHand).isValid;
-                return tracked && rig && rig.gameObject.activeInHierarchy && rig.rightControllerAnchor
+                // VrPlatformSwitcher only enables the VR rig when the headset is
+                // active. Once active, follow Meta's controller anchor directly:
+                // input-device detection can lag behind controller tracking.
+                return UsingVrHands
                     ? rig.rightControllerAnchor : DesktopRightHand();
+            }
+        }
+        public Transform LeftHand
+        {
+            get
+            {
+                return UsingVrHands
+                    ? rig.leftControllerAnchor : DesktopLeftHand();
             }
         }
 #if UNITY_EDITOR
@@ -76,23 +98,33 @@ namespace ADayAtTheZoo.Monkeys.Care
         public bool RoundStarted { get; private set; }
         public CareInputSnapshot Input { get; private set; }
         public CareGloveInventory GloveInventory { get; private set; }
+        public CareHandVisuals Hands { get; private set; }
         Camera playerCamera;
         DesktopPlayerController desktopController;
-        Transform desktopRightHand;
+        Transform desktopRightHand, desktopLeftHand;
         CareItem held;
         CareTeleportPoint highlighted;
         LineRenderer pointer, arc;
         RectTransform readyCanvas;
+        Text readyPrompt;
+        Text readyKeyLabel;
         GameObject readyFx;
         CareRoundView roundView;
+        CareFarmEnvironment farmEnvironment;
+        CarePickupMarker bananaPickup;
         readonly List<CareTaskRecord> records = new();
         Vector3 rigStartPosition;
         Quaternion rigStartRotation;
-        bool begun, focused = true, arcAiming, arcValid, supplyEnabled, suppressUntilRelease;
+        bool begun, focused = true, arcAiming, arcValid, suppressUntilRelease;
+        bool tutorialCompleted;
+        bool readyGateActive, goSequenceActive;
+        float goUntil;
+        bool hapticControllerLogged;
         Vector3 lastThrowVelocity;
         bool hasThrowSolution;
         Vector3 landing;
         float gameTime;
+        float nextBananaEquipAt;
         readonly Vector3[] arcPoints = new Vector3[40];
 
         IEnumerator Start()
@@ -108,32 +140,25 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (!trackingSpace) trackingSpace = rig ? rig.trackingSpace : transform;
             desktopController = Object.FindFirstObjectByType<DesktopPlayerController>(FindObjectsInactive.Include);
             DesktopRightHand();
+            DesktopLeftHand();
+            Hands = gameObject.AddComponent<CareHandVisuals>();
             pointer = MakeLine("Care Straight Ray"); arc = MakeLine("Care Teleport Arc");
             if (locomotion) locomotion.externalRightHandControl = true;
             begun = true;
             Round = new CareRound(MonkeyStartingNeeds(), feedingOnly);
             rigStartPosition = rig.transform.position; rigStartRotation = rig.transform.rotation;
             SetupFeedingOnlyScene();
+            farmEnvironment = CareFarmEnvironment.Create(playerCamera);
+            bananaPickup = farmEnvironment ? farmEnvironment.PickupPoint : null;
+            if (!bananaPickup) bananaPickup = FindFirstObjectByType<CarePickupMarker>(FindObjectsInactive.Include);
+            Hands.Begin(this);
             roundView = new CareRoundView(playerCamera, roundArtwork);
             GloveInventory = new CareGloveInventory(this, playerCamera);
-            // The guided first run starts immediately. Keep the Ready/Go flourish only for unguided rounds.
-            if (!showTutorial)
-            {
-                readyCanvas = CareUi.Canvas("Care READY GO", playerCamera.transform,
-                    new Vector3(0, 0, 1.8f), 1.0f, new Vector2(800, 470));
-                CareUi.Image("READY GO", readyCanvas, readyGo, new Vector2(800, 470), Vector2.zero);
-                CareReadyView.Decorate(readyCanvas, roundArtwork.star, readySeconds);
-            }
             audioFeedback.FollowCamera(playerCamera);
             audioFeedback.StartMusic(transform);
-            TutorialActive = showTutorial;
-            if (showTutorial)
-                gameObject.AddComponent<CareTutorial>().Begin(this, playerCamera, Time.unscaledTime);
-            else
-            {
-                RoundStarted = true;
-                foreach (var npc in monkeys) if (npc) npc.BeginSession();
-            }
+            TutorialActive = false;
+            RoundStarted = false;
+            ShowReadyGate();
         }
         CareNeed[] MonkeyStartingNeeds()
         {
@@ -143,6 +168,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         void SetupFeedingOnlyScene()
         {
             if (!feedingOnly) return;
+            EnsureBananaSupplyPool();
             Vector3 hidden = transform.position + Vector3.down * 3f;
             if (items != null)
             {
@@ -157,11 +183,29 @@ namespace ADayAtTheZoo.Monkeys.Care
                     else item.gameObject.SetActive(false);
                 }
             }
-            HideSupplyToolbox("banana box");
             HideSupplyToolbox("Sractch");
             roundArtwork.bananaAnchor = playerCamera.transform;
-            roundArtwork.bananaOffset = new Vector3(.43f, .37f, 1.35f);
-            roundArtwork.bananaWidth = .32f;
+            roundArtwork.bananaOffset = new Vector3(.82f, .46f, 1.28f);
+            roundArtwork.bananaWidth = .34f;
+        }
+
+        void EnsureBananaSupplyPool()
+        {
+            if (items == null) return;
+            var allItems = new List<CareItem>(items);
+            var bananaSources = allItems.Where(item => item && item.kind == CareNeed.Hunger).ToList();
+            if (bananaSources.Count == 0) return;
+            for (int i = bananaSources.Count; i < CareRound.StartingBananas; i++)
+            {
+                CareItem source = bananaSources[i % bananaSources.Count];
+                var cloneObject = Instantiate(source.gameObject, transform);
+                cloneObject.name = source.name + " Glove Supply " + (i + 1);
+                var clone = cloneObject.GetComponent<CareItem>();
+                if (!clone) continue;
+                allItems.Add(clone);
+                bananaSources.Add(clone);
+            }
+            items = allItems.ToArray();
         }
         static void HideSupplyToolbox(string objectName)
         {
@@ -173,17 +217,90 @@ namespace ADayAtTheZoo.Monkeys.Care
                 foreach (var collider in root.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
             }
         }
+        void ShowReadyGate()
+        {
+            if (readyCanvas) Destroy(readyCanvas.gameObject);
+            readyCanvas = CareUi.Canvas("Care READY GO", playerCamera.transform,
+                new Vector3(0, 0, 1.45f), .94f, new Vector2(960, 560));
+            var readyArt = CareUiSkin.SvgReadyGo ? CareUiSkin.SvgReadyGo : readyGo;
+            if (readyArt)
+                CareUi.Image("READY GO", readyCanvas, readyArt, new Vector2(960, 560), Vector2.zero);
+            else
+                CareUiSkin.AddSliced(readyCanvas, "Ready panel", CareUiSkin.Panel,
+                    new Vector2(900, 430), Vector2.zero, new Color(1f, .97f, .86f, 1f));
+            CareReadyView.Decorate(readyCanvas, roundArtwork.star, 100000f);
+            CareUiSkin.AddSliced(readyCanvas, "Ready prompt plate", CareUiSkin.Slot,
+                new Vector2(590, 104), new Vector2(0, -228), new Color(.08f, .25f, .42f, .94f))
+                .transform.SetAsLastSibling();
+            var readyKey = CareUiSkin.Add(readyCanvas, "Ready key", CareUiSkin.RoundButton,
+                new Vector2(116, 116), new Vector2(-196, -228), Color.white);
+            readyKey.transform.SetAsLastSibling();
+            readyKeyLabel = CareRoundView.Label("Ready key label", readyKey.transform,
+                "A", new Vector2(112, 112), Vector2.zero, 56,
+                TextAnchor.MiddleCenter, new Color(.08f, .18f, .31f, 1f));
+            readyPrompt = CareRoundView.Label("Ready prompt",
+                readyCanvas, "PRESS TO START",
+                new Vector2(360, 72), new Vector2(66, -228), 42,
+                TextAnchor.MiddleCenter, Color.white);
+            readyPrompt.transform.SetAsLastSibling();
+            var outline = readyPrompt.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(.04f, .16f, .28f, .96f);
+            outline.effectDistance = new Vector2(3, -3);
+            readyGateActive = true;
+            goSequenceActive = false;
+            SetPlayerInputLocked(true);
+        }
+        void AcceptReadyGate()
+        {
+            if (!readyGateActive) return;
+            readyGateActive = false;
+            goSequenceActive = true;
+            gameTime = 0;
+            goUntil = .9f;
+            readyPrompt.text = "";
+            readyKeyLabel.text = "GO";
+            readyKeyLabel.color = new Color(1f, .72f, .10f, 1f);
+            CareInput.ForgetEdges();
+        }
+        void BeginAfterReadyGo()
+        {
+            goSequenceActive = false;
+            if (readyCanvas)
+            {
+                Destroy(readyCanvas.gameObject);
+                readyCanvas = null;
+            }
+            SetPlayerInputLocked(false);
+            TutorialActive = showTutorial && !tutorialCompleted;
+            if (TutorialActive)
+            {
+                gameObject.AddComponent<CareTutorial>().Begin(this, playerCamera, Time.unscaledTime);
+            }
+            else
+            {
+                RoundStarted = true;
+                foreach (var npc in monkeys) if (npc) npc.BeginSession();
+            }
+            roundView.ShowHud();
+            GloveInventory?.ShowHud();
+        }
+        void SetPlayerInputLocked(bool locked)
+        {
+            if (locomotion) locomotion.inputLocked = locked;
+            if (desktopController) desktopController.inputLocked = locked;
+        }
         public void FinishTutorial()
         {
             if (RoundStarted) return;
+            tutorialCompleted = true;
             TutorialActive = false;
             RoundStarted = true;
             gameTime = 0;
-            supplyEnabled = true;
             if (readyCanvas) Destroy(readyCanvas.gameObject);
             if (readyFx) Destroy(readyFx);
             GloveInventory?.Close();
             roundView.ShowHud();
+            GloveInventory?.ShowHud();
             foreach (var npc in monkeys)
             {
                 if (!npc) continue;
@@ -201,17 +318,47 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (locomotion) locomotion.inputLocked = open;
             if (desktopController) desktopController.inputLocked = open;
         }
-        public bool EquipBananaFromGlove()
+        public bool EquipBananaFromGlove(bool requireSelection = true)
         {
-            if (!Playing || Round.Frozen || Round.Bananas <= 0 || held || items == null) return false;
-            CareItem banana = items.FirstOrDefault(item => item && item.kind == CareNeed.Hunger && item.Available);
-            if (!banana || !banana.EquipFromGlove(RightHand)) return false;
+            if (!Playing || Round.Frozen || Round.Bananas <= 0 || held || items == null ||
+                GloveInventory == null || (requireSelection && !GloveInventory.BananaSelected)) return false;
+            CareItem banana = items.FirstOrDefault(item => item && item.kind == CareNeed.Hunger &&
+                                                           item.Available && !item.Held && !item.Thrown);
+            Transform grip = Hands ? Hands.RightGripSocket : RightHand;
+            if (!grip) grip = RightHand;
+            if (!banana || !banana.EquipFromGlove(grip)) return false;
             held = banana;
             hasThrowSolution = false;
             arcAiming = arcValid = false;
+            Hands?.AttachHeldItem(banana);
             return true;
         }
-        public bool ConsumeThrownBanana() => Round != null && Round.ConsumeBanana();
+        public void CancelSelectedBanana()
+        {
+            if (held && held.kind == CareNeed.Hunger)
+            {
+                held.Release();
+                held = null;
+                Hands?.ReleaseHeldItem();
+            }
+            hasThrowSolution = false;
+            arcAiming = arcValid = false;
+            StopHaptics();
+        }
+        public bool ConsumeThrownBanana()
+        {
+            bool consumed = Round != null && Round.ConsumeBanana();
+            if (consumed && Round.Bananas <= 0) GloveInventory?.ClearSelection();
+            return consumed;
+        }
+        public bool TryPickupBananas()
+        {
+            if (!Playing || Round == null || Round.Frozen ||
+                !bananaPickup || !bananaPickup.PlayerInRange || !Round.RefillBananas()) return false;
+            GloveInventory?.ClearSelection();
+            nextBananaEquipAt = Time.time + .15f;
+            return true;
+        }
         Transform DesktopRightHand()
         {
             if (!playerCamera) return null;
@@ -223,6 +370,18 @@ namespace ADayAtTheZoo.Monkeys.Care
                 desktopRightHand.localRotation = Quaternion.Euler(4f, -3f, -3f);
             }
             return desktopRightHand;
+        }
+        Transform DesktopLeftHand()
+        {
+            if (!playerCamera) return null;
+            if (!desktopLeftHand)
+            {
+                desktopLeftHand = new GameObject("Care Desktop Left Hand").transform;
+                desktopLeftHand.SetParent(playerCamera.transform, false);
+                desktopLeftHand.localPosition = new Vector3(-.34f, -.08f, .58f);
+                desktopLeftHand.localRotation = Quaternion.Euler(4f, 3f, 3f);
+            }
+            return desktopLeftHand;
         }
         LineRenderer MakeLine(string name)
         {
@@ -247,14 +406,28 @@ namespace ADayAtTheZoo.Monkeys.Care
                 if (pointer) pointer.enabled = false; if (arc) arc.enabled = false;
                 StopHaptics(); return;
             }
-            gameTime = Mathf.Min(CareRound.Duration, gameTime + Time.deltaTime);
             Input = ReadSessionInput();
-            if (!supplyEnabled && gameTime >= readySeconds)
+            if (readyGateActive)
             {
-                supplyEnabled = true; if (readyCanvas) Destroy(readyCanvas.gameObject); if (readyFx) Destroy(readyFx);
-                if (RoundStarted) roundView.ShowHud();
+                if (pointer) pointer.enabled = false;
+                if (arc) arc.enabled = false;
+                StopHaptics();
+                if (Input.AWasPressed) AcceptReadyGate();
+                return;
             }
+            if (goSequenceActive)
+            {
+                gameTime = Mathf.Min(CareRound.Duration, gameTime + Time.deltaTime);
+                if (pointer) pointer.enabled = false;
+                if (arc) arc.enabled = false;
+                StopHaptics();
+                if (gameTime >= goUntil) BeginAfterReadyGo();
+                return;
+            }
+            gameTime = Mathf.Min(CareRound.Duration, gameTime + Time.deltaTime);
             GloveInventory?.Tick(Input, Round, !Round.Frozen && gameTime >= .1f);
+            bool menuOpen = GloveInventory != null && GloveInventory.IsOpen;
+            if (!menuOpen && Input.AWasPressed) TryPickupBananas();
             Transform hand = RightHand; if (!hand) return;
             if (suppressUntilRelease)
             {
@@ -262,7 +435,10 @@ namespace ADayAtTheZoo.Monkeys.Care
                 suppressUntilRelease = false;
             }
             if (held && (!held.Available || !held.Held)) { held = null; StopHaptics(); }
-            bool menuOpen = GloveInventory != null && GloveInventory.IsOpen;
+            menuOpen = GloveInventory != null && GloveInventory.IsOpen;
+            if (!menuOpen && !held && GloveInventory != null && GloveInventory.BananaSelected &&
+                !Round.Frozen && Round.Bananas > 0 && Time.time >= nextBananaEquipAt)
+                EquipBananaFromGlove();
 
             RaycastHit? hit;
             Vector3 throwVelocity = Vector3.zero;
@@ -294,6 +470,8 @@ namespace ADayAtTheZoo.Monkeys.Care
             {
                 held.Throw(hasThrowSolution ? lastThrowVelocity : hand.forward * throwSpeed);
                 held = null;
+                nextBananaEquipAt = 0;
+                EquipBananaFromGlove(false);
                 hasThrowSolution = false;
                 pointer.enabled = false;
                 StopHaptics();
@@ -325,7 +503,9 @@ namespace ADayAtTheZoo.Monkeys.Care
                 if (arcAiming && (!Input.TriggerHeld || !Input.GripHeld) && arcValid && locomotion) locomotion.TryTeleport(landing);
                 arcAiming = false; arcValid = false; arc.enabled = false;
             }
-            pointer.enabled = !arcAiming && !menuOpen && (held != null || point || itemTarget || RayNpc);
+            // The care ray belongs to the banana in hand. Empty-hand targeting
+            // must stay invisible so it cannot obstruct the scene.
+            pointer.enabled = !arcAiming && !menuOpen && held != null;
             if (hasThrowArc)
             {
                 pointer.positionCount = throwPointCount;
@@ -349,12 +529,16 @@ namespace ADayAtTheZoo.Monkeys.Care
                 Round.Freeze();
                 foreach (var npc in monkeys) npc.StopAtCutoff();
                 if (held) held.Release(); held = null; StopHaptics();
+                GloveInventory?.Close();
                 roundView.ShowResults(); SaveRoundRecord();
+                GloveInventory?.HideHud();
             }
-            if (RoundStarted && begun && roundView != null) roundView.Update(Round, gameTime);
+            if (begun && !readyGateActive && !goSequenceActive && roundView != null)
+                roundView.Update(Round, gameTime);
             audioFeedback.UpdateMusic(Round.Frozen);
-            bool foodAimed = held && held.Held && Input.TriggerHeld &&
+            bool foodAimed = held && held.Held &&
                              RayNpc && RayNpc.Accepts(CareNeed.Hunger);
+            LogHapticDevicesOnce();
             if (Playing && foodAimed && (GloveInventory == null || !GloveInventory.IsOpen)) SetHaptics(hapticAmplitude);
             else StopHaptics();
         }
@@ -448,10 +632,10 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
         void SetHaptics(float amplitude)
         {
-            CareXboxInput.SetMotorSpeeds(amplitude * .3f, amplitude);
-            if (Gamepad.current != null)
+            CareXboxInput.SetMotorSpeeds(amplitude * .68f, amplitude);
+            if (Gamepad.all.Count > 0)
             {
-                Gamepad.current.SetMotorSpeeds(amplitude * .3f, amplitude);
+                foreach (var pad in Gamepad.all) pad.SetMotorSpeeds(amplitude * .68f, amplitude);
                 return;
             }
             if (OVRInput.IsControllerConnected(OVRInput.Controller.RTouch))
@@ -462,10 +646,23 @@ namespace ADayAtTheZoo.Monkeys.Care
                 if (device.isValid && device.TryGetHapticCapabilities(out var caps) && caps.supportsImpulse) device.SendHapticImpulse(0, amplitude, .05f);
             }
         }
+        void LogHapticDevicesOnce()
+        {
+            if (hapticControllerLogged) return;
+            hapticControllerLogged = true;
+            if (Gamepad.all.Count == 0)
+            {
+                Debug.Log("[Monkey Care] 未检测到 Input System 手柄，暂停增强震动日志。");
+                return;
+            }
+            foreach (var pad in Gamepad.all)
+                Debug.Log("[Monkey Care] 震动控制器: " + pad.displayName + " | layout=" + pad.layout +
+                          " | interface=" + pad.description.interfaceName);
+        }
         public void StopHaptics()
         {
             CareXboxInput.SetMotorSpeeds(0, 0);
-            Gamepad.current?.SetMotorSpeeds(0, 0);
+            foreach (var pad in Gamepad.all) pad.SetMotorSpeeds(0, 0);
             if (OVRInput.IsControllerConnected(OVRInput.Controller.RTouch)) OVRInput.SetControllerVibration(0, 0, OVRInput.Controller.RTouch);
             var device = InputDevices.GetDeviceAtXRNode(XRNode.RightHand); if (device.isValid) device.StopHaptics();
         }
@@ -486,18 +683,17 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (!Round.Frozen) return;
             StopHaptics(); if (held) held.Release(); held = null;
             Round = new CareRound(MonkeyStartingNeeds(), feedingOnly);
-            records.Clear(); gameTime = 0; supplyEnabled = false;
-            TutorialActive = false; RoundStarted = true;
+            records.Clear(); gameTime = 0;
+            TutorialActive = false; RoundStarted = false;
             rig.transform.SetPositionAndRotation(rigStartPosition, rigStartRotation);
             roundView.Reset();
             GloveInventory?.Reset(Round);
-            if (locomotion) locomotion.inputLocked = false;
-            if (desktopController) desktopController.inputLocked = false;
+            GloveInventory?.HideHud();
+            nextBananaEquipAt = 0;
+            SetPlayerInputLocked(true);
             foreach (var item in items) item.RestoreSupply();
-            foreach (var npc in monkeys) npc.ResetForRound();
-            readyCanvas = CareUi.Canvas("Care READY GO", playerCamera.transform, new Vector3(0, 0, 1.8f), 1, new Vector2(800, 470));
-            CareUi.Image("READY GO", readyCanvas, readyGo, new Vector2(800, 470), Vector2.zero);
-            CareReadyView.Decorate(readyCanvas, roundArtwork.star, readySeconds);
+            foreach (var npc in monkeys) npc.ResetForRound(false);
+            ShowReadyGate();
             suppressUntilRelease = true; arcAiming = false;
             CareInput.ForgetEdges();
         }

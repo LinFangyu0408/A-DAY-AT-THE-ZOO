@@ -1,4 +1,5 @@
 using Oculus.Interaction;
+using ADayAtTheZoo.Monkeys.Care;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.XR;
@@ -99,7 +100,7 @@ public sealed class Locomotion : MonoBehaviour
         bool rightConnected =
             OVRInput.IsControllerConnected(OVRInput.Controller.RTouch) ||
             InputDevices.GetDeviceAtXRNode(XRNode.RightHand).isValid ||
-            Gamepad.current != null;
+            CareInput.AnyGamepadConnected;
         bool leftClick = ReadThumbstickClick(
             OVRInput.Controller.LTouch,
             XRNode.LeftHand,
@@ -122,14 +123,10 @@ public sealed class Locomotion : MonoBehaviour
     private static Vector2 ReadThumbstick(OVRInput.Controller controller, XRNode node)
     {
         Vector2 value = OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick, controller);
-        Gamepad pad = Gamepad.current;
-        if (pad != null)
-        {
-            Vector2 padValue = node == XRNode.LeftHand
-                ? pad.leftStick.ReadValue()
-                : pad.rightStick.ReadValue();
-            if (padValue.sqrMagnitude > value.sqrMagnitude) value = padValue;
-        }
+        Vector2 padValue = node == XRNode.LeftHand
+            ? CareInput.GamepadLeftStick
+            : CareInput.GamepadRightStick;
+        if (padValue.sqrMagnitude > value.sqrMagnitude) value = padValue;
         XRInputDevice device = InputDevices.GetDeviceAtXRNode(node);
         if (value.sqrMagnitude < 0.0001f &&
             device.isValid &&

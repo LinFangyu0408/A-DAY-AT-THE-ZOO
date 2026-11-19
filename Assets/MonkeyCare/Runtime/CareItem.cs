@@ -34,6 +34,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         readonly HashSet<Collider> touching = new();
         readonly ScratchStroke stroke = new();
         MonkeyCareNpc previousScratchTarget;
+        MonkeyCareNpc caughtTarget;
 
         void Awake()
         {
@@ -47,7 +48,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
         public bool EquipFromGlove(Transform hand)
         {
-            if (!gloveMode || !Available || Held || !hand) return false;
+            if (!gloveMode || !Available || Held || Thrown || !hand) return false;
             return Equip(hand);
         }
         bool Equip(Transform hand)
@@ -55,6 +56,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             returnAt = float.PositiveInfinity;
             Held = true;
             Thrown = false;
+            caughtTarget = null;
             if (!body.isKinematic) { body.linearVelocity = Vector3.zero; body.angularVelocity = Vector3.zero; }
             body.isKinematic = true;
             SetVisible(true, true);
@@ -71,6 +73,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             if (!Held) return;
             Held = false; Caring = false; Target = null;
+            caughtTarget = null;
             if (gloveMode) { RestoreSupply(); return; }
             transform.SetParent(homeParent, true); transform.localScale = homeScale;
             body.isKinematic = false; stroke.Reset(); previousScratchTarget = null;
@@ -93,6 +96,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             if (!Held) return;
             Held = false; Caring = false; Target = null;
+            caughtTarget = null;
             transform.SetParent(homeParent, true); transform.localScale = homeScale;
             transform.position += velocity.normalized * .08f;
             body.isKinematic = false;
@@ -110,6 +114,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (!Available) return;
             Available = false; Held = false; Caring = false; Target = null;
             Thrown = false;
+            caughtTarget = null;
             transform.SetParent(homeParent, true); body.isKinematic = true; touching.Clear(); stroke.Reset();
             if (ghost) Destroy(ghost);
             SetVisible(false, false);
@@ -119,12 +124,17 @@ namespace ADayAtTheZoo.Monkeys.Care
         public void RestoreSupply()
         {
             if (Held) { Held = false; Caring = false; Target = null; }
+            caughtTarget = null;
             returnAt = float.PositiveInfinity;
             Available = true; Caring = false; Target = null;
             Thrown = false;
             transform.SetParent(homeParent, true); transform.SetPositionAndRotation(homePosition, homeRotation); transform.localScale = homeScale;
+            if (!body.isKinematic)
+            {
+                body.linearVelocity = Vector3.zero;
+                body.angularVelocity = Vector3.zero;
+            }
             body.isKinematic = true;
-            body.linearVelocity = Vector3.zero; body.angularVelocity = Vector3.zero;
             SetVisible(!gloveMode, !gloveMode);
             touching.Clear(); stroke.Reset();
         }
@@ -151,7 +161,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             }
             if (!Available) return;
             if (!MonkeyCareSession.Playing) { Caring = false; if (ghost) ghost.SetActive(false); return; }
-            Target = ContactTarget();
+            Target = ContactTarget() ?? caughtTarget;
             var session = MonkeyCareSession.Instance;
             if (!Target && Held && kind == CareNeed.Hunger && session && session.RayNpc && session.RayNpc.Accepts(kind)) Target = session.RayNpc;
             Caring = Target && Target.Accepts(kind) && (kind == CareNeed.Hunger || Held);
@@ -159,7 +169,11 @@ namespace ADayAtTheZoo.Monkeys.Care
             {
                 if (!Held && Thrown)
                 {
-                    CatchAtTarget();
+                    if (!caughtTarget)
+                    {
+                        caughtTarget = Target;
+                        CatchAtTarget();
+                    }
                     Target.OfferFood(this);
                 }
             }
@@ -192,7 +206,12 @@ namespace ADayAtTheZoo.Monkeys.Care
             // Keep the thrown state active while the monkey eats so each frame can
             // continue advancing satisfaction until Consume() clears the banana.
             returnAt = float.PositiveInfinity;
-            body.linearVelocity = Vector3.zero; body.angularVelocity = Vector3.zero; body.isKinematic = true;
+            if (!body.isKinematic)
+            {
+                body.linearVelocity = Vector3.zero;
+                body.angularVelocity = Vector3.zero;
+            }
+            body.isKinematic = true;
             transform.position = TargetPoint(Target);
             transform.rotation = Quaternion.LookRotation(Target.transform.forward, Vector3.up);
         }
