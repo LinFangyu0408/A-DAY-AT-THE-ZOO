@@ -1,5 +1,28 @@
 # A Day at the Zoo - 开发记录
 
+## 2026-11-20 UI 重叠与字细问题修复（用户反馈"很糟糕/完全没改"）
+- 根因1（重叠）：CareTutorial 面板定位 (-.48,.32,1.50) 与顶部 SCORE HUD (0,.43,1.18) 在世界空间大面积重叠，且 HUD 更靠前遮住指导面板。修复：指导面板移至居中偏下 (0,-.06,1.45)，缩放 .88，数学上 y 范围与 HUD 完全分离。
+- 根因2（字细）：Fredoka-Variable.ttf 可变字体的 Bold 字重被 Unity legacy Text 忽略，一直渲染细体。修复：`CareFont.LoadReadable()` 改为优先加载项目内静态粗体 `Resources/Fonts/Arial-Bold.ttf`（从系统 arialbd.ttf 复制，游戏内 UI 文案全英文无中文方块风险），并保留 OS 粗体/Fredoka 逐级 fallback。
+- CareRoundView.Legible() 简化为单层对比描边（2.5px），配合真粗体；body 字号 48→54。
+- 同步更新 CareFinalSmokeTests 的过时断言（原强制要求 Fredoka）为接受粗体可读字体。
+- 验证：跑 `work/monkey-care/final-smoke.request` 触发全套自动测试，**SUCCESS 41 assertions 全通过**；`final-tutorial.png` 截图确认面板居中不重叠、文字粗实清晰不出框。
+- 备份在 `_backups/`（.v2 系列）。
+
+## 2026-11-20 游戏界面切图补充（UI切图-游戏界面(1).zip）
+- 新素材 17 张导入到 `Assets/MonkeyCare/Resources/UI/GameUI2/`（独立目录，不覆盖旧版高清图）：STAMINA/STAMINA LOGO、SATISFACTION/LOGO、UI SCORE、banana、happy/sad、READY GO、3 种进度条底、数字星级 1-5。
+- 对比发现：多数新图与旧图是同一套美术的低分辨率版（旧图分辨率约高一倍），故保留旧图用于 banana/happy/sad/readygo/进度条，仅接入项目真正缺的部分。
+- 修复既有 bug：`CareUiSkin.SvgStaminaPanel` 原本错误指向 `satisfaction`（体力面板显示满意度图），改为 `LoadGameUi("STAMINA")`；`SvgStaminaLogo` 改用新闪电图标 `LoadGameUi("STAMINA LOGO")`。
+- 新增 `CareUiSkin.LoadGameUi()`（从 UI/GameUI2/ 加载）和 `SvgNumberStar(int)`；结算徽章优先用新数字星级 1/2/3（fallback 到 level1/2/3）。
+- 备份移至项目根 `_backups/`（避免 .bak 被 Unity 当资源导入）。已重编译通过（compile 6689ms），无 C# 错误与新素材缺失警告。
+
+## 2026-11-20 UI 素材更新与文字可读性修正
+
+- 结算按钮/星星换成新版切图：`UI/SVG/continue.png`、`restart.png`、`star.png`（来自用户提供的 `UI切图-结算界面(2).zip`）。
+- 结算面板仍用 `results_blank.png` + 代码动态填字：新版 `Results Screen.png` 自带烘焙文字，直接替换会和动态文字重叠，故不替换面板本身；显示效果与参考图一致。
+- 所有 UI 文字统一走 `CareRoundView.Legible()`：按文字亮度自动加对比描边（深字白边、浅字深边），并启用 `resizeTextForBestFit` 防止文字出框。进度条、结算、香蕉数量、背包、新手引导全部覆盖。
+- 新手引导（CareTutorial）重新排版：标题/正文/操作提示改居中、放大文字框、收敛字号上限，彻底解决文字出框；移除各处重复的手动 Outline 避免描边叠加发糊。
+- 备份：`CareRoundView.cs.bak`、`CareTutorial.cs.bak`。已重新编译通过，无 C# 错误。
+
 ## 2026-11-20 最新试玩修正
 
 - 英文 UI 字体切换为随项目提供的开源字体 **Fredoka**（SIL OFL 许可证），并同步放大教程、HUD、背包、拾取提示与结算清单字号。
@@ -78,3 +101,30 @@
 - Unity：6000.3.28f1
 - 当前通过 Xbox 手柄在 Unity Editor 中模拟 XR 交互
 - 本地 Meta XR 安装包位于 `Packages/UnityPackages/`，该目录不提交到 Git
+
+## 2026-11-20 UI 第四轮（按用户参考截图）
+- 教程面板移到左上角（-0.60, .42, 1.30，scale .62），不再挡玩家视角。
+- HUD 换成参考图样式：SCORE 白面板（GameUI2/UI SCORE.png，彩虹条用运行时切片做活进度）+ 金星徽章 + 右上分数"0.00"格式 + 面板下计时器；香蕉面板（banana.png）右侧"×N"；新增 STAMINA 面板（STAMINA.png + 渐变条 + 闪电 logo），值为有需求猴子的平均进度。
+- 震动改为：只有按住扳机瞄准"饥饿中"猴子才触发（MonkeyCareSession.LateUpdate foodAimed 加 Input.TriggerHeld）。
+- 结算界面按参考图3重做：白卡 + LEVEL COMPLETE 蓝缎带 + Feeding Amount / Resolved Status(%) / Facilities Added + Total Score + 三星 + Next Star + CONTINUE 胶囊 + 绿色圆重启按钮。
+- 冒烟测试 41 断言通过；注意 request 触发前先确认 Unity 已完成脚本重编译（ScriptAssemblies 两个 dll mtime）。
+
+## 2026-11-20 第五轮微修
+- 结算卡 "Next Star" 文本框收窄右移（宽460 @ -160），不再出卡片左缘。
+- HUD "PASS 60%" 标注右移（+80）避开中央金星徽章。
+- CareFinalSmokeTests 结算段补 StopAtCutoff 循环，截图与真实结算一致。
+- 触发测试前务必确认 Library/ScriptAssemblies 两个 dll mtime 晚于源码（Ctrl+R 后轮询），否则 request 会用旧程序集跑出假通过。
+
+## 2026-11-20 第六轮（小摊后方+碰撞）
+- 小摊移到玩家初始视角后方偏左（-forward*6.5 + left*3.4），转身才可见；摊位正面朝外。
+- 新增 AddBoxBlockingColliders：摊位柜台周围 3 个 BoxCollider 阻挡玩家穿过。
+- 教程面板微调 (-0.52,.34,1.32) scale .56。
+- work/monkey-care/layout-editor-state.txt 是 Unity 侧心跳（playing/compiling/updating），判断编辑器状态优先读它。
+- 用户端显示旧 UI 的原因：Play 会话先于编译开始，Unity Play 模式不热重载——退出 Play 重进即可。
+
+## 2026-11-20 第七轮（8 项反馈）
+- 回合 230s→150s；NextTime 去 85/155s 门控；喂完 5-9s 随机再请求；开局 3-6s 首次饥饿。
+- 吃香蕉期间不震动（EatingNow）、头顶进度条隐藏、吃完触发 Happy 动画。
+- SCORE 条去 0/9 只留百分比；轨道精确对齐贴图+圆角奶油空槽。
+- 结算卡修复 SDF 漏 radius 的假圆角；卡+阴影共享 96px 大圆角。
+- Unity 用特定启动方式会静默退出，用 Bash 后台方式启动。

@@ -221,7 +221,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             if (readyCanvas) Destroy(readyCanvas.gameObject);
             readyCanvas = CareUi.Canvas("Care READY GO", playerCamera.transform,
-                new Vector3(0, 0, 1.45f), .94f, new Vector2(960, 560));
+                new Vector3(0, 0, 1.45f), .94f, new Vector2(960, 760));
             var readyArt = CareUiSkin.SvgReadyGo ? CareUiSkin.SvgReadyGo : readyGo;
             if (readyArt)
                 CareUi.Image("READY GO", readyCanvas, readyArt, new Vector2(960, 560), Vector2.zero);
@@ -229,23 +229,22 @@ namespace ADayAtTheZoo.Monkeys.Care
                 CareUiSkin.AddSliced(readyCanvas, "Ready panel", CareUiSkin.Panel,
                     new Vector2(900, 430), Vector2.zero, new Color(1f, .97f, .86f, 1f));
             CareReadyView.Decorate(readyCanvas, roundArtwork.star, 100000f);
+            // The hint sits well below the READY GO artwork so it never covers
+            // the big letters.
             CareUiSkin.AddSliced(readyCanvas, "Ready prompt plate", CareUiSkin.Slot,
-                new Vector2(590, 104), new Vector2(0, -228), new Color(.08f, .25f, .42f, .94f))
+                new Vector2(620, 108), new Vector2(0, -318), new Color(.08f, .25f, .42f, .94f))
                 .transform.SetAsLastSibling();
             var readyKey = CareUiSkin.Add(readyCanvas, "Ready key", CareUiSkin.RoundButton,
-                new Vector2(116, 116), new Vector2(-196, -228), Color.white);
+                new Vector2(116, 116), new Vector2(-206, -318), Color.white);
             readyKey.transform.SetAsLastSibling();
             readyKeyLabel = CareRoundView.Label("Ready key label", readyKey.transform,
                 "A", new Vector2(112, 112), Vector2.zero, 56,
                 TextAnchor.MiddleCenter, new Color(.08f, .18f, .31f, 1f));
             readyPrompt = CareRoundView.Label("Ready prompt",
-                readyCanvas, "PRESS TO START",
-                new Vector2(360, 72), new Vector2(66, -228), 42,
+                readyCanvas, "PRESS A TO START",
+                new Vector2(420, 72), new Vector2(56, -318), 42,
                 TextAnchor.MiddleCenter, Color.white);
             readyPrompt.transform.SetAsLastSibling();
-            var outline = readyPrompt.gameObject.AddComponent<Outline>();
-            outline.effectColor = new Color(.04f, .16f, .28f, .96f);
-            outline.effectDistance = new Vector2(3, -3);
             readyGateActive = true;
             goSequenceActive = false;
             SetPlayerInputLocked(true);
@@ -523,21 +522,35 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
         void LateUpdate()
         {
-            // All NPC Update calls have settled the final clipped frame before freezing.
-            if (RoundStarted && begun && !Round.Frozen && gameTime >= CareRound.Cutoff)
+            // Freeze at the time cutoff OR as soon as every banana is fed
+            // (100% progress ends the round immediately).
+            if (RoundStarted && begun && !Round.Frozen &&
+                (gameTime >= CareRound.Cutoff || Round.FeedingTotal >= Round.TaskTotal))
             {
                 Round.Freeze();
                 foreach (var npc in monkeys) npc.StopAtCutoff();
                 if (held) held.Release(); held = null; StopHaptics();
                 GloveInventory?.Close();
+                // Results view only: hide every other HUD attached to the
+                // camera (score, banana, stamina, tutorial, glove, ready gate).
+                foreach (Transform child in playerCamera.transform)
+                    if (child.name.StartsWith("Care ") && child.name != "Care RESULTS")
+                        child.gameObject.SetActive(false);
+                if (bananaPickup) bananaPickup.gameObject.SetActive(false);
                 roundView.ShowResults(); SaveRoundRecord();
-                GloveInventory?.HideHud();
             }
             if (begun && !readyGateActive && !goSequenceActive && roundView != null)
+            {
+                roundView.StaminaFill = AverageMonkeyStamina();
                 roundView.Update(Round, gameTime);
+            }
             audioFeedback.UpdateMusic(Round.Frozen);
+            // Haptics mean "a hungry monkey is locked in your sights". While
+            // that monkey is already eating the caught banana the buzz stops —
+            // the request has been answered and the player needs no cue.
             bool foodAimed = held && held.Held &&
-                             RayNpc && RayNpc.Accepts(CareNeed.Hunger);
+                             RayNpc && RayNpc.Accepts(CareNeed.Hunger) &&
+                             !RayNpc.EatingNow;
             LogHapticDevicesOnce();
             if (Playing && foodAimed && (GloveInventory == null || !GloveInventory.IsOpen)) SetHaptics(hapticAmplitude);
             else StopHaptics();
@@ -630,6 +643,22 @@ namespace ADayAtTheZoo.Monkeys.Care
             for (int i = 0; i < count; i++) arc.SetPosition(i, arcPoints[i]);
             arc.startColor = arc.endColor = arcValid ? Color.cyan : new Color(1, .3f, .3f);
         }
+        // Average satisfaction of every monkey with an active demand; full bar
+        // when nobody needs anything (everyone is content).
+        float AverageMonkeyStamina()
+        {
+            float sum = 0f; int count = 0;
+            foreach (var npc in monkeys)
+            {
+                if (!npc || npc.Progress == null) continue;
+                if (!npc.HasDemand || npc.Celebrating) continue;
+                float ratio = npc.Need == CareNeed.Itch
+                    ? (float)npc.Progress.Strokes / Mathf.Max(1, npc.Progress.StrokeTarget)
+                    : npc.Progress.Fed / Mathf.Max(.01f, npc.Progress.FeedTarget);
+                sum += Mathf.Clamp01(ratio); count++;
+            }
+            return count > 0 ? sum / count : 1f;
+        }
         void SetHaptics(float amplitude)
         {
             CareXboxInput.SetMotorSpeeds(amplitude * .68f, amplitude);
@@ -687,6 +716,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             TutorialActive = false; RoundStarted = false;
             rig.transform.SetPositionAndRotation(rigStartPosition, rigStartRotation);
             roundView.Reset();
+            if (bananaPickup) bananaPickup.gameObject.SetActive(true);
             GloveInventory?.Reset(Round);
             GloveInventory?.HideHud();
             nextBananaEquipAt = 0;

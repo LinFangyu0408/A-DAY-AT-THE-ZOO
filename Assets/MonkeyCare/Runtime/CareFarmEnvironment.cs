@@ -51,8 +51,15 @@ namespace ADayAtTheZoo.Monkeys.Care
             forward.Normalize();
 
             Vector3 groundBelowPlayer = FindGround(player.position);
+            // The stand sits BEHIND the player's opening view, nudged to the
+            // left: invisible until the player turns around. Because the stall
+            // is now behind, its counter (+z local front) faces back toward
+            // the player's start position.
             Quaternion facingPlayer = Quaternion.LookRotation(forward, Vector3.up);
-            Vector3 standPlan = groundBelowPlayer - forward * MarketStandDistance;
+            // Cross(forward, up) points left of the player's view direction.
+            Vector3 left = Vector3.Cross(forward, Vector3.up).normalized;
+            Vector3 standPlan = groundBelowPlayer - forward * 8f +
+                                left * 3.4f;
             marketStand = FindNamed("Banana Market Stand");
             Vector3 standGround = FindGround(standPlan + Vector3.up * 1.5f,
                 marketStand ? marketStand.transform : null);
@@ -78,6 +85,7 @@ namespace ADayAtTheZoo.Monkeys.Care
                 AlignBottomToGround(marketStand, standGround.y + .015f);
                 SetBoundsCenterXZ(marketStand, standPlan);
                 AddStaticMeshColliders(marketStand);
+                AddStallBlocker(marketStand);
                 if (VisualBounds(marketStand, out var standBounds))
                     ClearVegetationInside(standBounds);
                 Transform stack = FindNamed("Banana Crate Stack")?.transform;
@@ -429,6 +437,21 @@ namespace ADayAtTheZoo.Monkeys.Care
                 meshCollider.sharedMesh = filter.sharedMesh;
                 meshCollider.convex = false;
             }
+        }
+
+        // Invisible solid box filling the stall's footprint so the player
+        // cannot walk into or straight through the stand area.
+        void AddStallBlocker(GameObject stand)
+        {
+            if (!stand || stand.transform.Find("Stall Blocker")) return;
+            if (!VisualBounds(stand, out var bounds)) return;
+            var blocker = new GameObject("Stall Blocker");
+            blocker.transform.SetParent(stand.transform, false);
+            var box = blocker.AddComponent<BoxCollider>();
+            float height = Mathf.Max(2.2f, bounds.size.y);
+            box.center = new Vector3(bounds.center.x,
+                bounds.min.y + height * .5f, bounds.center.z);
+            box.size = new Vector3(bounds.size.x + .5f, height, bounds.size.z + .4f);
         }
 
         Vector3 FindGround(Vector3 near, Transform ignoredRoot = null)

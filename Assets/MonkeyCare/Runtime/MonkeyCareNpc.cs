@@ -45,6 +45,9 @@ namespace ADayAtTheZoo.Monkeys.Care
         public bool Celebrating { get; private set; }
         public int CurrentTaskIndex { get; private set; }
         public bool Accepts(CareNeed need) => HasDemand && Need == need;
+        // True while a caught banana is being eaten. The care ray may still
+        // touch the monkey during this window, but haptics must stay silent.
+        public bool EatingNow { get; private set; }
         public MonkeyAction Phase { get; private set; }
         public float NextIn => Mathf.Max(0, waitUntil - MonkeyCareSession.GameTime);
         CarePanel panel;
@@ -99,7 +102,9 @@ namespace ADayAtTheZoo.Monkeys.Care
             var round = MonkeyCareSession.Instance ? MonkeyCareSession.Instance.Round : null;
             started = true;
             nextNeed = round != null && round.FeedingOnly ? CareNeed.Hunger : firstNeed;
-            waitUntil = MonkeyCareSession.GameTime + Mathf.Max(10, firstDelay);
+            // First hunger request lands within a few seconds so players can
+            // feed right away instead of waiting with nothing to aim at.
+            waitUntil = MonkeyCareSession.GameTime + Mathf.Clamp(firstDelay, 3f, 6f);
             PlayPhase(MonkeyAction.Hi, wave);
         }
         public bool TutorialSatisfied => guidedTutorial && Celebrating;
@@ -134,6 +139,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             started = false;
             HasDemand = false;
             Celebrating = false;
+            EatingNow = false;
             Progress = null;
             smokeShown = false;
             feedingFrame = -1;
@@ -178,10 +184,15 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (Need == CareNeed.Hunger)
             {
                 bool feeding = feedingFrame == Time.frameCount && feedingItem && feedingItem.Available;
+                EatingNow = feeding;
                 if (feeding)
                 {
                     if (!smokeShown) { smokeEffect.Spawn(transform); smokeShown = true; }
                     PlayPhase(MonkeyAction.Eating, eating);
+                    // Eating is self-explanatory: hide the overhead satisfaction
+                    // bar and emotion icon until the banana is finished.
+                    if (panel.Root.gameObject.activeSelf) panel.Root.gameObject.SetActive(false);
+                    if (emotion.gameObject.activeSelf) emotion.gameObject.SetActive(false);
                     if (record.startedAt < 0)
                     {
                         record.startedAt = MonkeyCareSession.TaskTime - delta;
@@ -193,7 +204,7 @@ namespace ADayAtTheZoo.Monkeys.Care
                 }
                 else { Progress.Advance(delta, false); PlayPhase(MonkeyAction.Hungry, hungry); }
             }
-            else Progress.Advance(delta, false);
+            else { EatingNow = false; Progress.Advance(delta, false); }
             UpdateRecord();
             RefreshUi();
         }
@@ -208,10 +219,13 @@ namespace ADayAtTheZoo.Monkeys.Care
 
             float delta = Mathf.Max(0, MonkeyCareSession.TaskTime - appearedAt - Progress.Waited);
             bool feeding = feedingFrame == Time.frameCount && feedingItem && feedingItem.Available;
+            EatingNow = feeding;
             if (feeding)
             {
                 if (!smokeShown) { smokeEffect.Spawn(transform); smokeShown = true; }
                 PlayPhase(MonkeyAction.Eating, eating);
+                if (panel.Root.gameObject.activeSelf) panel.Root.gameObject.SetActive(false);
+                if (emotion.gameObject.activeSelf) emotion.gameObject.SetActive(false);
                 if (Progress.Advance(delta, true)) CompleteGuided(feedingItem);
             }
             else
@@ -224,7 +238,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         public void BeginDemand(CareNeed need)
         {
             if (MonkeyCareSession.Instance.Round.FeedingOnly) need = CareNeed.Hunger;
-            Need = need; HasDemand = true; Celebrating = false; smokeShown = false; feedingFrame = -1;
+            Need = need; HasDemand = true; Celebrating = false; smokeShown = false; feedingFrame = -1; EatingNow = false;
             Progress = new CareProgress(patienceSeconds, feedingSeconds, lateFeedingSeconds, scratchCount, lateScratchCount);
             appearedAt = MonkeyCareSession.TaskTime; rescueRecorded = false;
             record = MonkeyCareSession.Instance.RegisterTask(Array.IndexOf(MonkeyCareSession.Instance.monkeys, this), CurrentTaskIndex, need, appearedAt);
@@ -273,9 +287,11 @@ namespace ADayAtTheZoo.Monkeys.Care
             CurrentTaskIndex++;
             nextNeed = MonkeyCareSession.Instance.Round.FeedingOnly ? CareNeed.Hunger :
                 Need == CareNeed.Hunger ? CareNeed.Itch : CareNeed.Hunger;
+            // The next request follows quickly (5-9s), keeping the round moving;
+            // staggered per-monkey timers make the order feel random.
             waitUntil = CareRound.NextTime(completedAt, CurrentTaskIndex, Progress.Late,
-                nextNeed == CareNeed.Hunger ? hungerInterval : itchInterval, recoveryWait);
-            HasDemand = false; Celebrating = true;
+                Mathf.Min(hungerInterval, 6f) + UnityEngine.Random.Range(0f, 3f), recoveryWait);
+            HasDemand = false; Celebrating = true; EatingNow = false;
             item.Consume();
             if (demandFx) Destroy(demandFx);
             if (teleportPoint) teleportPoint.gameObject.SetActive(false);
@@ -400,7 +416,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
         public void StopAtCutoff()
         {
-            UpdateRecord(); HasDemand = false; Celebrating = false;
+            UpdateRecord(); HasDemand = false; Celebrating = false; EatingNow = false;
             if (demandFx) Destroy(demandFx);
             if (teleportPoint) teleportPoint.gameObject.SetActive(false);
             if (panel != null) panel.Root.gameObject.SetActive(false);

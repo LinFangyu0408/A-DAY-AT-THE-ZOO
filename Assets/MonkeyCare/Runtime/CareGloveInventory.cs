@@ -34,9 +34,7 @@ namespace ADayAtTheZoo.Monkeys.Care
                 new Vector2(320, 78), new Vector2(0, 174), Color.white);
             CareRoundView.Label("Backpack title", root, "BAG",
                 new Vector2(300, 72), new Vector2(0, 174), 54,
-                TextAnchor.MiddleCenter, Color.white)
-                .gameObject.AddComponent<Outline>().effectColor =
-                new Color(.04f, .16f, .28f, .9f);
+                TextAnchor.MiddleCenter, Color.white);
 
             selector = CareUiSkin.AddSliced(root, "Selected slot glow", CareUiSkin.YellowButton,
                 new Vector2(146, 146), new Vector2(-241, 109),
@@ -206,10 +204,8 @@ namespace ADayAtTheZoo.Monkeys.Care
             label.alignment = alignment;
             label.color = color;
             label.raycastTarget = false;
-            label.horizontalOverflow = HorizontalWrapMode.Wrap;
-            label.verticalOverflow = VerticalWrapMode.Overflow;
             label.text = value;
-            return label;
+            return CareRoundView.Legible(label, fontSize);
         }
     }
 }

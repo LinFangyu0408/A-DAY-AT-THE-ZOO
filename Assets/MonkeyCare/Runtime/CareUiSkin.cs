@@ -25,6 +25,11 @@ namespace ADayAtTheZoo.Monkeys.Care
         public static Sprite RoundButton => Casual("round", "circle", "badge") ??
             Load("ui_round_blue");
         public static Sprite Star => Casual("star") ?? Load("ui_star");
+        // Extra-large corner radius white plate for the results card. The
+        // Casual HD panel only has a subtle radius; this procedural sprite
+        // gives the card a clearly rounded, friendly silhouette. The 96px
+        // radius stays visible even on a tall (880x1290) card.
+        public static Sprite RoundedCard => Rounded("RoundedCard", 256, 96);
         public static Sprite StarOutline => Casual("star_outline", "star_empty", "star empty") ??
             Load("ui_star_empty");
         public static Sprite DownArrow => Casual("arrow", "down") ?? Load("arrow_basic_s");
@@ -52,17 +57,26 @@ namespace ADayAtTheZoo.Monkeys.Care
         public static Sprite BackpackCount => LoadBackpack("number");
         public static Sprite BackpackButton => LoadBackpack("button_a");
         public static Sprite BackpackIcon => LoadBackpack("bag_icon");
-        public static Sprite SvgScorePanel => LoadSvg("stamina");
-        public static Sprite SvgScoreFill => LoadSvg("score_fill");
-        public static Sprite SvgBananaPanel => LoadSvg("banana");
+        // The reference HUD uses the new game-UI slice set: a white SCORE plate
+        // with a baked rainbow bar. The bar region is re-sliced at runtime so
+        // the live progress fill reuses the exact gradient.
+        public static Sprite SvgScorePanel => LoadGameUi("UI SCORE") ?? LoadSvg("stamina");
+        public static Sprite SvgScoreFill =>
+            LoadGameUiRect("UI SCORE", new Rect(50f, 72f, 738f, 74f)) ?? LoadSvg("score_fill");
+        public static Sprite SvgBananaPanel => LoadGameUi("banana") ?? LoadSvg("banana");
+        public static Sprite SvgStaminaBar => LoadGameUi("progress bar background STAMINA");
         public static Sprite SvgHappy => LoadSvg("happy");
         public static Sprite SvgSad => LoadSvg("sad");
         public static Sprite SvgSatisfactionPanel => LoadSvg("satisfaction");
-        public static Sprite SvgStaminaPanel => LoadSvg("satisfaction");
+        // The old SVG set had no dedicated STAMINA panel and mistakenly reused
+        // the satisfaction art. The newer game-UI slice set ships a proper one.
+        public static Sprite SvgStaminaPanel => LoadGameUi("STAMINA") ?? LoadSvg("stamina");
         public static Sprite SvgSatisfactionFill => LoadSvg("progress_satisfaction");
         public static Sprite SvgStaminaFill => LoadSvg("progress_stamina");
         public static Sprite SvgSatisfactionLogo => LoadSvg("satisfaction_logo");
-        public static Sprite SvgStaminaLogo => LoadSvg("stamina_logo");
+        public static Sprite SvgStaminaLogo => LoadGameUi("STAMINA LOGO") ?? LoadSvg("stamina_logo");
+        // Numbered star badges (1-5) from the new game-UI slice set.
+        public static Sprite SvgNumberStar(int number) => LoadGameUi(number.ToString());
         public static Sprite SvgReadyGo => LoadSvg("readygo");
         public static Sprite SvgResultsPanel => LoadSvg("results_blank");
         public static Sprite SvgContinue => LoadSvg("continue");
@@ -110,6 +124,44 @@ namespace ADayAtTheZoo.Monkeys.Care
             return sprite;
         }
 
+        // Procedural rounded-rectangle sprite with a generous corner radius
+        // and anti-aliased edges. Sliced borders keep the corners crisp at
+        // any card size.
+        static Sprite Rounded(string name, int size, int radius)
+        {
+            string key = "Rounded/" + name + "/" + radius;
+            if (cache.TryGetValue(key, out var existing) && existing) return existing;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false) { name = name };
+            float half = size * .5f;
+            float inner = half - radius;
+            var pixels = new Color32[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                float qx = Mathf.Abs(x + .5f - half) - inner;
+                float qy = Mathf.Abs(y + .5f - half) - inner;
+                // Rounded-rect signed distance: distance to the inner box
+                // MINUS the corner radius (the radius term is what actually
+                // rounds the corners; without it the sprite is a square).
+                float outside = new Vector2(Mathf.Max(qx, 0f), Mathf.Max(qy, 0f)).magnitude +
+                                Mathf.Min(Mathf.Max(qx, qy), 0f) - radius;
+                byte a = (byte)(Mathf.Clamp01(.5f - outside) * 255f);
+                    pixels[y * size + x] = new Color32(255, 255, 255, a);
+                }
+            }
+            texture.SetPixels32(pixels);
+            texture.filterMode = FilterMode.Bilinear;
+            texture.wrapMode = TextureWrapMode.Clamp;
+            texture.Apply();
+            var sprite = Sprite.Create(texture, new Rect(0, 0, size, size),
+                new Vector2(.5f, .5f), 100f, 0, SpriteMeshType.FullRect,
+                new Vector4(radius, radius, radius, radius));
+            sprite.name = "Care UI - " + name;
+            cache[key] = sprite;
+            return sprite;
+        }
+
         static Sprite LoadBackpack(string fileName)
         {
             string key = "UI/Backpack/" + fileName;
@@ -146,6 +198,47 @@ namespace ADayAtTheZoo.Monkeys.Care
                 new Rect(0, 0, texture.width, texture.height),
                 new Vector2(.5f, .5f), 100f, 0, SpriteMeshType.FullRect);
             sprite.name = "Care SVG - " + fileName;
+            cache[key] = sprite;
+            return sprite;
+        }
+
+        static Sprite LoadGameUi(string fileName)
+        {
+            string key = "UI/GameUI2/" + fileName;
+            if (cache.TryGetValue(key, out var existing) && existing) return existing;
+            var texture = Resources.Load<Texture2D>(key);
+            if (!texture)
+            {
+                Debug.LogWarning("[Monkey Care] Missing game-UI texture: " + key);
+                return null;
+            }
+            texture.filterMode = FilterMode.Bilinear;
+            texture.wrapMode = TextureWrapMode.Clamp;
+            var sprite = Sprite.Create(texture,
+                new Rect(0, 0, texture.width, texture.height),
+                new Vector2(.5f, .5f), 100f, 0, SpriteMeshType.FullRect);
+            sprite.name = "Care GameUI - " + fileName;
+            cache[key] = sprite;
+            return sprite;
+        }
+
+        // Slices a sub-region of a game-UI texture (y measured from the bottom,
+        // matching Sprite.Create) so baked artwork can double as live fills.
+        static Sprite LoadGameUiRect(string fileName, Rect rect)
+        {
+            string key = "UI/GameUI2/" + fileName + "#" + rect;
+            if (cache.TryGetValue(key, out var existing) && existing) return existing;
+            var texture = Resources.Load<Texture2D>("UI/GameUI2/" + fileName);
+            if (!texture)
+            {
+                Debug.LogWarning("[Monkey Care] Missing game-UI texture: UI/GameUI2/" + fileName);
+                return null;
+            }
+            texture.filterMode = FilterMode.Bilinear;
+            texture.wrapMode = TextureWrapMode.Clamp;
+            var sprite = Sprite.Create(texture, rect,
+                new Vector2(.5f, .5f), 100f, 0, SpriteMeshType.FullRect);
+            sprite.name = "Care GameUI - " + fileName + " slice";
             cache[key] = sprite;
             return sprite;
         }

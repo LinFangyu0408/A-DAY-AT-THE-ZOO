@@ -146,3 +146,7 @@ crashlytics-build.properties
 *.bak
 /Assets/MonkeyCare/Backups/
 /ProjectSettings/Packages/com.unity.ai.assistant/
+
+# Local agent backups & stray references
+/_backups/
+/playbtn3.png

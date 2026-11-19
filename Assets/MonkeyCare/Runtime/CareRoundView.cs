@@ -18,15 +18,18 @@ namespace ADayAtTheZoo.Monkeys.Care
     {
         readonly CareRoundArtwork art;
         readonly Camera camera;
-        readonly RectTransform scoreHud, bananaHud;
+        readonly RectTransform scoreHud, bananaHud, staminaHud;
         RectTransform results;
         readonly Image progressFill;
         readonly Image[] stars = new Image[3];
-        Image grade;
-        Sprite resultStarSprite, resultStarOutline;
-        readonly Text progress, score, clock, bananas;
+        Image staminaFill;
+        Sprite resultStarSprite;
+        readonly Text score, clock, bananas;
         Text feedingValue, penaltyValue, finalValue, passValue, starHint;
         CareResultButton[] buttons;
+
+        // Player HUD stamina bar (0..1), refreshed by the session each frame.
+        public float StaminaFill { get; set; } = 1f;
 
         public static Text Label(string name, Transform parent, string value, Vector2 size,
             Vector2 pos, int fontSize, TextAnchor align = TextAnchor.MiddleCenter,
@@ -41,8 +44,31 @@ namespace ADayAtTheZoo.Monkeys.Care
             text.alignment = align;
             text.raycastTarget = false;
             text.text = value;
+            return Legible(text, fontSize);
+        }
+
+        // Shared readability pass. LoadReadable() now returns a genuine bold OS
+        // face, so glyphs are already heavy; a single contrast outline keeps
+        // them crisp on any panel. Best-fit scaling keeps long strings inside
+        // their rect so text never spills out of frame.
+        public static Text Legible(Text text, int maxFontSize)
+        {
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.verticalOverflow = VerticalWrapMode.Truncate;
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = Mathf.Max(13, Mathf.RoundToInt(maxFontSize * .62f));
+            text.resizeTextMaxSize = maxFontSize;
+            if (!text.gameObject.GetComponent<Outline>())
+            {
+                Color c = text.color;
+                float lum = c.r * .299f + c.g * .587f + c.b * .114f;
+                var outline = text.gameObject.AddComponent<Outline>();
+                outline.effectColor = lum < .55f
+                    ? new Color(1f, 1f, 1f, .95f)      // dark text -> light edge
+                    : new Color(.04f, .10f, .18f, .95f); // light text -> dark edge
+                outline.effectDistance = new Vector2(2.5f, -2.5f);
+                outline.useGraphicAlpha = true;
+            }
             return text;
         }
 
@@ -52,7 +78,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             this.camera = camera;
 
             scoreHud = CareUi.Canvas("Care SCORE HUD", camera.transform,
-                new Vector3(0, .43f, 1.18f), .80f, new Vector2(1000, 320));
+                new Vector3(0, .45f, 1.18f), .80f, new Vector2(1000, 480));
             var svgScore = CareUiSkin.SvgScorePanel;
             if (svgScore)
             {
@@ -76,60 +102,71 @@ namespace ADayAtTheZoo.Monkeys.Care
             }
             if (svgScore)
             {
-                // The SVG score plate already contains the SCORE heading. Cover
-                // only its static gradient so the live value can animate.
+                // The game-UI SCORE plate bakes the rainbow gradient. Cover it
+                // with the panel's own cream tone so the live value can animate.
                 CareUi.Image("Static score bar cover", scoreHud, null,
-                    new Vector2(930, 126), new Vector2(0, -31)).color =
-                    new Color(.975f, .972f, .968f, 1f);
+                    new Vector2(900, 102), new Vector2(2, -31)).color =
+                    new Color(.922f, .925f, .902f, 1f);
             }
             else
             {
-                // Fallback for projects that have not imported the SVG pack.
+                // Fallback for projects that have not imported the game-UI pack.
                 CareUi.Image("Localized progress cover", scoreHud, null,
                     new Vector2(900, 170), new Vector2(0, -24)).color =
                     new Color(.975f, .965f, .945f, 1f);
                 CareUiSkin.AddSliced(scoreHud, "Progress title ribbon", CareUiSkin.Header,
                     new Vector2(420, 66), new Vector2(0, 72), Color.white);
                 Label("Progress title", scoreHud, "SCORE", new Vector2(400, 58),
-                    new Vector2(0, 72), 36, TextAnchor.MiddleCenter, Color.white)
-                    .gameObject.AddComponent<Outline>().effectColor =
-                    new Color(.04f, .16f, .28f, .9f);
+                    new Vector2(0, 72), 36, TextAnchor.MiddleCenter, Color.white);
             }
 
-            Vector2 trackSize = svgScore ? new Vector2(850, 88) : new Vector2(700, 50);
-            Vector2 trackPosition = svgScore ? new Vector2(-55, -31) : new Vector2(-55, -8);
+            // The baked rainbow bar occupies canvas rect x[-441,444] y[-77,14]
+            // (measured from UI SCORE.png). Align the live track exactly to it
+            // so the fill never overflows the printed artwork.
+            Vector2 trackSize = new Vector2(886, 92);
+            Vector2 trackPosition = new Vector2(2, -31);
             var track = CareUi.Rect("Progress track", scoreHud, trackSize, trackPosition);
             var trackBackground = track.gameObject.AddComponent<Image>();
-            var scoreFill = CareUiSkin.SvgScoreFill;
-            trackBackground.sprite = scoreFill ? scoreFill : CareUiSkin.ProgressTrack;
+            // Rounded cream empty track: matches the reference layout where the
+            // unfilled bar reads as a soft rounded slot on the white plate.
+            trackBackground.sprite = CareUiSkin.RoundedCard;
             trackBackground.type = Image.Type.Sliced;
-            trackBackground.type = scoreFill ? Image.Type.Simple : Image.Type.Sliced;
-            // The supplied score SVG is a full coloured bar. Tint a second copy
-            // down to a soft neutral track so 0 / 10 still reads as an empty
-            // progress bar, then draw the live coloured fill above it.
-            trackBackground.color = scoreFill
-                ? new Color(.46f, .48f, .53f, .82f)
-                : new Color(.58f, .62f, .66f, .58f);
-            trackBackground.enabled = true;
+            trackBackground.color = new Color(.84f, .82f, .78f, 1f);
             trackBackground.raycastTarget = false;
+            var scoreFill = CareUiSkin.SvgScoreFill;
             progressFill = CareUi.Image("Progress fill", track,
                 scoreFill ? scoreFill : CareUiSkin.ProgressFill,
-                scoreFill ? new Vector2(836, 82) : new Vector2(682, 32), Vector2.zero);
+                scoreFill ? new Vector2(872, 80) : new Vector2(682, 32), Vector2.zero);
             progressFill.type = Image.Type.Filled;
             progressFill.fillMethod = Image.FillMethod.Horizontal;
             progressFill.fillOrigin = 0;
             progressFill.fillAmount = 0;
             progressFill.color = scoreFill ? Color.white : new Color(1f, .82f, .20f, 1f);
-            progress = Label("Progress value", scoreHud, "0 / 10", new Vector2(170, 52),
-                new Vector2(430, trackPosition.y), 50, TextAnchor.MiddleLeft,
-                new Color(.18f, .18f, .26f, 1f));
+            // 60% passing line: a slim marker on the track so the player can
+            // see exactly where the round starts to count as passed.
+            var passMarker = CareUi.Rect("Progress pass marker", track,
+                new Vector2(10, trackSize.y), Vector2.zero);
+            var passMarkerImage = passMarker.gameObject.AddComponent<Image>();
+            passMarkerImage.color = new Color(1f, .72f, .10f, .95f);
+            passMarkerImage.raycastTarget = false;
+            passMarker.anchoredPosition = new Vector2(
+                -trackSize.x * .5f + trackSize.x * CareRound.PassingRatio, 0f);
+            passMarker.SetAsLastSibling();
+            var passCaption = Label("Progress pass caption", scoreHud, "PASS 60%",
+                new Vector2(150, 36), new Vector2(
+                    trackPosition.x - trackSize.x * .5f + trackSize.x * CareRound.PassingRatio + 14,
+                    trackPosition.y - trackSize.y * .5f - 22), 26,
+                TextAnchor.UpperLeft, new Color(.72f, .48f, .05f, 1f));
+            passCaption.transform.SetAsLastSibling();
+            var scoreBadge = CareUiSkin.Add(scoreHud, "Score star badge", CareUiSkin.SvgStar,
+                new Vector2(128, 125), new Vector2(2, -28), Color.white);
+            scoreBadge.preserveAspect = true;
 
-            score = Label("Current score", scoreHud, "TOTAL SCORE: 0", new Vector2(390, 46),
-                new Vector2(-225, -112), 44, TextAnchor.MiddleLeft,
-                new Color(.27f, .22f, .31f, 1f));
-            clock = Label("Round clock", scoreHud, "03:50", new Vector2(180, 46),
-                new Vector2(350, -112), 42, TextAnchor.MiddleRight,
-                new Color(.38f, .19f, .16f, 1f));
+            score = Label("Current score", scoreHud, "0%", new Vector2(300, 60),
+                new Vector2(330, 60), 52, TextAnchor.MiddleRight,
+                new Color(.33f, .20f, .30f, 1f));
+            clock = Label("Round clock", scoreHud, "03:50", new Vector2(220, 50),
+                new Vector2(0, -198), 44, TextAnchor.MiddleCenter, Color.white);
 
             bananaHud = CareUi.Canvas("Care BANANA HUD",
                 art.bananaAnchor ? art.bananaAnchor : camera.transform,
@@ -146,12 +183,37 @@ namespace ADayAtTheZoo.Monkeys.Care
             else
                 CareUiSkin.AddSliced(bananaHud, "Banana HUD panel", CareUiSkin.LightPanel,
                     new Vector2(545, 313), Vector2.zero, Color.white);
-            Label("Banana title", bananaHud, "BANANA", new Vector2(230, 70),
-                new Vector2(165, 56), 42, TextAnchor.MiddleCenter,
-                new Color(.20f, .20f, .25f, 1f));
-            bananas = Label("Banana count", bananaHud, "×10", new Vector2(220, 115),
-                new Vector2(170, -45), 72, TextAnchor.MiddleCenter,
-                new Color(.91f, .34f, .09f, 1f));
+            // The banana slice bakes the fruit on the left; only the counter is live.
+            bananas = Label("Banana count", bananaHud, "×10", new Vector2(250, 110),
+                new Vector2(150, -20), 78, TextAnchor.MiddleCenter,
+                new Color(.14f, .14f, .18f, 1f));
+
+            // STAMINA plate below the score HUD, mirroring the reference layout:
+            // baked title plate, teal gradient bar, lightning badge on the left.
+            staminaHud = CareUi.Canvas("Care STAMINA HUD", camera.transform,
+                new Vector3(0, .125f, 1.19f), .52f, new Vector2(700, 330));
+            var staminaPanel = CareUiSkin.Add(staminaHud, "Stamina panel",
+                CareUiSkin.SvgStaminaPanel, new Vector2(700, 315), Vector2.zero, Color.white);
+            staminaPanel.preserveAspect = true;
+            var staminaBarSprite = CareUiSkin.SvgStaminaBar;
+            var staminaTrack = CareUi.Rect("Stamina track", staminaHud,
+                new Vector2(500, 64), new Vector2(14, -82));
+            var staminaTrackBackground = staminaTrack.gameObject.AddComponent<Image>();
+            staminaTrackBackground.sprite = staminaBarSprite ? staminaBarSprite : CareUiSkin.ProgressTrack;
+            staminaTrackBackground.type = staminaBarSprite ? Image.Type.Simple : Image.Type.Sliced;
+            staminaTrackBackground.color = new Color(.40f, .48f, .54f, .50f);
+            staminaTrackBackground.raycastTarget = false;
+            staminaFill = CareUi.Image("Stamina fill", staminaTrack,
+                staminaBarSprite ? staminaBarSprite : CareUiSkin.ProgressFill,
+                new Vector2(486, 52), Vector2.zero);
+            staminaFill.type = Image.Type.Filled;
+            staminaFill.fillMethod = Image.FillMethod.Horizontal;
+            staminaFill.fillOrigin = 0;
+            staminaFill.fillAmount = 1;
+            staminaFill.color = staminaBarSprite ? Color.white : new Color(.16f, .78f, .72f, 1f);
+            var staminaLogo = CareUiSkin.Add(staminaHud, "Stamina logo",
+                CareUiSkin.SvgStaminaLogo, new Vector2(92, 93), new Vector2(-206, -82), Color.white);
+            staminaLogo.preserveAspect = true;
 
             BuildResults();
             Reset();
@@ -159,106 +221,49 @@ namespace ADayAtTheZoo.Monkeys.Care
 
         void BuildResults()
         {
+            // Reference card: big-corner white rounded plate, blue LEVEL
+            // COMPLETE ribbon, three airy stat rows, big total score, three
+            // stars, next-star hint, CONTINUE pill plus a round green button.
             results = CareUi.Canvas("Care RESULTS", camera.transform,
-                new Vector3(0, -.02f, 1.18f), .98f, new Vector2(1420, 1720));
-            var svgResults = CareUiSkin.SvgResultsPanel;
-            if (svgResults)
-            {
-                var resultsArt = CareUi.Image("SVG results panel", results, svgResults,
-                    new Vector2(1368, 1779), Vector2.zero);
-                resultsArt.preserveAspect = true;
-            }
-            else if (art.resultsPanel)
-            {
-                var originalResults = CareUi.Image("Original GitHub results panel", results,
-                    art.resultsPanel, new Vector2(1368, 1800), Vector2.zero);
-                originalResults.color = new Color(.96f, .97f, .97f, 1f);
-                originalResults.preserveAspect = true;
-            }
-            else
-            {
-                var shadow = CareUiSkin.AddSliced(results, "Results shadow", CareUiSkin.Panel,
-                    new Vector2(1368, 1690), new Vector2(8, -14),
-                    new Color(.02f, .06f, .12f, .40f));
-                shadow.transform.SetAsFirstSibling();
-                CareUiSkin.AddSliced(results, "Results panel", CareUiSkin.LightPanel,
-                    new Vector2(1360, 1680), Vector2.zero, Color.white);
-            }
-            if (!svgResults)
-            {
-                CareUiSkin.AddSliced(results, "Results content plate", CareUiSkin.LightPanel,
-                    new Vector2(1340, 1280), new Vector2(0, -130),
-                    new Color(1f, .995f, .97f, 1f));
-                CareUiSkin.AddSliced(results, "Results header", CareUiSkin.Header,
-                    new Vector2(1090, 164), new Vector2(0, 650), Color.white);
-                Label("Results title", results, "LEVEL COMPLETE", new Vector2(880, 105),
-                    new Vector2(0, 650), 58, TextAnchor.MiddleCenter,
-                    Color.white).gameObject.AddComponent<Outline>().effectColor =
-                    new Color(.04f, .18f, .34f, .92f);
-                Row("Successful feedings", "Feeding Amount", 315, out feedingValue);
-                Row("Patience penalties", "Patience Penalty", 180, out penaltyValue);
-                Row("Final score", "Total Score", 45, out finalValue);
-                passValue = Label("Pass result", results, "PASSED", new Vector2(1060, 88),
-                    new Vector2(0, -72), 54, TextAnchor.MiddleCenter,
-                    new Color(.04f, .45f, .25f, 1f));
-            }
-            else
-            {
-                const float rowX = -112;
-                const float valueX = 150;
-                Label("Feeding Amount title", results, "Feeding Amount",
-                    new Vector2(560, 92), new Vector2(rowX, 372), 66,
-                    TextAnchor.MiddleLeft, new Color(.20f, .20f, .20f, 1f));
-                Label("Resolved Status title", results, "Resolved Status",
-                    new Vector2(560, 92), new Vector2(rowX, 228), 66,
-                    TextAnchor.MiddleLeft, new Color(.20f, .20f, .20f, 1f));
-                Label("Patience Penalty title", results, "Patience Penalty",
-                    new Vector2(560, 92), new Vector2(rowX, 92), 66,
-                    TextAnchor.MiddleLeft, new Color(.20f, .20f, .20f, 1f));
-                Label("Total Score title", results, "Total Score",
-                    new Vector2(560, 116), new Vector2(rowX, -108), 72,
-                    TextAnchor.MiddleLeft, new Color(.18f, .18f, .18f, 1f));
-                CareUi.Image("Results divider", results, null,
-                    new Vector2(1050, 8), new Vector2(0, -5)).color =
-                    new Color(.56f, .58f, .57f, 1f);
+                new Vector3(0, -.02f, 1.30f), .50f, new Vector2(900, 1300));
+            // The shadow must share the card's rounded silhouette, otherwise a
+            // square dark rim shows around the rounded card corners.
+            var shadow = CareUiSkin.AddSliced(results, "Results shadow", CareUiSkin.RoundedCard,
+                new Vector2(896, 1296), new Vector2(8, -14),
+                new Color(.02f, .06f, .12f, .35f));
+            shadow.transform.SetAsFirstSibling();
+            var card = CareUiSkin.AddSliced(results, "Results card", CareUiSkin.RoundedCard,
+                new Vector2(880, 1290), Vector2.zero, new Color(.985f, .99f, .99f, 1f));
+            CareUiSkin.AddSliced(results, "Results ribbon", CareUiSkin.Header,
+                new Vector2(780, 150), new Vector2(0, 505), Color.white);
+            Label("Results title", results, "LEVEL COMPLETE", new Vector2(720, 100),
+                new Vector2(0, 505), 56, TextAnchor.MiddleCenter, Color.white);
 
-                feedingValue = Label("Feeding Amount value", results, "0 / 10",
-                    new Vector2(470, 96), new Vector2(valueX, 372), 64,
-                    TextAnchor.MiddleRight, new Color(.20f, .20f, .20f, 1f));
-                passValue = Label("Pass result", results, "PASSED",
-                    new Vector2(470, 96), new Vector2(valueX, 228), 64,
-                    TextAnchor.MiddleRight, new Color(.04f, .45f, .25f, 1f));
-                penaltyValue = Label("Patience Penalty value", results, "0",
-                    new Vector2(470, 96), new Vector2(valueX, 92), 64,
-                    TextAnchor.MiddleRight, new Color(.20f, .20f, .20f, 1f));
-                finalValue = Label("Total Score value", results, "0 / 10",
-                    new Vector2(470, 116), new Vector2(valueX, -108), 72,
-                    TextAnchor.MiddleRight, new Color(.18f, .18f, .18f, 1f));
-            }
+            feedingValue = StatRow("Feeding Amount", 345);
+            passValue = StatRow("Resolved Status", 225);
+            penaltyValue = StatRow("Facilities Added", 105);
+
+            CareUi.Image("Results divider", results, null,
+                new Vector2(780, 6), new Vector2(0, -25)).color =
+                new Color(.72f, .74f, .75f, 1f);
+            Label("Total Score title", results, "Total Score:", new Vector2(500, 110),
+                new Vector2(-160, -130), 80, TextAnchor.MiddleLeft,
+                new Color(.12f, .12f, .14f, 1f));
+            finalValue = Label("Total Score value", results, "0", new Vector2(260, 110),
+                new Vector2(255, -130), 80, TextAnchor.MiddleRight,
+                new Color(.12f, .12f, .14f, 1f));
 
             resultStarSprite = CareUiSkin.SvgStar ? CareUiSkin.SvgStar :
                 art.star ? art.star : CareUiSkin.Star;
-            resultStarOutline = CareUiSkin.StarOutline;
-            grade = CareUi.Image("Grade badge", results, resultStarSprite,
-                new Vector2(146, 138), new Vector2(420, -76));
-            grade.preserveAspect = true;
-            grade.gameObject.SetActive(!svgResults);
-            if (!svgResults)
-                Label("Star heading", results, "STAR RATING", new Vector2(460, 56),
-                    new Vector2(0, -171), 32, TextAnchor.MiddleCenter,
-                    new Color(.12f, .29f, .40f, 1f));
             for (int i = 0; i < 3; i++)
             {
                 stars[i] = CareUi.Image("Result star " + (i + 1), results,
                     resultStarSprite,
-                    new Vector2(178, 174), new Vector2((i - 1) * 220, -318));
+                    new Vector2(200, 196), new Vector2((i - 1) * 235, -310));
                 stars[i].preserveAspect = true;
             }
-            starHint = Label("Star thresholds", results,
-                "NEXT STAR: 1 POINT",
-                svgResults ? new Vector2(600, 50) : new Vector2(900, 50),
-                svgResults ? new Vector2(100, -605) : new Vector2(0, -395),
-                52, svgResults ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter,
+            starHint = Label("Star thresholds", results, "Next Star: 1",
+                new Vector2(560, 60), new Vector2(-140, -450), 48, TextAnchor.MiddleLeft,
                 new Color(.24f, .25f, .25f, 1f));
 
             var continueArt = CareUiSkin.SvgContinue;
@@ -269,29 +274,25 @@ namespace ADayAtTheZoo.Monkeys.Care
             {
                 ResultButton("Continue exploring", "CONTINUE", results,
                     continueArt ? continueArt : CareUiSkin.BlueButton,
-                    bakedContinue ? new Vector2(470, 147) : new Vector2(400, 126),
-                    bakedContinue ? new Vector2(-185, -722) : new Vector2(-220, -545),
+                    bakedContinue ? new Vector2(430, 134) : new Vector2(400, 126),
+                    bakedContinue ? new Vector2(-155, -575) : new Vector2(-180, -575),
                     false, Color.white, !bakedContinue),
                 ResultButton("Restart round", "RESTART", results,
                     restartArt ? restartArt : CareUiSkin.GreenButton,
-                    bakedRestart ? new Vector2(142, 143) : new Vector2(400, 126),
-                    bakedRestart ? new Vector2(270, -720) : new Vector2(220, -545),
+                    bakedRestart ? new Vector2(140, 140) : new Vector2(320, 110),
+                    bakedRestart ? new Vector2(215, -575) : new Vector2(230, -575),
                     true, Color.white, !bakedRestart)
             };
         }
 
-        void Row(string name, string title, float y, out Text value)
+        Text StatRow(string title, float y)
         {
-            Label(name + " title", results, title, new Vector2(520, 90),
-                new Vector2(-350, y), 44, TextAnchor.MiddleLeft,
-                new Color(.11f, .25f, .34f, 1f));
-            var divider = CareUi.Image(name + " divider", results, CareUiSkin.Divider,
-                new Vector2(1050, 12), new Vector2(0, y - 63));
-            divider.type = Image.Type.Sliced;
-            divider.color = new Color(.56f, .64f, .70f, .62f);
-            value = Label(name + " value", results, "0", new Vector2(470, 90),
-                new Vector2(335, y), 47, TextAnchor.MiddleRight,
-                new Color(.02f, .35f, .48f, 1f));
+            Label(title + " title", results, title, new Vector2(480, 88),
+                new Vector2(-190, y), 64, TextAnchor.MiddleLeft,
+                new Color(.16f, .16f, .18f, 1f));
+            return Label(title + " value", results, "0", new Vector2(340, 88),
+                new Vector2(215, y), 64, TextAnchor.MiddleRight,
+                new Color(.16f, .16f, .18f, 1f));
         }
 
         static CareResultButton ResultButton(string name, string caption, Transform parent,
@@ -328,11 +329,12 @@ namespace ADayAtTheZoo.Monkeys.Care
                 }
             }
 
-            float ratio = Mathf.Clamp01((float)round.FeedingTotal / CareRound.PlannedFeedings);
+            float ratio = round.TaskTotal > 0
+                ? Mathf.Clamp01((float)round.FeedingTotal / round.TaskTotal) : 0f;
             progressFill.fillAmount = ratio;
-            progress.text = round.FeedingTotal + " / " + CareRound.PlannedFeedings;
-            score.text = "TOTAL SCORE: " + Mathf.RoundToInt((float)round.Score);
+            score.text = Mathf.RoundToInt(ratio * 100f) + "%";
             bananas.text = "×" + round.Bananas;
+            staminaFill.fillAmount = Mathf.Clamp01(StaminaFill);
 
             int remaining = Mathf.CeilToInt(Mathf.Max(0, CareRound.Cutoff - elapsed));
             clock.text = round.Frozen
@@ -340,33 +342,19 @@ namespace ADayAtTheZoo.Monkeys.Care
                 : (remaining / 60).ToString("00") + ":" + (remaining % 60).ToString("00");
             if (!round.Frozen) return;
 
-            feedingValue.text = round.FeedingTotal + " / " + CareRound.PlannedFeedings;
-            penaltyValue.text = round.PatiencePenalties > 0
-                ? "-" + round.PatiencePenalties
-                : "0";
-            finalValue.text = Mathf.RoundToInt((float)round.Score) + " / " + CareRound.MaxScore;
-            passValue.text = round.IsPassing ? "PASSED" : "FAILED";
-            passValue.color = round.IsPassing
-                ? new Color(.04f, .45f, .25f, 1f)
-                : new Color(.66f, .14f, .10f, 1f);
+            feedingValue.text = round.FeedingTotal + " / " + round.TaskTotal;
+            int resolved = Mathf.RoundToInt(100f * (float)round.FeedingTotal / round.TaskTotal);
+            passValue.text = resolved.ToString("0") + "%";
+            penaltyValue.text = "0";
+            finalValue.text = Mathf.RoundToInt((float)round.Score).ToString("N0");
             for (int i = 0; i < stars.Length; i++)
             {
                 bool earned = i < round.Stars;
-                stars[i].sprite = CareUiSkin.SvgStar ? resultStarSprite :
-                    earned ? resultStarSprite : resultStarOutline;
-                stars[i].color = earned ? Color.white : new Color(.84f, .87f, .87f, .58f);
+                stars[i].color = earned ? Color.white : new Color(.84f, .87f, .87f, .55f);
             }
-            var level1 = CareUiSkin.SvgLevel1 ? CareUiSkin.SvgLevel1 : art.level1;
-            var level2 = CareUiSkin.SvgLevel2 ? CareUiSkin.SvgLevel2 : art.level2;
-            var level3 = CareUiSkin.SvgLevel3 ? CareUiSkin.SvgLevel3 : art.level3;
-            var gradeArt = round.Stars == 3 ? level3 : round.Stars == 2 ? level2 :
-                round.Stars == 1 ? level1 : null;
-            grade.sprite = gradeArt ? gradeArt : CareUiSkin.Star;
-            grade.color = round.Stars > 0 ? Color.white : new Color(.62f, .66f, .66f, .58f);
             starHint.text = round.Stars == 3
-                ? "PERFECT! THREE STARS"
-                : "NEXT STAR: " + round.NextStarPoints.ToString("0") +
-                  (Math.Abs(round.NextStarPoints - 1) < .001 ? " POINT" : " POINTS");
+                ? "PERFECT! ALL STARS EARNED"
+                : "Next Star: " + round.NextStarPoints.ToString("0");
             foreach (var button in buttons)
             {
                 button.available = true;
@@ -379,12 +367,14 @@ namespace ADayAtTheZoo.Monkeys.Care
             results.gameObject.SetActive(true);
             scoreHud.gameObject.SetActive(false);
             bananaHud.gameObject.SetActive(false);
+            staminaHud.gameObject.SetActive(false);
         }
 
         public void ShowHud()
         {
             scoreHud.gameObject.SetActive(true);
             bananaHud.gameObject.SetActive(true);
+            staminaHud.gameObject.SetActive(true);
         }
 
         public void Continue()
@@ -398,6 +388,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             results.gameObject.SetActive(false);
             scoreHud.gameObject.SetActive(false);
             bananaHud.gameObject.SetActive(false);
+            staminaHud.gameObject.SetActive(false);
         }
     }
 }

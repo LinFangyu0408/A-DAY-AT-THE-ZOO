@@ -144,6 +144,9 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
 
         yield return null;
         Capture("final-ready");
+        var readyPrompt = GameObject.Find("Ready prompt")?.GetComponent<Text>();
+        Check(readyPrompt && readyPrompt.text == "PRESS A TO START",
+            "ready gate shows the PRESS A TO START hint below Ready Go");
         yield return Press("recordingA");
         yield return WaitUntil(() => session.RoundStarted, 3);
         Check(session.RoundStarted, "A starts the round");
@@ -151,19 +154,26 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         Check(GameObject.Find("SVG score panel") && GameObject.Find("Static score bar cover") &&
               progressTrack && progressTrack.enabled && progressTrack.color.a >= .18f,
             "top progress uses the supplied artwork with a visible empty track");
+        Check(GameObject.Find("Progress pass marker") && GameObject.Find("Progress pass caption"),
+            "sixty-percent passing line is marked on the score bar");
         var bananaHud = GameObject.Find("Care BANANA HUD")?.GetComponent<RectTransform>();
         Check(bananaHud && bananaHud.localPosition.x >= .75f && bananaHud.localPosition.y >= .35f,
             "banana counter is fixed in the upper-right");
         var scoreHud = GameObject.Find("Care SCORE HUD")?.GetComponent<RectTransform>();
         Check(scoreHud && scoreHud.localPosition.y >= .33f && scoreHud.localPosition.y <= .48f,
             "top progress bar stays below the screen edge");
-        var progressText = GameObject.Find("Progress value")?.GetComponent<Text>();
         var scoreText = GameObject.Find("Current score")?.GetComponent<Text>();
-        Check(progressText && progressText.fontSize >= 48 &&
+        Check(!GameObject.Find("Progress value") &&
               scoreText && scoreText.fontSize >= 30,
-            "top progress text uses larger gameplay sizes");
-        Check(progressText && progressText.font && progressText.font.name.Contains("Fredoka"),
-            "gameplay UI uses the bundled Fredoka font");
+            "top progress shows only the percentage (no raw 0/9 counter)");
+        // Readability fix: the variable Fredoka face renders hairline-thin on
+        // Unity's legacy Text, so gameplay copy now uses a real bold face.
+        // Accept either a bold readable face or the themed Fredoka fallback.
+        Check(scoreText && scoreText.font &&
+              (scoreText.font.name.Contains("Arial") ||
+               scoreText.font.name.Contains("Bold") ||
+               scoreText.font.name.Contains("Fredoka")),
+            "gameplay UI uses a bold readable font");
         var bagButton = session.GloveInventory.BagButtonRoot;
         Check(bagButton && bagButton.gameObject.activeInHierarchy,
             "persistent backpack button is visible in the lower-left");
@@ -363,6 +373,10 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             }
         }
         round.Freeze();
+        // Mirror the session freeze path so NPC world-space HUDs (satisfaction
+        // bars, emotions) are hidden exactly like the real round end does.
+        if (session.monkeys != null)
+            foreach (var npc in session.monkeys) npc.StopAtCutoff();
         var viewField = typeof(MonkeyCareSession).GetField("roundView",
             BindingFlags.Instance | BindingFlags.NonPublic);
         var roundView = viewField?.GetValue(session) as CareRoundView;
@@ -370,10 +384,16 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         roundView.ShowResults();
         roundView.Update(round, 240);
         yield return null;
-        Check(GameObject.Find("SVG results panel") &&
+        Check(GameObject.Find("Results card") &&
               GameObject.Find("Continue exploring") &&
               GameObject.Find("Restart round"),
-            "results use the supplied SVG panel and button artwork");
+            "results use the reference card layout with both round buttons");
+        var cardShadow = GameObject.Find("Results shadow")?.GetComponent<Image>();
+        var cardImage = GameObject.Find("Results card")?.GetComponent<Image>();
+        Check(cardShadow && cardShadow.sprite && cardShadow.sprite.name.Contains("RoundedCard") &&
+              cardImage && cardImage.sprite && cardImage.sprite.name.Contains("RoundedCard") &&
+              cardImage.sprite.border == new Vector4(96, 96, 96, 96),
+            "results card and shadow share the large rounded-corner silhouette");
         var resultsTitle = GameObject.Find("Feeding Amount title")?.GetComponent<Text>();
         var totalTitle = GameObject.Find("Total Score title")?.GetComponent<Text>();
         Check(resultsTitle && resultsTitle.fontSize >= 64 &&

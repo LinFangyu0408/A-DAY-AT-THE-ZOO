@@ -3,6 +3,8 @@
     "com.meta.xr.sdk.core": "file:UnityPackages/com.meta.xr.sdk.core-207.0.1.tgz",
     "com.meta.xr.sdk.interaction": "file:UnityPackages/com.meta.xr.sdk.interaction-207.0.1.tgz",
     "com.meta.xr.sdk.interaction.ovr": "file:UnityPackages/com.meta.xr.sdk.interaction.ovr-207.0.1.tgz",
+    "com.unity.ai.assistant": "2.22.0-pre.1",
+    "com.unity.ai.inference": "2.6.1",
     "com.unity.collab-proxy": "2.14.0",
     "com.unity.feature.development": "1.0.2",
     "com.unity.inputsystem": "1.20.1",

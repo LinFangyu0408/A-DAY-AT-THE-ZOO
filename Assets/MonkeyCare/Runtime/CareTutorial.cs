@@ -20,8 +20,11 @@ namespace ADayAtTheZoo.Monkeys.Care
             session = owner;
             shownAt = visibleAt;
             stepAt = Time.unscaledTime;
+            // The tutorial must never block the player's view. Park it in the
+            // upper-left corner as a compact hint panel, well clear of the
+            // centred SCORE/STAMINA HUD column.
             root = CareUi.Canvas("Care Tutorial", camera.transform,
-                new Vector3(-.48f, .32f, 1.50f), .94f, new Vector2(820, 470));
+                new Vector3(-.82f, .24f, 1.34f), .56f, new Vector2(820, 470));
             group = root.gameObject.AddComponent<CanvasGroup>();
             group.alpha = 0;
             group.interactable = false;
@@ -48,19 +51,14 @@ namespace ADayAtTheZoo.Monkeys.Care
             stepLabel = Label("Tutorial step", root, "STEP 1 / 9", new Vector2(170, 38),
                 new Vector2(-205, 142), 28, TextAnchor.MiddleCenter, new Color(.95f, .98f, 1f, 1));
             stepLabel.gameObject.SetActive(false);
-            title = Label("Tutorial title", root, string.Empty, new Vector2(610, 70),
-                new Vector2(95, 76), 64, TextAnchor.MiddleLeft, Color.white);
-            AddOutline(title, new Color(.08f, .20f, .36f, .95f), new Vector2(2, -2));
-            body = Label("Tutorial body", root, string.Empty, new Vector2(724, 154),
-                new Vector2(0, -8), 56, TextAnchor.MiddleLeft, new Color(.035f, .10f, .19f, 1));
-            body.horizontalOverflow = HorizontalWrapMode.Wrap;
-            body.verticalOverflow = VerticalWrapMode.Overflow;
+            title = Label("Tutorial title", root, string.Empty, new Vector2(600, 68),
+                new Vector2(95, 118), 58, TextAnchor.MiddleLeft, Color.white);
+            body = Label("Tutorial body", root, string.Empty, new Vector2(730, 168),
+                new Vector2(0, -14), 54, TextAnchor.MiddleCenter, new Color(.035f, .10f, .19f, 1));
             CareUiSkin.AddSliced(root, "Tutorial action panel", CareUiSkin.Button,
-                new Vector2(736, 84), new Vector2(0, -158), new Color(.78f, .94f, 1f, 1f));
-            action = Label("Tutorial action", root, string.Empty, new Vector2(686, 62),
-                new Vector2(0, -158), 50, TextAnchor.MiddleCenter, Color.white);
-            AddOutline(action, new Color(.06f, .16f, .29f, .95f), new Vector2(2, -2));
-            action.horizontalOverflow = HorizontalWrapMode.Wrap;
+                new Vector2(736, 92), new Vector2(0, -166), new Color(.78f, .94f, 1f, 1f));
+            action = Label("Tutorial action", root, string.Empty, new Vector2(700, 72),
+                new Vector2(0, -166), 44, TextAnchor.MiddleCenter, Color.white);
 
             root.gameObject.SetActive(false);
             ShowStep(0);
@@ -222,10 +220,8 @@ namespace ADayAtTheZoo.Monkeys.Care
             text.alignment = alignment;
             text.color = color;
             text.raycastTarget = false;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
             text.text = value;
-            return text;
+            return CareRoundView.Legible(text, fontSize);
         }
 
         static void AddOutline(Graphic graphic, Color color, Vector2 distance)
