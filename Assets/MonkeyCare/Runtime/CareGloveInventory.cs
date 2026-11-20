@@ -10,8 +10,14 @@ namespace ADayAtTheZoo.Monkeys.Care
         readonly RectTransform bagButton;
         readonly Image selector, bananaIcon;
         readonly Text count, status, confirmButtonLabel, backButtonLabel, actionLabel, bagButtonLabel;
+        // Once the player has picked a banana the first time, the glove keeps
+        // feeding itself: every throw is followed by a fresh banana and a
+        // restock at the stand re-arms the hand. The bag is never needed again,
+        // so it also stops opening (and its button stops appearing).
+        bool autoEquip;
         public bool IsOpen { get; private set; }
-        public bool BananaSelected { get; private set; }
+        public bool BananaSelected => autoEquip;
+        public bool AutoEquip => autoEquip;
         public RectTransform BagButtonRoot => bagButton;
 
         public CareGloveInventory(MonkeyCareSession owner, Camera camera)
@@ -84,11 +90,13 @@ namespace ADayAtTheZoo.Monkeys.Care
 
         public void Tick(CareInputSnapshot input, CareRound round, bool mayOpen)
         {
-            bool showBagButton = mayOpen && !IsOpen;
+            // The bag entry disappears for good after the first selection.
+            bool showBagButton = mayOpen && !IsOpen && !autoEquip;
             if (bagButton.gameObject.activeSelf != showBagButton)
                 bagButton.gameObject.SetActive(showBagButton);
             bagButtonLabel.text = CareInput.BackLabel;
-            if (input.BWasPressed && (IsOpen || mayOpen)) Toggle(round, mayOpen);
+            bool canOpen = mayOpen && !autoEquip;
+            if (input.BWasPressed && (IsOpen || canOpen)) Toggle(round, canOpen);
             if (!IsOpen) return;
             Refresh(round);
             selector.gameObject.SetActive(BananaSelected);
@@ -104,11 +112,11 @@ namespace ADayAtTheZoo.Monkeys.Care
             }
             if (round == null || round.Bananas <= 0) return;
 
-            BananaSelected = true;
+            autoEquip = true;
             if (session.EquipBananaFromGlove()) Close();
             else
             {
-                BananaSelected = false;
+                autoEquip = false;
                 Refresh(round);
                 status.text = "Banana is returning to the glove. Try again.";
             }
@@ -132,7 +140,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         public void ShowHud()
         {
             bagButtonLabel.text = CareInput.BackLabel;
-            bagButton.gameObject.SetActive(true);
+            bagButton.gameObject.SetActive(!autoEquip);
         }
 
         public void HideHud()
@@ -150,15 +158,16 @@ namespace ADayAtTheZoo.Monkeys.Care
 
         public void CancelSelection()
         {
-            BananaSelected = false;
+            autoEquip = false;
             session.CancelSelectedBanana();
         }
 
-        public void ClearSelection() => BananaSelected = false;
+        public void ClearSelection() => autoEquip = false;
 
         public void Reset(CareRound round)
         {
-            ClearSelection();
+            // The auto-equip unlock survives a restart: the bag is a one-time
+            // lesson, not a per-round chore.
             Close();
             Refresh(round);
         }
@@ -166,7 +175,6 @@ namespace ADayAtTheZoo.Monkeys.Care
         void Refresh(CareRound round)
         {
             int bananas = round != null ? round.Bananas : 0;
-            if (bananas <= 0 && BananaSelected) ClearSelection();
             count.text = bananas.ToString();
             confirmButtonLabel.text = CareInput.ConfirmLabel;
             backButtonLabel.text = CareInput.BackLabel;

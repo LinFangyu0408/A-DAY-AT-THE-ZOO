@@ -152,3 +152,15 @@
 - 小摊方向提示（方案 A）：`CareDirectionHint`，玩家累计转头 ≥35° 且小摊不在正前 55° 锥内时，屏幕下方出现可旋转箭头 + "BANANA STAND 10m"，开局面朝反方向时先给 6 秒引导；香蕉 ≤2 根时常驻。
 - 第二轮 HUD 恢复：`RestartRound` 重新激活所有 "Care ..." 相机子物体（之前结算时被关掉就再也不回来）。
 - 冒烟测试 66 项全过。
+
+## 2026-11-20 第十轮（提示/星星/背包/围栏/回合重排）
+- 小摊方位提示改版：删掉深蓝底板与阴影，只剩一个**红色三角**（运行时生成的白色三角形贴图再染色——导入的 arrow 素材本身是深灰剪影，直接染红会变成黑色）+ 一行描边文字；触发条件从"累计转头 ≥35° / 开局 6 秒"改为**只在香蕉 ≤3 根**时出现，且小摊已在正前 55° 锥内时不显示。`CareDirectionHint.LowStockBananas = 3`。
+- 香蕉数量 ≤3 变红：`CareRoundView.Update` 把 `Banana count` 文本改成红色 (0.88,0.13,0.13)，与方位提示同一阈值。
+- 星星成为进度游标：`MoveStar(ratio)` 让 `Score star badge` 沿轨道滑动（左右各留 60px 边距），0% 贴左端、100% 贴右端；到 6 根（`PassingRatio = 6/9 ≈ 66.7%`）时正好压在黄色通过线上——同时满足"随进度移动"和"盖住黄线"两个诉求。
+- 背包只开一次：`CareGloveInventory` 用 `autoEquip` 取代可清空的 `BananaSelected`；第一次 A 选中后永久保持，扔完自动补一根、到小摊补货也自动上膛，香蕉归零不再 `ClearSelection()`；`autoEquip` 后 B 不再打开背包、B 按钮也隐藏，跨回合（`Reset`）保留。
+- 场地围栏：新增 `CarePlayAreaBarrier`，以玩家起点为圆心、按"最远猴子 +2.4m / 小摊 +3.2m"算半径（8.5~16m 夹取）生成 18~32 段无渲染 BoxCollider 圆环；VR 摇杆位移会直接平移 tracking space、绕过 Collider，所以额外每帧把玩家根节点（rig / CharacterController）夹回半径内 `ClampInset = .55m`。
+- 回合重排：`PlannedFeedings` 9 → **12**（每猴 4 只，`DealFeedingTasks` 不再随机分配，避免四舍五入漏牌）；`Cutoff` 150 → **120s**，`Duration` 130；饥饿轮转在 12 只耗尽前一直派单，最后 20 秒的补派兜底保留 → 结尾不再出现"30 秒没人饿"。
+- 星级：`MaxStars = 3`，`Stars = Math.Min(MaxStars, …)`；`ScoreGoal = ThreeStarFeedings = 9` 作为进度条分母 → 满格与 3 星同时发生，喂第 10~12 根只增加分数不增加星。
+- 结算"Feeding Amount"改为按 3 星目标显示（9 / 9），不再显示 9 / 12。
+- 自检新增 `work/monkey-care/self-tests.request` 入口（`CareSelfTests` 加 `[InitializeOnLoad]` + Tick），纯逻辑 271 项；顺带修掉自检里写死的 `timestamp 200`（Cutoff 缩短后已超时）。
+- 冒烟测试 86 项全过（含"星星随进度移动且 6 根时压线"、"香蕉 ≤3 变红"、"提示无底板且箭头为红"、"围栏 27 段且能把越界玩家推回"、"任务 12 个 + 120s"、"12 根仍是 3 星"）。

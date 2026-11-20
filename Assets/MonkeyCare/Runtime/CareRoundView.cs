@@ -27,6 +27,8 @@ namespace ADayAtTheZoo.Monkeys.Care
         Text sprint;
         Text feedingValue, penaltyValue, finalValue, passValue, starHint;
         CareResultButton[] buttons;
+        RectTransform starBadge;
+        float trackLeft, trackRight, trackCenterY;
 
         public static Text Label(string name, Transform parent, string value, Vector2 size,
             Vector2 pos, int fontSize, TextAnchor align = TextAnchor.MiddleCenter,
@@ -149,14 +151,20 @@ namespace ADayAtTheZoo.Monkeys.Care
             passMarker.anchoredPosition = new Vector2(
                 -trackSize.x * .5f + trackSize.x * CareRound.PassingRatio, 0f);
             passMarker.SetAsLastSibling();
-            // The star now sits exactly on the 60% marker and covers the yellow
-            // line underneath, so the plate reads "this line = the star you are
-            // after". The separate PASS 60% caption became redundant clutter.
+            // The star is the live progress marker: it slides along the track
+            // with the fill, so it passes over (and momentarily covers) the
+            // passing line at exactly six bananas. It starts pinned to the left
+            // end of the track instead of floating in the middle.
             float passX = trackPosition.x - trackSize.x * .5f + trackSize.x * CareRound.PassingRatio;
             var scoreBadge = CareUiSkin.Add(scoreHud, "Score star badge", CareUiSkin.SvgStar,
                 new Vector2(126, 123), new Vector2(passX, trackPosition.y), Color.white);
             scoreBadge.preserveAspect = true;
             scoreBadge.transform.SetAsLastSibling();
+            starBadge = scoreBadge.rectTransform;
+            trackLeft = trackPosition.x - trackSize.x * .5f;
+            trackRight = trackPosition.x + trackSize.x * .5f;
+            trackCenterY = trackPosition.y;
+            MoveStar(0f);
 
             score = Label("Current score", scoreHud, "0%", new Vector2(300, 60),
                 new Vector2(330, 60), 52, TextAnchor.MiddleRight,
@@ -307,11 +315,17 @@ namespace ADayAtTheZoo.Monkeys.Care
                 }
             }
 
-            float ratio = round.TaskTotal > 0
-                ? Mathf.Clamp01((float)round.FeedingTotal / round.TaskTotal) : 0f;
+            // Read the fill from the star goal instead of the task count so the
+            // bar and the three-star rating always agree.
+            float ratio = Mathf.Clamp01((float)round.FeedingRatio);
             progressFill.fillAmount = ratio;
             score.text = Mathf.RoundToInt(ratio * 100f) + "%";
+            MoveStar(ratio);
             bananas.text = "×" + round.Bananas;
+            // Low stock turns the counter red so running dry is impossible to miss.
+            bananas.color = round.Bananas <= CareDirectionHint.LowStockBananas
+                ? new Color(.88f, .13f, .13f, 1f)
+                : new Color(.14f, .14f, .18f, 1f);
 
             int remaining = Mathf.CeilToInt(Mathf.Max(0, CareRound.Cutoff - elapsed));
             bool sprinting = !round.Frozen && remaining > 0 &&
@@ -327,7 +341,10 @@ namespace ADayAtTheZoo.Monkeys.Care
             }
             sprint.text = string.Empty;
 
-            feedingValue.text = Mathf.Min(round.FeedingTotal, round.TaskTotal) + " / " + round.TaskTotal;
+            // Report against the three-star goal so "9 / 9" always reads as a
+            // completed round; banana twelve is bonus, not a missing task.
+            feedingValue.text = Mathf.Min(round.FeedingTotal, CareRound.ScoreGoal) + " / " +
+                                CareRound.ScoreGoal;
             int resolved = Mathf.RoundToInt(100f * (float)round.FeedingRatio);
             passValue.text = resolved.ToString("0") + "%";
             penaltyValue.text = "0";
@@ -337,7 +354,7 @@ namespace ADayAtTheZoo.Monkeys.Care
                 bool earned = i < round.Stars;
                 stars[i].color = earned ? Color.white : new Color(.84f, .87f, .87f, .55f);
             }
-            starHint.text = round.Stars == 3
+            starHint.text = round.Stars >= CareRound.MaxStars
                 ? "PERFECT! ALL STARS EARNED"
                 : "Next Star: " + round.NextStarFeedings + " MORE";
             foreach (var button in buttons)
@@ -347,13 +364,24 @@ namespace ADayAtTheZoo.Monkeys.Care
             }
         }
 
+        // Slide the star badge along the track with the fill. Small margin at
+        // both ends keeps the whole glyph inside the printed plate.
+        void MoveStar(float ratio)
+        {
+            if (!starBadge) return;
+            const float margin = 60f;
+            float x = Mathf.Lerp(trackLeft, trackRight, Mathf.Clamp01(ratio));
+            x = Mathf.Clamp(x, trackLeft + margin, trackRight - margin);
+            starBadge.anchoredPosition = new Vector2(x, trackCenterY);
+        }
+
         // Last-twenty-seconds copy: state the exact remaining goal so the player
         // always knows what is still worth doing.
         static string SprintCopy(CareRound round, int remaining)
         {
-            if (round.Stars >= 3) return "FINAL " + remaining + "s · ALL STARS LOCKED IN";
+            if (round.Stars >= CareRound.MaxStars) return "FINAL " + remaining + "s · ALL STARS LOCKED IN";
             int need = Mathf.Max(1, round.NextStarFeedings);
-            int target = Mathf.Min(3, round.Stars + 1);
+            int target = Mathf.Min(CareRound.MaxStars, round.Stars + 1);
             return "FINAL " + remaining + "s · " + need + " MORE FOR " + target +
                    (target == 1 ? " STAR" : " STARS");
         }

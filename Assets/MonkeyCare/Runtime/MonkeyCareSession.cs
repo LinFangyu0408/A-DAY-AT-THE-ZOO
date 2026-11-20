@@ -53,6 +53,12 @@ namespace ADayAtTheZoo.Monkeys.Care
 #endif
             Time.timeScale > 0;
         public static Camera PlayerCamera => Instance ? Instance.playerCamera : null;
+        // Root that actually carries the player: the VR rig in headset play, the
+        // character controller on desktop. Used by the invisible play-area fence.
+        public Transform PlayerRoot =>
+            rig && rig.gameObject.activeInHierarchy ? rig.transform :
+            desktopController ? desktopController.transform :
+            playerCamera ? playerCamera.transform : null;
         // Below this many seconds left the HUD switches to "final sprint" mode.
         public const float FinalSprintSeconds = 20;
         public static float GameTime => Instance ? Instance.gameTime : Time.time;
@@ -114,6 +120,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         CareRoundView roundView;
         CareDirectionHint standHint;
         CareFarmEnvironment farmEnvironment;
+        CarePlayAreaBarrier playArea;
         CarePickupMarker bananaPickup;
         readonly List<CareTaskRecord> records = new();
         Vector3 rigStartPosition;
@@ -155,6 +162,12 @@ namespace ADayAtTheZoo.Monkeys.Care
             farmEnvironment = CareFarmEnvironment.Create(playerCamera);
             bananaPickup = farmEnvironment ? farmEnvironment.PickupPoint : null;
             if (!bananaPickup) bananaPickup = FindFirstObjectByType<CarePickupMarker>(FindObjectsInactive.Include);
+            // Fence the yard off behind the monkeys and behind the stall so the
+            // player cannot wander past the animals and lose the scene.
+            playArea = CarePlayAreaBarrier.Create(this, playerCamera,
+                farmEnvironment && farmEnvironment.Stand
+                    ? farmEnvironment.Stand
+                    : bananaPickup ? bananaPickup.transform : null);
             Hands.Begin(this);
             roundView = new CareRoundView(playerCamera, roundArtwork);
             GloveInventory = new CareGloveInventory(this, playerCamera);
@@ -403,15 +416,16 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
         public bool ConsumeThrownBanana()
         {
-            bool consumed = Round != null && Round.ConsumeBanana();
-            if (consumed && Round.Bananas <= 0) GloveInventory?.ClearSelection();
-            return consumed;
+            // The glove selection is deliberately sticky: running out of bananas
+            // must not send the player back into the bag.
+            return Round != null && Round.ConsumeBanana();
         }
         public bool TryPickupBananas()
         {
             if (!Playing || Round == null || Round.Frozen ||
                 !bananaPickup || !bananaPickup.PlayerInRange || !Round.RefillBananas()) return false;
-            GloveInventory?.ClearSelection();
+            // Refilling re-arms the hand on its own (one frame later, so the
+            // pickup press does not also throw the new banana).
             nextBananaEquipAt = Time.time + .15f;
             return true;
         }

@@ -3,23 +3,18 @@ using UnityEngine.UI;
 
 namespace ADayAtTheZoo.Monkeys.Care
 {
-    // Proactive "where is the banana stand" hint.
+    // "Where is the banana stand" pointer.
     //
-    // The stall sits behind the player's opening view, so anyone who turns
-    // around has no idea where to walk. This plate appears at the bottom of the
-    // view as soon as the player swings the camera and the stall is outside the
-    // forward cone, points at it with a rotating arrow and shows the distance.
-    // It also comes back on its own when the bag runs low.
+    // The stall sits behind the player's opening view. Instead of a plate with a
+    // dark blue backing (which read as a floating slab in VR), the hint is now a
+    // bare red arrow plus one line of outlined text. It only appears when the
+    // bag is nearly empty, because that is the only moment the stand matters.
     public sealed class CareDirectionHint : MonoBehaviour
     {
         // Half angle of the "looks like you can see it" cone.
         public const float ViewConeDegrees = 55f;
-        // Turning this many degrees (accumulated, with cooling) counts as
-        // "the player is looking around and may be lost".
-        public const float TurnTriggerDegrees = 35f;
-        public const float HoldSeconds = 4.5f;
-        public const float IntroSeconds = 6f;
-        public const float LowStockBananas = 2;
+        // Show the pointer only at or below this many bananas.
+        public const float LowStockBananas = 3;
 
         MonkeyCareSession session;
         Camera view;
@@ -28,8 +23,8 @@ namespace ADayAtTheZoo.Monkeys.Care
         CanvasGroup group;
         Image arrow;
         Text label;
-        float lastYaw, turnHeat, showUntil, fade;
-        bool seeded;
+        float fade;
+        static Sprite arrowSprite;
 
         public bool Showing => root && root.gameObject.activeSelf;
 
@@ -49,24 +44,57 @@ namespace ADayAtTheZoo.Monkeys.Care
         void Build()
         {
             // Bottom centre: high enough to stay clear of the backpack button,
-            // low enough not to sit on top of the score plate.
+            // low enough not to sit on top of the score plate. No plate sprite
+            // and no shadow: only the arrow and the outlined label remain.
             root = CareUi.Canvas("Care DIRECTION HINT", transform,
-                new Vector3(0, -.235f, 1.15f), .34f, new Vector2(640, 150), 25);
+                new Vector3(0, -.245f, 1.12f), .52f, new Vector2(780, 160), 25);
             group = root.gameObject.AddComponent<CanvasGroup>();
             group.alpha = 0;
             group.interactable = false;
             group.blocksRaycasts = false;
-            CareUiSkin.AddSliced(root, "Hint plate shadow", CareUiSkin.Slot,
-                new Vector2(614, 132), new Vector2(4, -10), new Color(.02f, .07f, .14f, .35f));
-            CareUiSkin.AddSliced(root, "Hint plate", CareUiSkin.Slot,
-                new Vector2(600, 126), Vector2.zero, new Color(.07f, .22f, .38f, .95f));
-            arrow = CareUiSkin.Add(root, "Hint arrow", CareUiSkin.DownArrow,
-                new Vector2(92, 92), new Vector2(-238, 0), new Color(1f, .72f, .12f, 1f));
+            arrow = CareUiSkin.Add(root, "Hint arrow", ArrowSprite(),
+                new Vector2(118, 118), new Vector2(-296, 0), new Color(1f, .18f, .16f, 1f));
             arrow.preserveAspect = true;
             label = CareRoundView.Label("Hint text", root, "BANANA STAND 8m",
-                new Vector2(470, 88), new Vector2(44, 0), 36,
-                TextAnchor.MiddleLeft, Color.white);
+                new Vector2(580, 108), new Vector2(52, 0), 52,
+                TextAnchor.MiddleLeft, new Color(1f, .98f, .95f, 1f));
             root.gameObject.SetActive(false);
+        }
+
+        // A white triangle generated at runtime. The imported arrow artwork is a
+        // dark silhouette, so tinting it red only produced black; a generated
+        // white shape takes the colour cleanly at any size.
+        static Sprite ArrowSprite()
+        {
+            if (arrowSprite) return arrowSprite;
+            const int size = 128;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "Care Hint Arrow",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp
+            };
+            var pixels = new Color32[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                float ny = (y + .5f) / size;
+                // Apex at the bottom centre, base across the top.
+                float t = Mathf.InverseLerp(.12f, .90f, ny);
+                float halfWidth = Mathf.Lerp(0f, .46f, t);
+                for (int x = 0; x < size; x++)
+                {
+                    float nx = (x + .5f) / size;
+                    float distance = Mathf.Abs(nx - .5f) - halfWidth;
+                    float alpha = ny < .10f ? 0f : Mathf.Clamp01(.5f - distance * size / 1.6f);
+                    pixels[y * size + x] = new Color32(255, 255, 255, (byte)(alpha * 255f));
+                }
+            }
+            texture.SetPixels32(pixels);
+            texture.Apply();
+            arrowSprite = Sprite.Create(texture, new Rect(0, 0, size, size),
+                new Vector2(.5f, .5f), 100f);
+            arrowSprite.name = "Care Hint Arrow";
+            return arrowSprite;
         }
 
         void Update()
@@ -75,13 +103,10 @@ namespace ADayAtTheZoo.Monkeys.Care
             var round = session.Round;
             bool live = session.Begun && round != null && !round.Frozen && MonkeyCareSession.Playing;
             if (!live || !target) { SetVisible(false); return; }
-            // One short introduction as soon as play starts: the stall sits
-            // behind the player, so say where it is before they wander off.
-            if (!seeded)
-            {
-                seeded = true;
-                showUntil = Time.unscaledTime + IntroSeconds;
-            }
+
+            // Low stock is the only trigger: the pointer is a supply cue, not a
+            // permanent compass.
+            if (round.Bananas > LowStockBananas) { SetVisible(false); return; }
 
             Vector3 toStand = target.position - view.transform.position;
             Vector3 flatTo = Vector3.ProjectOnPlane(toStand, Vector3.up);
@@ -90,29 +115,18 @@ namespace ADayAtTheZoo.Monkeys.Care
             { SetVisible(false); return; }
             float yaw = Vector3.SignedAngle(flatForward, flatTo, Vector3.up);
             float distance = flatTo.magnitude;
-            bool inView = Mathf.Abs(yaw) <= ViewConeDegrees && distance <= 26f;
+            // Facing the stall already: the pointer would only repeat what the
+            // player can see.
+            bool inView = Mathf.Abs(yaw) <= ViewConeDegrees;
+            if (inView) { SetVisible(false); return; }
 
-            // Accumulate how much the player has been turning. A deliberate swing
-            // fires the hint; drifting the sticks slowly does not spam it.
-            float delta = Mathf.DeltaAngle(lastYaw, view.transform.eulerAngles.y);
-            lastYaw = view.transform.eulerAngles.y;
-            turnHeat = Mathf.Max(0f, turnHeat + Mathf.Abs(delta) - Time.deltaTime * 25f);
-            if (turnHeat >= TurnTriggerDegrees)
-            {
-                showUntil = Time.unscaledTime + HoldSeconds;
-                turnHeat = 0f;
-            }
-
-            bool lowStock = round.Bananas <= LowStockBananas;
-            bool show = !inView && (Time.unscaledTime < showUntil || lowStock);
-            SetVisible(show);
-            if (!show) return;
-
+            SetVisible(true);
             // The arrow art points down; rotating it by the signed yaw aims it at
             // the stall (straight up means it is behind the player).
             arrow.rectTransform.localRotation = Quaternion.Euler(0, 0, yaw);
-            // One short line only: the plate is narrow and two lines clipped.
             int metres = Mathf.Max(1, Mathf.RoundToInt(distance));
+            // One short line only: the pointer must be readable at a glance and
+            // must never wrap.
             label.text = Mathf.Abs(yaw) >= 125f
                 ? "TURN AROUND · " + metres + "m"
                 : "BANANA STAND · " + metres + "m";

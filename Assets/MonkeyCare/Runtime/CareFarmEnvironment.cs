@@ -30,6 +30,9 @@ namespace ADayAtTheZoo.Monkeys.Care
             }
         }
 
+        // The market stand that was placed / re-aligned for this session.
+        public Transform Stand => marketStand ? marketStand.transform : null;
+
         public static CareFarmEnvironment Create(Camera camera)
         {
             if (!camera) return null;

@@ -4,11 +4,36 @@ using UnityEditor;
 using UnityEngine;
 using ADayAtTheZoo.Monkeys.Care;
 
+[InitializeOnLoad]
 public static class CareSelfTests
 {
+    const string Work = "work/monkey-care/";
+    const string Request = Work + "self-tests.request";
     static int checks;
     static void Check(bool value, string message) { checks++; if (!value) throw new Exception("Care self-test failed: " + message); }
     static CareProgress New() => new CareProgress(30, 8, 10, 3, 4);
+
+    static CareSelfTests() => EditorApplication.update += Tick;
+
+    // One-shot request file so the automation session can run the pure logic
+    // assertions (no play mode, no scene changes) without opening a menu.
+    static void Tick()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode ||
+            EditorApplication.isCompiling || EditorApplication.isUpdating ||
+            !File.Exists(Request)) return;
+        File.Delete(Request);
+        try
+        {
+            Run();
+        }
+        catch (Exception exception)
+        {
+            Directory.CreateDirectory(Work);
+            File.WriteAllText(Work + "self-tests.txt", "FAIL " + exception);
+            Debug.LogException(exception);
+        }
+    }
 
     [MenuItem("Tools/猴子照顾/运行逻辑自检")]
     public static void Run()
@@ -32,7 +57,7 @@ public static class CareSelfTests
         Check(CareRound.NextTime(25, 1, false) == 43, "normal refresh eighteen seconds");
         Check(CareRound.NextTime(25, 1, true) == 47, "rescue refresh twenty-two seconds");
 
-        for (int count = 0; count <= CareRound.PlannedFeedings; count++)
+        for (int count = 0; count <= CareRound.StartingBananas; count++)
         {
             var round = new CareRound();
             int completed = 0;
@@ -40,7 +65,7 @@ public static class CareSelfTests
             {
                 for (int task = 0; task < round.TasksForMonkey(monkey) && completed < count; task++)
                 {
-                    Check(round.Complete(monkey, task, CareNeed.Hunger, 200), "accept unique feeding task");
+                    Check(round.Complete(monkey, task, CareNeed.Hunger, CareRound.Cutoff - 20), "accept unique feeding task");
                     Check(round.ConsumeBanana(), "successful feeding consumes one banana");
                     completed++;
                 }
@@ -50,26 +75,29 @@ public static class CareSelfTests
             Check(Math.Abs(round.Score - count) < .00001, "score equals fed bananas " + count);
             Check(round.Bananas == CareRound.StartingBananas - round.FeedingTotal,
                 "only completed feeding consumes a banana");
-            Check(!round.Complete(0, 0, CareNeed.Hunger, 231), "completion after cutoff rejected");
+            Check(!round.Complete(0, 0, CareNeed.Hunger, CareRound.Cutoff + 5), "completion after cutoff rejected");
             round.Freeze();
-            Check(!round.Complete(0, 0, CareNeed.Hunger, 200), "frozen round rejects changes");
+            Check(!round.Complete(0, 0, CareNeed.Hunger, CareRound.Cutoff - 20), "frozen round rejects changes");
         }
 
-        // Random hunger plan: three monkeys, nine episodes, everyone involved.
+        // Random hunger plan: three monkeys, twelve episodes, everyone involved.
         for (int seed = 0; seed < 12; seed++)
         {
             var random = new CareRound();
             int sum = random.TasksForMonkey(0) + random.TasksForMonkey(1) + random.TasksForMonkey(2);
             Check(sum == CareRound.PlannedFeedings,
-                "random hunger plan totals nine episodes (run " + seed + ")");
+                "hunger plan totals twelve episodes (run " + seed + ")");
             Check(random.TasksForMonkey(0) >= 2 && random.TasksForMonkey(1) >= 2 &&
                   random.TasksForMonkey(2) >= 2,
-                "every monkey keeps at least two hunger episodes (run " + seed + ")");
+                "every monkey keeps several hunger episodes (run " + seed + ")");
         }
 
         var exact = new CareRound();
         Check(exact.Complete(0, 0, CareNeed.Hunger, CareRound.Cutoff), "cutoff equality accepted before freeze");
-        Check(exact.TaskTotal == 9, "feeding-only rounds plan nine hunger episodes");
+        Check(exact.TaskTotal == CareRound.PlannedFeedings && exact.TaskTotal > 9,
+            "feeding-only rounds queue more than nine hunger episodes");
+        Check(CareRound.Cutoff <= 130 && CareRound.Cutoff >= 90,
+            "the countdown is shorter so the queue outlives the clock");
         Check(!exact.Complete(0, 1, CareNeed.Itch, 40), "feeding-only round rejects itching");
         var ignoredNeeds = new CareRound(new[] { CareNeed.Itch, CareNeed.Itch, CareNeed.Itch });
         Check(ignoredNeeds.Complete(1, 0, CareNeed.Hunger, 20), "feeding-only mode ignores old scene itch defaults");
@@ -96,6 +124,10 @@ public static class CareSelfTests
         Check(penalties.Score == CareRound.PlannedFeedings && penalties.IsPassing &&
               penalties.Stars == 3,
             "nine successful feeds reach one hundred percent and three stars");
+        Check(penalties.FeedingTotal > CareRound.ThreeStarFeedings &&
+              penalties.Stars == CareRound.MaxStars &&
+              penalties.NextStarFeedings == 0,
+            "bananas past the ninth still cap the rating at three stars");
         Check(penalties.ResolvedPercent > 99.999, "full run reports one hundred percent");
 
         var passing = new CareRound();

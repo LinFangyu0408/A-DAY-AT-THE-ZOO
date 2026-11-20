@@ -181,10 +181,9 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             "the sixty-percent passing line is still drawn on the bar");
         var starBadge = GameObject.Find("Score star badge")?.GetComponent<RectTransform>();
         var passMarkerRect = GameObject.Find("Progress pass marker")?.GetComponent<RectTransform>();
-        Check(starBadge && passMarkerRect &&
-              Mathf.Abs(starBadge.position.x - passMarkerRect.position.x) <= .004f &&
-              Mathf.Abs(starBadge.position.y - passMarkerRect.position.y) <= .004f,
-            "the star badge sits on the yellow passing line and covers it");
+        var starBefore = starBadge ? starBadge.anchoredPosition.x : float.NaN;
+        Check(starBadge && passMarkerRect,
+            "the star badge and the passing line both live on the progress bar");
         var bananaHud = GameObject.Find("Care BANANA HUD")?.GetComponent<RectTransform>();
         Check(bananaHud && bananaHud.localPosition.x >= .75f && bananaHud.localPosition.y >= .35f,
             "banana counter is fixed in the upper-right");
@@ -351,6 +350,13 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         bool refilled = session.TryPickupBananas();
         Check(refilled && pickupMarker != null && session.Round.Bananas == CareRound.StartingBananas,
             "A refills the banana inventory at the market stand");
+        yield return null;
+        yield return null;
+        Check(session.GloveInventory.AutoEquip &&
+              !session.GloveInventory.BagButtonRoot.gameObject.activeSelf,
+            "the bag never has to be opened again after the first banana");
+        Check(session.HeldItem && !session.GloveInventory.IsOpen,
+            "restocking at the stand puts a banana straight back in the hand");
         if (stand)
         {
             Aim(monkey);
@@ -462,7 +468,7 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
                        " feedings=" + string.Join(",", session.Round.Feedings));
             Check(session.Round.FeedingTotal == before + 1,
                 "a completed feeding raises the round score right away");
-            int expected = Mathf.RoundToInt(100f * session.Round.FeedingTotal / session.Round.TaskTotal);
+            int expected = Mathf.RoundToInt(100f * session.Round.FeedingTotal / CareRound.ScoreGoal);
             Check(scoreText && scoreText.text == expected + "%",
                 "the score percentage repaints without waiting for the next frame");
             var scoreFill = GameObject.Find("Progress fill")?.GetComponent<Image>();
@@ -477,6 +483,102 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             BindingFlags.Instance | BindingFlags.NonPublic);
         var roundView = viewField?.GetValue(session) as CareRoundView;
         Check(roundView != null, "round view is available");
+
+        // ---- the star rides the progress bar ----
+        Canvas.ForceUpdateCanvases();
+        roundView.Update(FedRound(0), 40f);
+        Canvas.ForceUpdateCanvases();
+        float starAtZero = starBadge.position.x;
+        roundView.Update(FedRound(6), 40f);
+        Canvas.ForceUpdateCanvases();
+        float starAtSix = starBadge.position.x;
+        float lineAtSix = passMarkerRect.position.x;
+        roundView.Update(FedRound(9), 40f);
+        Canvas.ForceUpdateCanvases();
+        float starAtNine = starBadge.position.x;
+        report.Add("STAR x0=" + starAtZero.ToString("F3") + " x6=" + starAtSix.ToString("F3") +
+                   " line=" + lineAtSix.ToString("F3") + " x9=" + starAtNine.ToString("F3") +
+                   " start=" + starBefore.ToString("F3"));
+        Check(starAtNine > starAtSix && starAtSix > starAtZero,
+            "the star icon slides along the track together with the progress");
+        Check(Mathf.Abs(starAtSix - lineAtSix) <= 1.5f,
+            "at six bananas the moving star sits exactly on the yellow passing line");
+
+        // ---- the banana counter turns red at three or fewer ----
+        var bananaText = GameObject.Find("Banana count")?.GetComponent<Text>();
+        var lowRound = FedRound(0);
+        for (int i = 0; i < CareRound.StartingBananas - 3; i++) lowRound.ConsumeBanana();
+        roundView.Update(lowRound, 40f);
+        Check(bananaText && bananaText.text == "×3" && bananaText.color.r > .7f &&
+              bananaText.color.g < .35f,
+            "the banana counter turns red at three bananas");
+        roundView.Update(FedRound(0), 40f);
+        Check(bananaText && bananaText.color.g > .1f && !(bananaText.color.r > .7f && bananaText.color.g < .35f),
+            "a full banana stock keeps the counter dark");
+        roundView.Update(session.Round, 40f);
+
+        // ---- the stand pointer is a bare red arrow, only while stock is low ----
+        var directionHint = FindFirstObjectByType<CareDirectionHint>(
+            FindObjectsInactive.Include);
+        Check(directionHint != null, "the banana stand pointer still exists");
+        var hintRoot = directionHint ? directionHint.transform.Find("Care DIRECTION HINT") : null;
+        Check(hintRoot, "the pointer canvas is built under the camera");
+        Check(!hintRoot.Find("Hint plate") && !hintRoot.Find("Hint plate shadow"),
+            "the pointer no longer uses the dark blue plate");
+        var hintArrow = hintRoot.Find("Hint arrow")?.GetComponent<Image>();
+        Check(hintArrow && hintArrow.color.r > .7f && hintArrow.color.g < .35f,
+            "the pointer arrow is red");
+        Check(Mathf.Approximately(CareDirectionHint.LowStockBananas, 3f),
+            "the pointer only appears when three or fewer bananas are left");
+
+        // Visual proof: low stock, back turned to the stall, bare red arrow.
+        var standObject = GameObject.Find("Banana Market Stand");
+        if (standObject && directionHint)
+        {
+            for (int i = 0; i < CareRound.StartingBananas - 2; i++) session.Round.ConsumeBanana();
+            var camTransform = gameCamera.transform;
+            Vector3 awayFromStand = camTransform.position - standObject.transform.position;
+            awayFromStand.y = 0f;
+            if (awayFromStand.sqrMagnitude < .01f) awayFromStand = Vector3.forward;
+            camTransform.rotation = Quaternion.LookRotation(awayFromStand.normalized, Vector3.up);
+            yield return new WaitForSecondsRealtime(.6f);
+            report.Add("HINT showing=" + directionHint.Showing + " bananas=" + session.Round.Bananas);
+            Check(directionHint.Showing, "the pointer appears as soon as stock is low");
+            Capture("final-stand-hint");
+        }
+
+        // ---- the yard is fenced off behind the monkeys and the stall ----
+        var barrierRoot = GameObject.Find("Care Play Area Barrier");
+        var barrier = barrierRoot ? barrierRoot.GetComponent<CarePlayAreaBarrier>() : null;
+        Check(barrier != null, "an invisible fence surrounds the feeding yard");
+        if (barrier)
+        {
+            var walls = barrierRoot.GetComponentsInChildren<BoxCollider>(true);
+            float farthest = session.monkeys.Where(item => item).Select(item =>
+                Vector2.Distance(new Vector2(item.transform.position.x, item.transform.position.z),
+                    new Vector2(barrier.Center.x, barrier.Center.z))).DefaultIfEmpty(0f).Max();
+            report.Add("FENCE radius=" + barrier.Radius.ToString("F2") +
+                       " segments=" + barrier.Segments + " walls=" + walls.Length +
+                       " farthestMonkey=" + farthest.ToString("F2"));
+            Check(walls.Length >= 18 &&
+                  barrierRoot.GetComponentsInChildren<Renderer>(true).Length == 0,
+                "the fence is solid but completely invisible");
+            Check(barrier.Radius > farthest,
+                "every monkey stands inside the fence, so nothing can be reached from behind");
+            Vector3 before = gameCamera.transform.position;
+            gameCamera.transform.position =
+                barrier.Center + new Vector3(barrier.Radius + 6f, 1.6f, 0f);
+            yield return new WaitForSecondsRealtime(.06f);
+            Vector3 escaped = gameCamera.transform.position;
+            float escapedDistance = Vector2.Distance(
+                new Vector2(escaped.x, escaped.z), new Vector2(barrier.Center.x, barrier.Center.z));
+            report.Add("FENCE clamp=" + escapedDistance.ToString("F2") +
+                       " limit=" + (barrier.Radius - CarePlayAreaBarrier.ClampInset).ToString("F2"));
+            Check(escapedDistance <= barrier.Radius - CarePlayAreaBarrier.ClampInset + .35f,
+                "trying to walk past the fence pushes the player back inside");
+            gameCamera.transform.position = before;
+            yield return null;
+        }
 
         // ---- final twenty seconds name the goal instead of leaving dead air ----
         var sprintText = GameObject.Find("Final sprint")?.GetComponent<Text>();
@@ -496,7 +598,23 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
                    " feedings=" + string.Join(",", probe9.Feedings));
         Check(TierStars(2) == 0 && TierStars(3) == 1 && TierStars(5) == 1 &&
               TierStars(6) == 2 && TierStars(8) == 2 && TierStars(9) == 3,
-            "stars follow the 0-2 / 3-5 / 6-8 / 9-10 banana tiers");
+            "stars follow the 0-2 / 3-5 / 6-8 / 9+ banana tiers");
+        Check(FedRound(12).Stars == CareRound.MaxStars &&
+              FedRound(12).FeedingTotal == 12,
+            "a tenth or twelfth banana never pushes the rating past three stars");
+        var queue = FedRound(0);
+        report.Add("QUEUE total=" + queue.TaskTotal + " per=" + queue.TasksForMonkey(0) + "/" +
+                   queue.TasksForMonkey(1) + "/" + queue.TasksForMonkey(2) +
+                   " cutoff=" + CareRound.Cutoff + " starGoal=" + CareRound.ScoreGoal);
+        Check(queue.TaskTotal > 9 && queue.TaskTotal == CareRound.PlannedFeedings &&
+              queue.TasksForMonkey(0) > 2 && queue.TasksForMonkey(1) > 2 &&
+              queue.TasksForMonkey(2) > 2,
+            "the round queues more than nine hunger episodes for the rotation");
+        Check(CareRound.Cutoff <= 130 && CareRound.Cutoff >= 90,
+            "the countdown is shortened so the queue still has work when it ends");
+        Check(Mathf.Abs(CareRound.PassingRatio - CareRound.TwoStarFeedings /
+                  (float)CareRound.ThreeStarFeedings) < .0001f,
+            "the passing line sits on the two-star threshold");
         Check(FedRound(9).FeedingRatio >= 1.0,
             "nine bananas fill the progress bar completely");
         var tutorialRound = new CareRound();
