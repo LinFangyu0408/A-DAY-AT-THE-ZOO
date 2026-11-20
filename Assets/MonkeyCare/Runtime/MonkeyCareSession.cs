@@ -571,6 +571,9 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
         void LateUpdate()
         {
+            // Start() is a coroutine: LateUpdate can run once before the round
+            // object exists, so everything below requires a live round.
+            if (!begun || Round == null) return;
             // Freeze at the time cutoff OR as soon as every banana is fed
             // (100% progress ends the round immediately).
             if (RoundStarted && begun && !Round.Frozen &&
