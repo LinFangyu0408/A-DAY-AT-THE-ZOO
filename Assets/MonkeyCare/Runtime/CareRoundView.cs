@@ -76,8 +76,11 @@ namespace ADayAtTheZoo.Monkeys.Care
             art = artwork;
             this.head = head;
 
+            // Kept well inside the headset's field of view: the old plate sat 21°
+            // above the gaze line and the banana counter 33° to the right, so in
+            // the headset both were parked on (or past) the edge of vision.
             scoreHud = CareUi.Canvas("Care SCORE HUD", head,
-                new Vector3(0, .45f, 1.18f), .80f, new Vector2(1000, 480), 10);
+                new Vector3(0, .34f, 1.12f), .70f, new Vector2(1000, 480), 10);
             var svgScore = CareUiSkin.SvgScorePanel;
             if (svgScore)
             {
@@ -179,7 +182,7 @@ namespace ADayAtTheZoo.Monkeys.Care
 
             bananaHud = CareUi.Canvas("Care BANANA HUD",
                 art.bananaAnchor ? art.bananaAnchor : head,
-                art.bananaAnchor ? art.bananaOffset : new Vector3(.82f, .46f, 1.28f),
+                art.bananaAnchor ? art.bananaOffset : new Vector3(.50f, .26f, 1.12f),
                 art.bananaWidth, new Vector2(560, 322), 10);
             var bananaArt = CareUiSkin.SvgBananaPanel ? CareUiSkin.SvgBananaPanel : art.bananaPanel;
             if (bananaArt)

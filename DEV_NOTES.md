@@ -183,3 +183,11 @@
 - `MonkeyCareNpc.Complete`：`completedAt` 下限钳到 1 秒（回合开始时 `<1` 的时间戳会被 `Round.Complete` 判为"还没开始"，导致吃不完、香蕉永远冻在嘴上）；任务结算仍失败时清空需求、1.5s 后重新要食，而不是死循环。
 - 输入探针新增高度遥测：`playerRoot y` / `rig y` / `eyeY` / `trackingLocalY` / `locomotion groundOnly` / `barrier startY`，下次"还在飘"可以直接看出是哪一层在动。
 - 自检 271 → **273**（长距离弹道速度 <15m/s 且落点误差 <0.2m）；冒烟 **90 断言**全过（抬 6 米一帧内回到 +0.03m）。
+
+## 2026-11-20 第十三轮（眼高 / 手部射线 / HUD 出不了视野）
+- **视角太低像坐在地上**：这套 rig 是**设备级（eye-level）XR origin** —— HMD 位姿几乎贴在 rig 根上（探针 `eyeY - rig y ≈ 0.02`），所以 **rig 的 Y 就是眼睛高度**。之前的代码把 rig.y 当作“脚底”，`floorClearance` 只加 0.24m，导致眼睛离地 ~0.5m。新增 `CareEyeHeight`（`[DefaultExecutionOrder(200)]`）：每帧探测脚下可行走地面（跳过猴子/香蕉/围栏/自身碰撞体，只取 `normal.y ≥ .6` 且不高于上一帧地面 1.1m 的命中），把眼睛固定在 **地面 + 1.58m**；地面以 6m/s 平滑跟随，不瞬移。围栏检测到 rig 活着时不再接管垂直轴（两者不再打架）。
+- **手部射线**：Meta 交互 rig 自带的 `RayInteractor` 会在两只手上各画一条指射线。`MonkeyCareSession.SuppressHandRays()` 每 0.5 秒把 rig 下所有 RayInteractor 的 `LineRenderer` 关掉（interactor 悬停时会自己打开，所以需要周期性再关）。香蕉瞄准线（右手、只在持蕉时出现）保留。
+- **HUD 在头显里看不到**：三块 UI 都贴在视野边缘 —— SCORE 在正上方 21°、香蕉数在右 33°/上 20°、教程在左 31°，基本落在头显有效视野之外。统一往中间收：SCORE `(0,.34,1.12)` 宽 .70（16.9°）；香蕉 `(.50,.26,1.12)` 宽 .24（偏航 24.1°/俯仰 13.1°）；教程 `(-.40,.09,1.08)` 宽 .44（-20.3°）。冒烟测试改成**角度断言**（偏航 ≤30°、俯仰 5~22°）而不是写死坐标。
+- 探针新增 `ground y` / `eyeAboveGround`，可以直接判断眼高是否正常（应 ≈1.58）。
+- 期间 Unity 编辑器崩过一次（日志里正常 shutdown + JobTempAlloc 泄漏），已用 `dangerouslyDisableSandbox` 直接拉起 `Unity.exe -projectPath` 恢复。
+- 冒烟 **90 断言**全过；自检 273 全过。

@@ -437,6 +437,11 @@ public sealed class Locomotion : MonoBehaviour
                 break;
             }
             Vector3 targetPosition = ground.point + Vector3.up * floorClearance;
+            // Walk-only: never take the rig's height from the ground probe. Any
+            // collider standing above the floor (a monkey, the stall, a rock) is
+            // read as "higher ground" and the player ratchets upwards step after
+            // step until they float over the yard.
+            if (groundOnly) targetPosition.y = transform.position.y;
             targetPosition.y = Mathf.Max(targetPosition.y, islandMinimumFloorY);
             transform.position = targetPosition;
         }

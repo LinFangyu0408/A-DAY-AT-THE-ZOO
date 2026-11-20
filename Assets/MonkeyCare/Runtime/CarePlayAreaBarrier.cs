@@ -139,12 +139,20 @@ namespace ADayAtTheZoo.Monkeys.Care
 
         void GuardVertical(Transform target)
         {
-            ClampY(target);
-            // Locomotion moves ITS OWN transform (the rig is usually a child of
-            // "Player and Locomotion"), so pinning only the rig would let the
-            // parent drift upwards every frame while the child compensated.
-            if (session && session.locomotion && session.locomotion.transform != target)
-                ClampY(session.locomotion.transform);
+            // In VR the eye height component owns the vertical axis (it places the
+            // eye at a fixed standing height over the ground), so the fence only
+            // backs it up on the desktop path. Checking the live rig instead of
+            // the component's flag keeps this independent of execution order.
+            bool eyeDriven = session && session.rig && session.rig.gameObject.activeInHierarchy;
+            if (!eyeDriven)
+            {
+                ClampY(target);
+                // Locomotion moves ITS OWN transform (the rig is usually a child of
+                // "Player and Locomotion"), so pinning only the rig would let the
+                // parent drift upwards every frame while the child compensated.
+                if (session && session.locomotion && session.locomotion.transform != target)
+                    ClampY(session.locomotion.transform);
+            }
 
             // Locomotion and recentering can offset the tracking space instead
             // of the root; clamping it keeps the eye at standing height.

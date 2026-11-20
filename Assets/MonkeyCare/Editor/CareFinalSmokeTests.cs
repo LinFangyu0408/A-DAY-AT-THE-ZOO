@@ -185,11 +185,30 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         Check(starBadge && passMarkerRect,
             "the star badge and the passing line both live on the progress bar");
         var bananaHud = GameObject.Find("Care BANANA HUD")?.GetComponent<RectTransform>();
-        Check(bananaHud && bananaHud.localPosition.x >= .75f && bananaHud.localPosition.y >= .35f,
-            "banana counter is fixed in the upper-right");
+        // Both plates used to sit outside (or right on) the headset's field of
+        // view: the counter 33° right and the score plate 21° up. The contract is
+        // now an angle budget, so they stay comfortably readable in the headset.
+        float BananaYaw = bananaHud ? Mathf.Atan2(bananaHud.localPosition.x, bananaHud.localPosition.z) * Mathf.Rad2Deg : 999f;
+        float BananaPitch = bananaHud ? Mathf.Atan2(bananaHud.localPosition.y, bananaHud.localPosition.z) * Mathf.Rad2Deg : 999f;
+        report.Add("HUD banana yaw=" + BananaYaw.ToString("F1") + " pitch=" + BananaPitch.ToString("F1"));
+        Check(bananaHud && Mathf.Abs(BananaYaw) <= 30f && BananaPitch >= 5f && BananaPitch <= 22f,
+            "banana counter sits inside the headset view, above the gaze line");
         var scoreHud = GameObject.Find("Care SCORE HUD")?.GetComponent<RectTransform>();
-        Check(scoreHud && scoreHud.localPosition.y >= .33f && scoreHud.localPosition.y <= .48f,
-            "top progress bar stays below the screen edge");
+        float scorePitch = scoreHud ? Mathf.Atan2(scoreHud.localPosition.y, scoreHud.localPosition.z) * Mathf.Rad2Deg : 999f;
+        report.Add("HUD score pitch=" + scorePitch.ToString("F1"));
+        Check(scoreHud && scorePitch >= 12f && scorePitch <= 24f,
+            "top progress bar stays below the screen edge and inside the view");
+        var tutorialHud = GameObject.Find("Care Tutorial")?.GetComponent<RectTransform>();
+        float tutorialYaw = tutorialHud ? Mathf.Atan2(tutorialHud.localPosition.x,
+            tutorialHud.localPosition.z) * Mathf.Rad2Deg : 999f;
+        report.Add("HUD tutorial yaw=" + tutorialYaw.ToString("F1"));
+        // The tutorial plate is only built once the round leaves READY GO, so it
+        // may not exist yet when this check runs.
+        if (tutorialHud)
+            Check(Mathf.Abs(tutorialYaw) <= 28f,
+                "the tutorial prompt sits inside the headset view, not on its edge");
+        else
+            report.Add("HUD tutorial not created yet (still on the ready gate)");
         var scoreText = GameObject.Find("Current score")?.GetComponent<Text>();
         Check(!GameObject.Find("Progress value") &&
               scoreText && scoreText.fontSize >= 30,

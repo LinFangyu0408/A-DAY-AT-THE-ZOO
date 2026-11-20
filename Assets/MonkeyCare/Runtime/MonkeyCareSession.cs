@@ -133,6 +133,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         CareHeadAnchor uiHead;
         CareFarmEnvironment farmEnvironment;
         CarePlayAreaBarrier playArea;
+        CareEyeHeight eyeHeight;
         CarePickupMarker bananaPickup;
         readonly List<CareTaskRecord> records = new();
         Vector3 rigStartPosition;
@@ -147,6 +148,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         Vector3 landing;
         float gameTime;
         float nextBananaEquipAt;
+        float nextHandRayCheck;
         readonly Vector3[] arcPoints = new Vector3[40];
 
         IEnumerator Start()
@@ -189,6 +191,10 @@ namespace ADayAtTheZoo.Monkeys.Care
                 farmEnvironment && farmEnvironment.Stand
                     ? farmEnvironment.Stand
                     : bananaPickup ? bananaPickup.transform : null);
+            // The rig runs on a device-level origin, so the eye height has to be
+            // placed explicitly or the player ends up sitting on the grass.
+            eyeHeight = gameObject.AddComponent<CareEyeHeight>();
+            eyeHeight.Begin(rig);
             Hands.Begin(this);
             roundView = new CareRoundView(Head, roundArtwork);
             GloveInventory = new CareGloveInventory(this, Head);
@@ -223,8 +229,8 @@ namespace ADayAtTheZoo.Monkeys.Care
             }
             HideSupplyToolbox("Sractch");
             roundArtwork.bananaAnchor = Head;
-            roundArtwork.bananaOffset = new Vector3(.82f, .46f, 1.28f);
-            roundArtwork.bananaWidth = .34f;
+            roundArtwork.bananaOffset = new Vector3(.50f, .26f, 1.12f);
+            roundArtwork.bananaWidth = .24f;
         }
 
         void EnsureBananaSupplyPool()
@@ -624,12 +630,27 @@ namespace ADayAtTheZoo.Monkeys.Care
             pointer.startColor = pointer.endColor = validTarget ? new Color(1f, .63f, .18f, 1) :
                 point || itemTarget || RayNpc ? new Color(.3f, 1f, .8f) : new Color(.7f, .9f, 1, .65f);
         }
-        void LateUpdate()
+        // The Meta interaction rig draws its own pointing ray out of each hand.
+        // The care scene only needs the banana aim line, so those hand rays are
+        // switched off (twice a second, because the interactor re-enables its
+        // visual whenever it starts or stops hovering something).
+        void SuppressHandRays()
         {
-            // Track whichever transform is the real eye: the rig activates a few
+            if (!rig || !rig.gameObject.activeInHierarchy) return;
+            if (Time.unscaledTime < nextHandRayCheck) return;
+            nextHandRayCheck = Time.unscaledTime + .5f;
+            foreach (var ray in rig.GetComponentsInChildren<Oculus.Interaction.RayInteractor>(true))
+            {
+                foreach (var line in ray.GetComponentsInChildren<LineRenderer>(true))
+                    if (line && line.enabled) line.enabled = false;
+            }
+        }
+        void LateUpdate()
+        {            // Track whichever transform is the real eye: the rig activates a few
             // frames after Start() and a controller/hand swap can move it again,
             // so the anchor is re-parented every frame instead of once.
             if (uiHead) uiHead.Follow(HeadSource());
+            SuppressHandRays();
             // Start() is a coroutine: LateUpdate can run once before the round
             // object exists, so everything below requires a live round.
             if (!begun || Round == null) return;

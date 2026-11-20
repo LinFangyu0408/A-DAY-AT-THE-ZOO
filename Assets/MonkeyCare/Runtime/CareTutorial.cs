@@ -29,8 +29,10 @@ namespace ADayAtTheZoo.Monkeys.Care
             // The tutorial must never block the player's view. Park it in the
             // upper-left corner as a compact hint panel, well clear of the
             // centred SCORE HUD.
+            // Pulled in from -31° left: the prompt used to sit on the edge of the
+            // headset's view, which read as "the tutorial never appears".
             root = CareUi.Canvas("Care Tutorial", head,
-                new Vector3(-.82f, .24f, 1.34f), .56f, new Vector2(820, 470), 80);
+                new Vector3(-.40f, .09f, 1.08f), .44f, new Vector2(820, 470), 80);
             group = root.gameObject.AddComponent<CanvasGroup>();
             group.alpha = 0;
             group.interactable = false;

@@ -83,9 +83,21 @@ public static class CareInputProbe
             }
             if (session.rig)
             {
+                float eyeY = session.rig.centerEyeAnchor ? session.rig.centerEyeAnchor.position.y : 0f;
                 sb.AppendLine("rig y=" + session.rig.transform.position.y.ToString("F2") +
-                    " eyeY=" + (session.rig.centerEyeAnchor ? session.rig.centerEyeAnchor.position.y.ToString("F2") : "?") +
+                    " eyeY=" + (session.rig.centerEyeAnchor ? eyeY.ToString("F2") : "?") +
                     " trackingLocalY=" + (session.rig.trackingSpace ? session.rig.trackingSpace.localPosition.y.ToString("F3") : "?"));
+                // Standing height above the actual floor: <1.0 means the player is
+                // looking at the yard as if sitting on the grass.
+                if (session.rig.centerEyeAnchor &&
+                    Physics.Raycast(new Vector3(session.rig.centerEyeAnchor.position.x,
+                        eyeY + 30f, session.rig.centerEyeAnchor.position.z),
+                        Vector3.down, out RaycastHit ground, 80f, ~((1 << 2) | (1 << 5)),
+                        QueryTriggerInteraction.Ignore))
+                {
+                    sb.AppendLine("ground y=" + ground.point.y.ToString("F2") +
+                        " eyeAboveGround=" + (eyeY - ground.point.y).ToString("F2"));
+                }
             }
             var barrier = UnityEngine.Object.FindFirstObjectByType<ADayAtTheZoo.Monkeys.Care.CarePlayAreaBarrier>();
             if (barrier) sb.AppendLine("barrier startY=" + barrier.StartY.ToString("F2"));
