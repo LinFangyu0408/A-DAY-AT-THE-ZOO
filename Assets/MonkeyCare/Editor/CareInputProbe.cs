@@ -51,6 +51,21 @@ public static class CareInputProbe
             string.Join(", ", pads.Select(p => p.layout + "/" + p.displayName)) + "]");
         try
         {
+            var pad = UnityEngine.InputSystem.Gamepad.current;
+            if (pad != null)
+            {
+                sb.AppendLine("pad.buttons=" + (pad.buttonSouth.isPressed ? "S" : ".") +
+                    (pad.buttonEast.isPressed ? "E" : ".") +
+                    (pad.buttonWest.isPressed ? "W" : ".") +
+                    (pad.buttonNorth.isPressed ? "N" : ".") +
+                    " stickL=(" + pad.leftStick.x.ReadValue().ToString("F2") + "," +
+                    pad.leftStick.y.ReadValue().ToString("F2") + ")" +
+                    " triggerR=" + pad.rightTrigger.ReadValue().ToString("F2"));
+            }
+        }
+        catch (Exception e) { sb.AppendLine("padError=" + e.Message); }
+        try
+        {
             sb.AppendLine("ovrConnected=" + OVRInput.GetConnectedControllers());
             sb.AppendLine("ovrRTouch=" + OVRInput.IsControllerConnected(OVRInput.Controller.RTouch));
             sb.AppendLine("ovrLTouch=" + OVRInput.IsControllerConnected(OVRInput.Controller.LTouch));
