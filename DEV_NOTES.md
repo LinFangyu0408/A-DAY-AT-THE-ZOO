@@ -218,3 +218,44 @@
 - **排版对齐参考视频**：SCORE 回到正中（0,300），香蕉计数用右上角锚点内缩 (-150,-70)，不再顶到屏幕边缘；`CanvasScaler` 2400x1350 保证任意窗口尺寸下比例一致。
 - **交互统一（VR=PC）**：持蕉显示射线（撤掉 PC 隐藏射线的门控）；射线指向饥饿猴子变橘色 (1,.63,.18) 并震动（Gamepad/OVR/haptic 三通道）；猴子开始吃（EatingNow）立即停震。这些逻辑本来就同源于 MonkeyCareSession，PC 之前只是被 UI 门控挡住。
 - 冒烟 90 断言全过。
+
+## 2026-11-21 02:50 第十八轮（教程左上 / UI 缩小 / 卡顿修复 / 手柄样式切换）
+- **教程面板**：PC 端移到极左上角（-640,-175，460×264），不再遮背包与 SCORE；内部元素等比缩放，背景改圆角 RoundedCard；断言放宽为比例等价（24pt/360 ≈ 54pt/800）。
+- **SCORE/香蕉/结算缩小**（用户两轮反馈"太小看不清"后定为中等）：全部用 localScale 缩放子元素坐标不变——SCORE .72、香蕉 .72、结算 .78。
+- **卡顿主因**：①legacy Text 每帧无条件赋值 `.text` → 整块 Canvas 重建（SCORE/香蕉/时钟/冲刺/每猴状态行共 7 处/帧 + 字符串分配）→ 加 cache，变了才写；②STAMINA 条 RectMask2D 每帧改 sizeDelta → 量化为 2% 步进；③CareAudio.effects 字典里失效 AudioSource 永不清理 → UpdateMusic 顺手回收；④质量档=Ultra（阴影 150m+AA2），建议中等档测试。文内的 RunDemoRecorder 与本现象无关（场景中不存在）。
+- **手柄样式切换**：新增 `CarePadStyleToggle`（右下角芯片 "A B XBOX" ⇄ "✕ ○ PS"，鼠标点击或手柄 Select 键切换）；`CareInput.PadStyle` + `LabelsChanged` 事件，`CareUiSkin.KeyBadge` 注册后换样式时自动改字并重染色（A/✕绿、B/○红），排版/尺寸/布局零改动；`AutoDetectStyle()` 按 Gamepad 布局自动选。
+- 冒烟 90 断言全过；未提交 GitHub（等用户 PC 试玩确认后一起提交）。
+
+## 2026-11-21 04:05 第十九轮（score 齐平 / 包包常驻 / PS5 自动识别 / 开局卡顿 / 音效诊断 / 低存量闪红）
+- **score 与香蕉数字齐平**：PC 平面 HUD 的 SCORE 板改为**顶部锚点**（anchor/pivot (.5,1)，偏移 (60,15)）：只有板的透明上边越过画布顶，印刷 artwork 顶边与香蕉板顶边同高，进度条中心恰好落在香蕉数字同一水平线上（画布参考系 y≈495）。VR 布局不动。
+- **包包 UI 左移 + 不再消失**：PC 端角落入口从世界空间画布改为**屏幕空间左下角锚定**（"Care PC Bag Root" overlay，(84,46) 起，scale .72）；取消"首次选蕉后按钮永久隐藏"——`showBagButton = mayOpen && !IsOpen`，B 随时可重开包；回合结算时显式 `HideHud()`（平面按钮不在 Head 锚点下，原隐藏循环管不到）；VR 端位置不变 (-.77,-.46,1.18)。平台中途切换时随 HUD 一起销毁重建（`DestroyPlates()`）。
+- **PS5 自动识别**：此前 `AutoDetectStyle()` 无人调用，连着 DualSense 也永远显示 A/B——这就是"识别不了 PS5 手柄"。现在 `CareInput.Read()` 首帧一次性自动检测；`InputSystem.onDeviceChange`（Added/Removed/Reconnected/Disconnected）再次检测（DualSense 被 XR 重扫挤掉重连时自动换字）；检测范围加 `description.product`；设置芯片手动切换改走 `PinStyle()`（pinned 后自动检测不再覆盖）。READY 提示/教程/背包/小摊键帽与文案全部改用 `ConfirmLabel/BackLabel` 动态生成（PS 样式下显示 ✕/○），教程 Update 原有的 label 监听负责换字后重绘当前步骤。
+- **开局卡顿**：①音频 8 段 wav 由 Start 单帧同步解码（music.wav ~40MB PCM）改为 `CareAudio.Preload()` **异步逐帧加载**（READY 门先出）；`preloadAudioData=0` 的片段强制 `LoadAudioData()`；②XR 延迟重试从固定 15s×8 改**指数退避**（15→90s，共 8 次），停止重试时打一条日志——每次重试都阻塞主线程并重扫 USB（就是开局 2 分钟内周期性轻卡的来源，也挤掉 DualSense）。
+- **音效恢复（诊断+三重加固）**：资源路径本身没问题（`Assets/MonkeyCare/Resources/HighlandLakeAudio/` 与代码一致，场景字段全空走 Resources 兜底）。加固：①`FollowCamera` 改为**把监听器钉在当前渲染相机上**（场景 3 个 AudioListener 全默认 disabled，旧逻辑"找到任一激活监听器就返回"可能挂在从不渲染的相机上）；②音乐**看门狗**（endpoint 被头显运行时抢占导致停止时自动重启）；③preload 强制解码。新增探针音频心跳：`audio.masterVolume/masterPause/listener(.enabled/cameraRendering)/musicSource(.playing/.volume/.loadState)/activeListeners`。运行期实测（04:01 冒烟 Play 中）：music playing=True、loadState=Loaded、volume=0.16、唯一 listener 在 Desktop Camera（cameraRendering=True）——链路健康。
+- **低存量闪红**：香蕉数字 <3（0/1/2）时红色闪烁（unscaled 时钟 2.3Hz，62% 亮 / 38% 暗），小摊补货回到 10 后自动停；=3 不再红（阈值从 `<=3` 收紧为 `<3`）。
+- **顺手修**：PC READY 根画布（"Care PC Ready Root"）此前从不销毁（每局泄漏一个空 overlay），新增 `DestroyReadyGate()` 统一销毁；小摊键帽标签去掉每帧盲写 `.text`（缓存比较）。
+- 冒烟 **92 断言**全过（新增"红色真闪烁"+"3 根不闪红"，键帽断言改为跟随 `ConfirmLabel/BackLabel`）；自检 **273** 全过；两轮冒烟连跑验证。未提交 GitHub（连同十七/十八轮，等用户 PC 试玩确认后一起提交）。
+
+## 2026-11-21 04:55 第二十轮（卡顿定位 / 背包放大 / 徽章清晰 / 头顶条上移）
+- **卡顿根因（录屏+日志对时确认）**：录屏 4:09、中位帧 33.3ms（30fps 封顶），第 1-3 分钟出现 5 段"2fps 连续 10 秒"的冻结（t≈55-66 / 70-80 / 93-103 / 126-137 / 177-184s）。Editor.log 的 XR 重试时间戳 04:05:59 / 04:06:10 / 04:06:25 / 04:06:47 / 04:07:21 / 04:08:12（Play 起始 04:05:11）与这五段**逐一对应**：每次 OpenXR 重试都会拆掉 loader、重扫 USB 并刷出 ~30 条堆栈警告，阻塞主线程约 10 秒。累计冻结 97s / 241s。
+  - 修复：`VrPlatformSwitcher` 重试预算 8 次 → **1 次**（8s 后），且先用 `Process.GetProcessesByName(OVRServer_x64/OculusClient/vrserver...)` 做廉价存在性探测，运行时没起来就完全不试；运行中每 2s 复查，Link 启动后自动补一次；`F2` 手动重连。实测（3 分钟手动 Play）：仅开局一次 10.5s 停顿，之后 worst 9-75ms。
+  - 画质 `m_CurrentQuality` 5(Ultra, shadowDistance 150 / lodBias 2) → 4(Very High, 70 / 1.5)。
+  - 去掉每帧字符串分配：`"×"+n`、`n+"%"`、时钟 `mm:ss`、冲刺条改为整数变化才拼串；`Camera.allCameras.FirstOrDefault` 加 0.5s 节流。
+  - `CareInputProbe` 新增 `frame.worstMs / frames`（编辑器帧间隔看门狗），下次可直接从探针判断是否还有冻结。
+- **背包 UI 放大**：PC 平面板 360x210@.72 → 400x240@.9；图标 128→180；徽章 52→74（字 29→46/52）。VR 世界画布同步 400x240。
+- **徽章模糊**：两个原因——①上一轮的 `LabelsChanged` 把徽章字色改成了 `KeyColor(text)`，红字压红底 → 现在恒为白色；②`Label()` 默认 `resizeTextForBestFit` 会把单字按任意尺寸重采样，且 128px 键帽贴图放大后边缘发虚 → 键帽改为 256px 生成、徽章字关闭 best-fit 并保留 1.6px 深色描边；另加 88px 白色圆环垫底、去掉原来 60x60 深色"厚度"块（那圈深色就是"糊"的来源）。
+- **猴子头顶进度条偏低**：`CarePanel.Root` 改为**底部锚点**（pivot (0.5,0)），`barOffset.y` 语义变为"卡片下边缘"；`MonkeyCareNpc.Awake` 用渲染器包围盒量出头顶高度，卡片底边 = 头顶 + 0.16m（原来固定 1.45m 居中，0.5m 高的卡片下半张直接插进脑袋）。卡片宽度 1.1→0.88。
+- **顺手**：头顶卡片被激活的**那一帧**还挂着猴子的朝向（猴子背对镜头时整张卡上下颠倒）——抽出 `FacePanel()`，激活后立即朝相机。
+- 冒烟 **97 断言**（新增 5 条：图标尺寸、字色为白、非 best-fit、徽章尺寸、底部锚点 + 首帧朝向）、自检 **273** 全过。
+- 未提交 GitHub（十七～二十轮一起等试玩确认）。
+
+## 2026-11-21 05:25 第二十一轮（启动即识别设备 / PC 通道验证 / 提交）
+- **启动即识别设备**：`CareInput.PadStyle` 原来只在**第一帧输入**时检测，READY 门首帧会闪一下 "A"（PS5 手柄实际是 ✕）。现在 `MonkeyCareSession.Start()` 在**建任何键帽之前**调用 `CareInput.ApplyAutoStyle()`，并打一条可核对的日志：
+  `[Zoo Platform] 运行模式=PC 平面 HUD 输入=PS5 · DualSense Wireless Controller 确认/返回=✕/○`。
+  探针 `CareInputProbe` 新增 `device.mode / device.input / device.padStyle / device.autoStyle / confirm / back / pinned`——不戴头显也能从 `input-probe.txt` 证明启动走了哪套内容。
+- **PC 通道进冒烟**：此前整套断言都在 `CarePlatform.ForceVr=true` 下跑，**平面 PC HUD 从未被真正渲染验证**（`Capture()` 走相机渲染，ScreenSpaceOverlay 根本拍不到）。新增 `PcHudPass()`：回合结束后 `ForceVr=false` → `session.RebuildHudForPlatform()`（与头显热插拔同一条路径）→ 断言 overlay 画布、三块板的 artwork **顶边对齐**（实测 delta=0.0）、全部在屏内、样式芯片可点且文案跟随检测结果、背包徽章用 `BackLabel`；截图改用 `ScreenCapture` 写 `final-pc-hud.png`。
+  - 顺带新增 `ArtBounds()`：`preserveAspect` 会在 rect 内做 letterbox，量 rect 角会误判"出屏"（SCORE 板上沿本来就有 15px 透明边刻意出屏）。
+  - 冒烟 **108 断言**全过。
+- **真实启动验证**：新增编辑器小工具 `CareLaunchShot`（丢 `work/monkey-care/shot.request` 即按玩家方式进 Play，1.2s/4s 各拍一张 Game View + 写 `launch-state.txt`）。实测：`flatUi=True padStyle=PlayStation confirm=✕ back=○ readyGateActive=True`，首帧 READY 门就是 "✕ PRESS ✕ TO START"，两帧之间无闪烁/错位。
+- **试玩排查记两条（未改，避免动了共享场景内容）**：①画面左下那簇洋红+黄尖刺不是错误着色器，是场景里的 `Flower_high_purple`（Synty 高饱和风格植被）；②`Wooden crate_Lowpoly_White` 的材质引用为空（prefab GUID 已不在工程里），渲染为空但可能仍带碰撞——属环境资产的历史问题，PC/VR 共用，留待用户确认后再动。
+- 本轮提交 GitHub。

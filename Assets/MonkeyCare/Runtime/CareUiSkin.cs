@@ -102,8 +102,8 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             switch ((key ?? string.Empty).Trim().ToUpperInvariant())
             {
-                case "A": return new Color(.20f, .72f, .36f, 1f);
-                case "B": return new Color(.90f, .24f, .32f, 1f);
+                case "A": case "✕": case "X": return new Color(.20f, .72f, .36f, 1f);
+                case "B": case "○": case "O": return new Color(.90f, .24f, .32f, 1f);
                 case "RT": return new Color(.98f, .62f, .12f, 1f);
                 case "LT": return new Color(.98f, .45f, .16f, 1f);
                 case "L":
@@ -114,16 +114,56 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
 
         // Round key cap with the printed label, the visual language used by the
-        // reference artwork (a letter inside a coloured circle).
+        // reference artwork (a letter inside a coloured circle). The cap is
+        // generated at 256px: a 128px cap looked soft once the HUD plates were
+        // scaled down for the flat layout (the badge edge fuzzed out).
+        public static Sprite KeyCapSprite => Rounded("KeyCap", 256, 128);
+        static readonly System.Collections.Generic.List<(Text label, string key)> liveKeyLabels = new();
+        static bool labelsHooked;
+
         public static Image KeyBadge(Transform parent, string key, Vector2 size,
             Vector2 position, out Text label, int fontSize = 44, string objectName = null)
         {
             // A plain white cap keeps the tint exact; the casual art carries its
             // own colour and would multiply the key tint into a muddy tone.
             var badge = Add(parent, string.IsNullOrEmpty(objectName) ? "Key " + key : objectName,
-                Rounded("KeyCap", 128, 64), size, position, KeyColor(key));
+                KeyCapSprite, size, position, KeyColor(key));
             label = CareRoundView.Label("Key " + key + " label", badge.transform,
                 key, size * .94f, Vector2.zero, fontSize, TextAnchor.MiddleCenter, Color.white);
+            // Best-fit re-samples the glyph at whatever size happens to fit, so
+            // a single letter inside a small cap came out soft and uneven. The
+            // badge always renders one glyph: keep the authored size exactly and
+            // give it a tight dark edge so it reads against the coloured cap.
+            label.resizeTextForBestFit = false;
+            label.horizontalOverflow = HorizontalWrapMode.Overflow;
+            label.verticalOverflow = VerticalWrapMode.Overflow;
+            var glyphEdge = label.GetComponent<Outline>();
+            if (glyphEdge)
+            {
+                glyphEdge.effectColor = new Color(.10f, .02f, .05f, .62f);
+                glyphEdge.effectDistance = new Vector2(1.6f, -1.6f);
+            }
+            // The glyph set can be swapped at runtime (A/B ⇄ ✕/○); register so a
+            // swap relabels every badge without touching layout or wiring.
+            if (!labelsHooked)
+            {
+                labelsHooked = true;
+                CareInput.LabelsChanged += () =>
+                {
+                    for (int i = liveKeyLabels.Count - 1; i >= 0; i--)
+                    {
+                        var pair = liveKeyLabels[i];
+                        if (!pair.label) { liveKeyLabels.RemoveAt(i); continue; }
+                        pair.label.text = pair.key == "A" ? CareInput.ConfirmLabel :
+                            pair.key == "B" ? CareInput.BackLabel : pair.key;
+                        // Glyph stays white: the cap is already tinted with the
+                        // key colour, so tinting the letter too turned the badge
+                        // into a red-on-red blob (the "blurry B" report).
+                        pair.label.color = Color.white;
+                    }
+                };
+            }
+            liveKeyLabels.Add((label, key));
             return badge;
         }
 

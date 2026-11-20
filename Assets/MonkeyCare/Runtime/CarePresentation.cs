@@ -165,6 +165,11 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             style = value;
             Root = CareUi.Canvas("Care Progress", parent, value.barOffset, value.width, new Vector2(640, 290), 60);
+            // Bottom-centre pivot: barOffset now names the plate's LOWER edge, so
+            // the card always grows upward from the anchor. With a centre pivot
+            // half of this 0.5 m-tall card hung below the anchor and sank into the
+            // monkey's head whenever the anchor hugged the skull.
+            Root.pivot = new Vector2(.5f, 0f);
             panel = CareUi.Image("Panel", Root, value.stamina, new Vector2(640, 290), Vector2.zero);
             // Cover the baked English title and the old white separator so the
             // gameplay caption can switch between patience and satisfaction in
@@ -206,8 +211,15 @@ namespace ADayAtTheZoo.Monkeys.Care
                     divider.color = new Color(.95f, .91f, .82f, .8f); dividers.Add(divider.gameObject);
                 }
             }
+            // Resizing a RectMask2D dirties the canvas; quantize so the mask
+            // geometry is only touched when the bar visibly moved.
+            int steps = Mathf.RoundToInt(amount * count * 50f);
+            if (steps == lastMaskSteps) return;
+            lastMaskSteps = steps;
+            float quantized = steps / (50f * count);
             for (int i = 0; i < count; i++)
-                masks[i].sizeDelta = new Vector2((490f / count - (i < count - 1 ? style.segmentGap : 0)) * Mathf.Clamp01(amount * count - i), 85);
+                masks[i].sizeDelta = new Vector2((490f / count - (i < count - 1 ? style.segmentGap : 0)) * Mathf.Clamp01(quantized * count - i), 85);
         }
+        int lastMaskSteps = -1;
     }
 }

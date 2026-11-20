@@ -26,47 +26,54 @@ namespace ADayAtTheZoo.Monkeys.Care
             shownAt = visibleAt;
             beganAt = Time.unscaledTime;
             stepAt = Time.unscaledTime;
-            // The tutorial must never block the player's view. Park it in the
-            // upper-left corner as a compact hint panel, well clear of the
-            // centred SCORE HUD.
-            // Pulled in from -31° left: the prompt used to sit on the edge of the
-            // headset's view, which read as "the tutorial never appears".
-            root = CareUi.Canvas("Care Tutorial", head,
-                new Vector3(-.40f, .09f, 1.08f), .44f, new Vector2(820, 470), 80);
+            // The tutorial must never block the player's view. On a PC it hugs
+            // the very top-left corner (user request: higher and further left,
+            // clear of the bag icon and the score bar); in VR it rides the head
+            // anchor at the left edge of view.
+            if (CarePlatform.FlatUi)
+            {
+                root = CareUi.OverlayRoot("Care PC Tutorial Root", 80);
+                root = CareUi.Plate("Care Tutorial", root,
+                    new Vector2(-640, -175), new Vector2(460, 264),
+                    new Vector2(.5f, .5f), new Vector2(.5f, .5f));
+            }
+            else
+                root = CareUi.Canvas("Care Tutorial", head,
+                    new Vector3(-.40f, .09f, 1.08f), .44f, new Vector2(820, 470), 80);
             group = root.gameObject.AddComponent<CanvasGroup>();
             group.alpha = 0;
             group.interactable = false;
             group.blocksRaycasts = false;
 
-            var shadow = CareUiSkin.AddSliced(root, "Tutorial shadow", CareUiSkin.Panel,
-                new Vector2(800, 450), new Vector2(0, -12), new Color(.03f, .09f, .16f, .30f));
+            var shadow = CareUiSkin.AddSliced(root, "Tutorial shadow", CareUiSkin.RoundedCard,
+                new Vector2(466, 268), new Vector2(0, -6), new Color(.03f, .09f, .16f, .30f));
             shadow.transform.SetAsFirstSibling();
-            CareUiSkin.AddSliced(root, "Tutorial panel", CareUiSkin.Panel,
-                new Vector2(800, 440), Vector2.zero, new Color(1f, .97f, .88f, .99f));
+            CareUiSkin.AddSliced(root, "Tutorial panel", CareUiSkin.RoundedCard,
+                new Vector2(460, 264), Vector2.zero, new Color(1f, .97f, .88f, .99f));
             CareUiSkin.AddSliced(root, "Tutorial header", CareUiSkin.Header,
-                new Vector2(758, 110), new Vector2(0, 140), new Color(.90f, .98f, 1f, 1f));
-            var accent = CareUi.Image("Tutorial accent", root, null, new Vector2(758, 7), new Vector2(0, 85));
+                new Vector2(438, 72), new Vector2(0, 86), new Color(.90f, .98f, 1f, 1f));
+            var accent = CareUi.Image("Tutorial accent", root, null, new Vector2(438, 5), new Vector2(0, 51));
             accent.color = new Color(1f, .78f, .20f, 1f);
             var star = CareUiSkin.Add(root, "Tutorial star", CareUiSkin.Star,
-                new Vector2(82, 76), new Vector2(334, 202), new Color(1f, .82f, .20f, 1f));
+                new Vector2(48, 45), new Vector2(194, 122), new Color(1f, .82f, .20f, 1f));
             star.preserveAspect = true;
 
-            keyCap = CareUiSkin.KeyBadge(root, "GO", new Vector2(132, 132),
-                new Vector2(-318, 140), out keyLabel, 46);
+            keyCap = CareUiSkin.KeyBadge(root, "GO", new Vector2(76, 76),
+                new Vector2(-184, 86), out keyLabel, 46);
 
-            stepLabel = Label("Tutorial step", root, "STEP 1 / 8", new Vector2(170, 38),
-                new Vector2(-205, 142), 28, TextAnchor.MiddleCenter, new Color(.95f, .98f, 1f, 1));
+            stepLabel = Label("Tutorial step", root, "STEP 1 / 8", new Vector2(100, 24),
+                new Vector2(-122, 86), 18, TextAnchor.MiddleCenter, new Color(.95f, .98f, 1f, 1));
             stepLabel.gameObject.SetActive(false);
-            title = Label("Tutorial title", root, string.Empty, new Vector2(600, 68),
-                new Vector2(95, 118), 58, TextAnchor.MiddleLeft, Color.white);
-            body = Label("Tutorial body", root, string.Empty, new Vector2(730, 168),
-                new Vector2(0, -14), 54, TextAnchor.MiddleCenter, new Color(.035f, .10f, .19f, 1));
+            title = Label("Tutorial title", root, string.Empty, new Vector2(325, 42),
+                new Vector2(56, 73), 33, TextAnchor.MiddleLeft, Color.white);
+            body = Label("Tutorial body", root, string.Empty, new Vector2(420, 100),
+                new Vector2(0, -10), 31, TextAnchor.MiddleCenter, new Color(.035f, .10f, .19f, 1));
             CareUiSkin.AddSliced(root, "Tutorial action panel", CareUiSkin.Button,
-                new Vector2(736, 92), new Vector2(0, -166), new Color(.78f, .94f, 1f, 1f));
+                new Vector2(426, 56), new Vector2(0, -99), new Color(.78f, .94f, 1f, 1f));
             // One key cap only (in the header) keeps the card quiet; the action
             // bar repeats the instruction in words instead of a second badge.
-            action = Label("Tutorial action", root, string.Empty, new Vector2(700, 72),
-                new Vector2(0, -166), 44, TextAnchor.MiddleCenter, Color.white);
+            action = Label("Tutorial action", root, string.Empty, new Vector2(410, 46),
+                new Vector2(0, -99), 26, TextAnchor.MiddleCenter, Color.white);
 
             root.gameObject.SetActive(false);
             ShowStep(0);
@@ -167,14 +174,14 @@ namespace ADayAtTheZoo.Monkeys.Care
                         session.BeginTutorialHunger();
                     }
                     title.text = "OPEN THE BAG";
-                    body.text = "A monkey is hungry. Press B to open your bag.";
-                    action.text = "PRESS B TO OPEN";
+                    body.text = "A monkey is hungry. Press " + CareInput.BackLabel + " to open your bag.";
+                    action.text = "PRESS " + CareInput.BackLabel + " TO OPEN";
                     SetKey(CareInput.BackLabel);
                     break;
                 case 4:
                     title.text = "TAKE A BANANA";
-                    body.text = "Pick the banana with A.";
-                    action.text = "PRESS A TO SELECT";
+                    body.text = "Pick the banana with " + CareInput.ConfirmLabel + ".";
+                    action.text = "PRESS " + CareInput.ConfirmLabel + " TO SELECT";
                     SetKey(CareInput.ConfirmLabel);
                     break;
                 case 5:

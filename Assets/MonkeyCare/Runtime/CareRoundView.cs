@@ -16,6 +16,11 @@ namespace ADayAtTheZoo.Monkeys.Care
 
     public sealed class CareRoundView
     {
+        // Below three bananas the counter starts its red flash alarm.
+        const int LowStockAlarm = 3;
+        static readonly Color AlarmLit = new(.88f, .13f, .13f, 1f);
+        static readonly Color AlarmDim = new(.88f, .13f, .13f, .22f);
+        static readonly Color BananaInk = new(.14f, .14f, .18f, 1f);
         readonly CareRoundArtwork art;
         readonly Transform head;
         readonly RectTransform scoreHud, bananaHud;
@@ -24,6 +29,16 @@ namespace ADayAtTheZoo.Monkeys.Care
         // Which layout the plates were built for, so the session can rebuild
         // them when the headset connects (or is removed) mid-game.
         public bool BuiltForVr { get; private set; }
+        // The HUD writes the same string most frames; legacy Text rebuilds its
+        // mesh on every .text assignment, which was repainting the whole canvas
+        // 60+ times a second (the main stutter source). Cache and only assign
+        // on change.
+        string scoreCache = "", bananaCache = "", clockCache = "", sprintCache = null;
+        // Numeric shadows of the cached strings; they let Update skip building a
+        // new string entirely when nothing changed.
+        int percentCache = -1, bananaCountCache = -1, clockSecondCache = int.MinValue;
+        int sprintSecondCache = int.MinValue;
+        bool clockFrozenShown;
         readonly Image progressFill;
         readonly Image[] stars = new Image[3];
         Sprite resultStarSprite;
@@ -88,10 +103,21 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (CarePlatform.FlatUi)
             {
                 flatHud = CareUi.OverlayRoot("Care PC HUD", 50);
-                // Reference layout: score bar centred on top, banana counter inset
-                // at the top-right corner (matches the original PC video).
+                // Reference-video layout, slightly smaller per user request so
+                // the plates never crowd the play area. The score plate is
+                // top-anchored and pushed up 15px past the canvas top: only the
+                // transparent margin of the plate reaches that far, while the
+                // printed artwork and the live bar land exactly level with the
+                // banana counter plate on the top-right (both plates read as
+                // one top row).
                 scoreHud = CareUi.Plate("Care SCORE HUD", flatHud,
-                    new Vector2(0, 300), new Vector2(1000, 480));
+                    new Vector2(60, 15), new Vector2(1000, 480),
+                    new Vector2(.5f, 1f), new Vector2(.5f, 1f));
+                scoreHud.localScale = Vector3.one * .72f;
+                // One pad-glyph toggle for the whole flat HUD (created once per
+                // plate set; DestroyPlates tears it down with the root).
+                CarePadStyleToggle.Create(flatHud, new Vector2(-30, 28),
+                    new Vector2(170, 56), 26);
             }
             else
                 scoreHud = CareUi.Canvas("Care SCORE HUD", head,
@@ -197,12 +223,13 @@ namespace ADayAtTheZoo.Monkeys.Care
 
             bananaHud = CarePlatform.FlatUi
                 ? CareUi.Plate("Care BANANA HUD", flatHud,
-                    new Vector2(-150, -70), new Vector2(560, 322),
+                    new Vector2(-70, -50), new Vector2(560, 322),
                     new Vector2(1f, 1f), new Vector2(1f, 1f))
                 : CareUi.Canvas("Care BANANA HUD",
                     art.bananaAnchor ? art.bananaAnchor : head,
                     art.bananaAnchor ? art.bananaOffset : new Vector3(.50f, .26f, 1.12f),
                     art.bananaWidth, new Vector2(560, 322), 10);
+            if (CarePlatform.FlatUi) bananaHud.localScale = Vector3.one * .72f;
             var bananaArt = CareUiSkin.SvgBananaPanel ? CareUiSkin.SvgBananaPanel : art.bananaPanel;
             if (bananaArt)
             {
@@ -233,9 +260,10 @@ namespace ADayAtTheZoo.Monkeys.Care
             // COMPLETE ribbon, three airy stat rows, big total score, three
             // stars, next-star hint, CONTINUE pill plus a round green button.
             results = CarePlatform.FlatUi
-                ? CareUi.Plate("Care RESULTS", flatHud, new Vector2(0, -20), new Vector2(760, 1100))
+                ? CareUi.Plate("Care RESULTS", flatHud, new Vector2(0, -10), new Vector2(900, 1300))
                 : CareUi.Canvas("Care RESULTS", head,
                     new Vector3(0, -.02f, 1.30f), .50f, new Vector2(900, 1300), 100);
+            if (CarePlatform.FlatUi) results.localScale = Vector3.one * .78f;
             // The shadow must share the card's rounded silhouette, otherwise a
             // square dark rim shows around the rounded card corners.
             var shadow = CareUiSkin.AddSliced(results, "Results shadow", CareUiSkin.RoundedCard,
@@ -355,27 +383,80 @@ namespace ADayAtTheZoo.Monkeys.Care
             // bar and the three-star rating always agree.
             float ratio = Mathf.Clamp01((float)round.FeedingRatio);
             progressFill.fillAmount = ratio;
-            score.text = Mathf.RoundToInt(ratio * 100f) + "%";
+            // Build the label strings only when the integer behind them moves:
+            // "×" + n and n + "%" allocated two strings every frame, which fed
+            // the GC a steady trickle of garbage for a value that changes a few
+            // times per round.
+            int percent = Mathf.RoundToInt(ratio * 100f);
+            if (percent != percentCache)
+            {
+                percentCache = percent;
+                scoreCache = percent + "%";
+                score.text = scoreCache;
+            }
             MoveStar(ratio);
-            bananas.text = "×" + round.Bananas;
-            // Low stock turns the counter red so running dry is impossible to miss.
-            bananas.color = round.Bananas <= CareDirectionHint.LowStockBananas
-                ? new Color(.88f, .13f, .13f, 1f)
-                : new Color(.14f, .14f, .18f, 1f);
+            if (round.Bananas != bananaCountCache)
+            {
+                bananaCountCache = round.Bananas;
+                bananaCache = "×" + round.Bananas;
+                bananas.text = bananaCache;
+            }
+            // Banana stock alarm: with fewer than three left (0/1/2) the
+            // counter turns red and blinks until the player restocks at the
+            // market stand, which restores the count to ten and stops it.
+            if (round.Bananas < LowStockAlarm)
+            {
+                // Visible flash: alternate between solid red and a dimmed red
+                // phase at ~2.3 blinks per second (unscaled clock, so the
+                // alarm keeps flashing even when the round clock matters).
+                bool lit = Mathf.Repeat(Time.unscaledTime * 2.3f, 1f) < .62f;
+                bananas.color = lit ? AlarmLit : AlarmDim;
+            }
+            else
+                bananas.color = BananaInk;
 
             int remaining = Mathf.CeilToInt(Mathf.Max(0, CareRound.Cutoff - elapsed));
             bool sprinting = !round.Frozen && remaining > 0 &&
                              remaining <= MonkeyCareSession.FinalSprintSeconds;
-            clock.text = round.Frozen
-                ? "ROUND END"
-                : (remaining / 60).ToString("00") + ":" + (remaining % 60).ToString("00");
+            if (round.Frozen)
+            {
+                if (!clockFrozenShown)
+                {
+                    clockFrozenShown = true;
+                    Set(clock, ref clockCache, "ROUND END");
+                }
+            }
+            else
+            {
+                clockFrozenShown = false;
+                if (remaining != clockSecondCache)
+                {
+                    clockSecondCache = remaining;
+                    Set(clock, ref clockCache, (remaining / 60).ToString("00") + ":" +
+                                                (remaining % 60).ToString("00"));
+                }
+            }
             clock.color = sprinting ? new Color(1f, .70f, .20f, 1f) : Color.white;
             if (!round.Frozen)
             {
-                sprint.text = sprinting ? SprintCopy(round, remaining) : string.Empty;
+                // The sprint banner is rebuilt only when its second tick changes.
+                if (sprinting)
+                {
+                    if (remaining != sprintSecondCache)
+                    {
+                        sprintSecondCache = remaining;
+                        Set(sprint, ref sprintCache, SprintCopy(round, remaining));
+                    }
+                }
+                else if (sprintSecondCache != -1)
+                {
+                    sprintSecondCache = -1;
+                    Set(sprint, ref sprintCache, string.Empty);
+                }
                 return;
             }
-            sprint.text = string.Empty;
+            sprintSecondCache = -1;
+            Set(sprint, ref sprintCache, string.Empty);
 
             // Report against the three-star goal so "9 / 9" always reads as a
             // completed round; banana twelve is bonus, not a missing task.
@@ -402,6 +483,16 @@ namespace ADayAtTheZoo.Monkeys.Care
 
         // Slide the star badge along the track with the fill. Small margin at
         // both ends keeps the whole glyph inside the printed plate.
+        // Only touch legacy Text when the string actually changed: assigning
+        // .text unconditionally dirtied the whole canvas every frame.
+        static void Set(Text label, ref string cache, string value)
+        {
+            if (!label) return;
+            if (cache == value) return;
+            cache = value;
+            label.text = value;
+        }
+
         void MoveStar(float ratio)
         {
             if (!starBadge) return;

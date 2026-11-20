@@ -48,17 +48,110 @@ namespace ADayAtTheZoo.Monkeys.Care
                 return false;
             }
         }
-        // The current English UI follows the reference screenshots and uses
-        // Xbox-style letter badges. PlayStation face buttons still map to the
-        // same actions: Cross = A and Circle = B.
-        public static string ConfirmLabel => "A";
-        public static string BackLabel => "B";
+        // The current UI follows the reference screenshots and uses Xbox-style
+        // letter badges. PlayStation face buttons still map to the same actions:
+        // Cross = A and Circle = B. The badge set can be switched at runtime
+        // from the settings strip without touching layout or wiring.
+        public static string ConfirmLabel => PadStyle == PadLayout.PlayStation ? "✕" : "A";
+        public static string BackLabel => PadStyle == PadLayout.PlayStation ? "○" : "B";
+        // Trigger badges keep the letters either way (RT/R2 both read as RT on
+        // the plates, so no relabeling is needed for them).
+
+        public enum PadLayout { Xbox, PlayStation }
+        // Live style used by every key badge; the auto-detector picks it on
+        // the first input frame and again whenever a device is plugged in or
+        // removed, because a DualSense can enumerate late (XR retries rescan
+        // USB and re-create the HID device several seconds into the session).
+        public static PadLayout PadStyle { get; private set; } = PadLayout.Xbox;
+        // A manual flip on the settings chip wins: the auto-detector then
+        // stops touching the glyphs for the rest of the session.
+        public static bool StylePinned { get; private set; }
+        static bool autoStyleApplied;
+        static CareInput()
+        {
+            // Re-detect whenever the device list changes: the DualSense often
+            // reconnects after the XR loader churned USB, and without this the
+            // badges stayed on Xbox letters even though the pad was there.
+            InputSystem.onDeviceChange += OnDeviceChanged;
+        }
+        static void OnDeviceChanged(UnityEngine.InputSystem.InputDevice device, InputDeviceChange change)
+        {
+            if (change != InputDeviceChange.Added && change != InputDeviceChange.Reconnected &&
+                change != InputDeviceChange.Removed && change != InputDeviceChange.Disconnected) return;
+            ApplyAutoStyle();
+        }
+        /// <summary>Detect-and-apply without touching a manually pinned style.</summary>
+        public static void ApplyAutoStyle()
+        {
+            if (StylePinned) return;
+            SetPadStyle(AutoDetectStyle());
+        }
+        /// <summary>Swap the badge glyphs (A/B ⇄ ✕/○). Returns the new style.</summary>
+        public static PadLayout SetPadStyle(PadLayout style)
+        {
+            PadStyle = style;
+            var renamed = LabelsChanged;
+            renamed?.Invoke();
+            return style;
+        }
+        /// <summary>Manual choice from the settings chip: pins so auto-detect stops overriding it.</summary>
+        public static PadLayout PinStyle(PadLayout style)
+        {
+            StylePinned = true;
+            return SetPadStyle(style);
+        }
+        /// <summary> Fired after the glyph set changed, so every on-screen badge relabels itself.</summary>
+        public static event Action LabelsChanged;
+
+        /// <summary>Display name of the pad that currently drives the badges ("" when none).</summary>
+        public static string PadDisplayName
+        {
+            get
+            {
+                var pad = Gamepad.current;
+                if (pad == null && Gamepad.all.Count > 0) pad = Gamepad.all[0];
+                return pad != null ? pad.displayName : string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// One-line launch report of the input device, so "which version is the
+        /// game actually running" can be answered from Editor.log without a
+        /// headset: VR + Touch, PS5 pad, Xbox pad, or plain PC keyboard.
+        /// </summary>
+        public static string DescribeDevice()
+        {
+            if (IsPlayStationController)
+                return "PS5 · " + (PadDisplayName.Length > 0 ? PadDisplayName : "PlayStation pad");
+            if (Gamepad.all.Count > 0)
+                return "Xbox · " + (PadDisplayName.Length > 0 ? PadDisplayName : "gamepad");
+            return "PC · keyboard + mouse";
+        }
+        // Best guess from whatever is connected (auto-pick on the settings strip).
+        public static PadLayout AutoDetectStyle()
+        {
+            if (IsPlayStationController) return PadLayout.PlayStation;
+            foreach (var pad in Gamepad.all)
+                if (pad != null && (pad.layout.Contains("DualSense") || pad.layout.Contains("DualShock") || LooksLikePlayStation(pad))) return PadLayout.PlayStation;
+            return PadLayout.Xbox;
+        }
+        /// <summary>Raise the relabel event for every live badge (initial paint too).</summary>
+        public static void RefreshLabels() => LabelsChanged?.Invoke();
         public static bool AnyGamepadConnected => Gamepad.all.Count > 0;
         public static Vector2 GamepadLeftStick => ReadGamepadStick(true);
         public static Vector2 GamepadRightStick => ReadGamepadStick(false);
 
         public static CareInputSnapshot Read(bool allowDesktopFallback = true)
         {
+            // One-shot auto-detect on the first input frame: the DualSense is
+            // usually enumerated by then, so the HUD starts on ✕/○ instead of
+            // waiting for the user to find the settings chip. Plugging a pad
+            // in later re-detects via onDeviceChange.
+            if (!autoStyleApplied)
+            {
+                autoStyleApplied = true;
+                ApplyAutoStyle();
+            }
             CareXboxSnapshot xbox = CareXboxInput.Read();
             XRInputDevice right = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
             XRInputDevice left = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
@@ -166,10 +259,16 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (device == null) return false;
             string layout = device.layout ?? string.Empty;
             string display = device.displayName ?? string.Empty;
+            // Raw HID entries can appear before the gamepad layout is matched,
+            // so the product string is checked as well (DualSense productId
+            // 0x0CE6 / DualShock 0x05C4 both show up in the description).
+            // InputDeviceDescription is a struct, so no null propagation.
+            string product = device.description.product ?? string.Empty;
             return Contains(layout, "DualSense") || Contains(layout, "DualShock") ||
                    Contains(display, "DualSense") || Contains(display, "DualShock") ||
+                   Contains(product, "DualSense") || Contains(product, "DualShock") ||
                    Contains(display, "PS5") || Contains(display, "PS4") ||
-                   Contains(display, "PlayStation");
+                   Contains(display, "PlayStation") || Contains(product, "PlayStation");
         }
         static bool Contains(string value, string token) =>
             value.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0;

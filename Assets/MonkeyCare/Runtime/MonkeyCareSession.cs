@@ -125,6 +125,8 @@ namespace ADayAtTheZoo.Monkeys.Care
         CareTeleportPoint highlighted;
         LineRenderer pointer, arc;
         RectTransform readyCanvas;
+        RectTransform pcHud;
+        CarePadStyleToggle padToggle;
         Text readyPrompt;
         Text readyKeyLabel;
         GameObject readyFx;
@@ -148,6 +150,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         Vector3 landing;
         float gameTime;
         float nextBananaEquipAt;
+        float nextCameraProbe;
         float nextHandRayCheck;
         readonly Vector3[] arcPoints = new Vector3[40];
 
@@ -196,13 +199,28 @@ namespace ADayAtTheZoo.Monkeys.Care
             eyeHeight = gameObject.AddComponent<CareEyeHeight>();
             eyeHeight.Begin(rig);
             Hands.Begin(this);
+            // Detect the input device before a single badge exists: the READY
+            // gate must already say "PRESS ✕" on a PS5 pad instead of waiting
+            // for the first input frame (it used to flash A for one frame).
+            CareInput.ApplyAutoStyle();
+            Debug.Log("[Zoo Platform] 运行模式=" + (CarePlatform.FlatUi ? "PC 平面 HUD" : "VR 世界 HUD") +
+                      " 输入=" + CareInput.DescribeDevice() +
+                      " 确认/返回=" + CareInput.ConfirmLabel + "/" + CareInput.BackLabel);
             roundView = new CareRoundView(Head, roundArtwork);
             GloveInventory = new CareGloveInventory(this, Head);
             audioFeedback.FollowCamera(playerCamera);
-            audioFeedback.StartMusic(transform);
+            // The READY prompt names the confirm button; relabel it when the
+            // auto-detected pad style settles or the user flips the chip.
+            CareInput.LabelsChanged += RefreshReadyPrompt;
             TutorialActive = false;
             RoundStarted = false;
             ShowReadyGate();
+            // Opening stutter: synchronously decoding eight wav clips used to
+            // land in the single Start frame (the music clip alone decompresses
+            // ~40MB of PCM). Show the ready gate first, then stream the audio
+            // in from the background loader so the first seconds stay smooth.
+            yield return audioFeedback.Preload();
+            audioFeedback.StartMusic(transform);
         }
         CareNeed[] MonkeyStartingNeeds()
         {
@@ -261,29 +279,56 @@ namespace ADayAtTheZoo.Monkeys.Care
                 foreach (var collider in root.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
             }
         }
+        // Tear the ready gate down completely: the PC layout wraps its plate in
+        // a whole ScreenSpaceOverlay root, and leaving that root alive stacked a
+        // new empty canvas every restart.
+        void DestroyReadyGate()
+        {
+            if (readyCanvas) { Destroy(readyCanvas.gameObject); readyCanvas = null; }
+            if (pcHud) { Destroy(pcHud.gameObject); pcHud = null; }
+        }
+
+        // The READY gate names the confirm button, so the copy has to follow
+        // the live pad style (✕ on a DualSense, A on Xbox pads/keyboard).
+        string ReadyGateCopy() => "PRESS " + CareInput.ConfirmLabel + " TO START";
+        void RefreshReadyPrompt()
+        {
+            if (readyGateActive && readyPrompt) readyPrompt.text = ReadyGateCopy();
+        }
+
         void ShowReadyGate()
         {
-            if (readyCanvas) Destroy(readyCanvas.gameObject);
-            readyCanvas = CareUi.Canvas("Care READY GO", Head,
-                new Vector3(0, 0, 1.45f), .94f, new Vector2(960, 760), 90);
+            DestroyReadyGate();
+            if (CarePlatform.FlatUi)
+            {
+                pcHud = CareUi.OverlayRoot("Care PC Ready Root", 90);
+                readyCanvas = CareUi.Plate("Care READY GO", pcHud,
+                    new Vector2(0, 40), new Vector2(660, 520));
+            }
+            else
+                readyCanvas = CareUi.Canvas("Care READY GO", Head,
+                    new Vector3(0, 0, 1.45f), .94f, new Vector2(960, 760), 90);
+            // The artwork keeps its authored size; on the smaller PC plate it is
+            // simply scaled down by the parent so the proportions stay right.
             var readyArt = CareUiSkin.SvgReadyGo ? CareUiSkin.SvgReadyGo : readyGo;
             if (readyArt)
-                CareUi.Image("READY GO", readyCanvas, readyArt, new Vector2(960, 560), Vector2.zero);
+                CareUi.Image("READY GO", readyCanvas, readyArt, new Vector2(660, 385), Vector2.zero);
             else
                 CareUiSkin.AddSliced(readyCanvas, "Ready panel", CareUiSkin.Panel,
-                    new Vector2(900, 430), Vector2.zero, new Color(1f, .97f, .86f, 1f));
-            CareReadyView.Decorate(readyCanvas, roundArtwork.star, 100000f);
+                    new Vector2(620, 300), Vector2.zero, new Color(1f, .97f, .86f, 1f));
+            CareReadyView.Decorate(readyCanvas, roundArtwork.star, 100000f,
+                CarePlatform.FlatUi ? .69f : 1f);
             // The hint sits well below the READY GO artwork so it never covers
             // the big letters.
             CareUiSkin.AddSliced(readyCanvas, "Ready prompt plate", CareUiSkin.Slot,
-                new Vector2(620, 108), new Vector2(0, -318), new Color(.08f, .25f, .42f, .94f))
+                new Vector2(430, 75), new Vector2(0, -222), new Color(.08f, .25f, .42f, .94f))
                 .transform.SetAsLastSibling();
-            var readyKey = CareUiSkin.KeyBadge(readyCanvas, "A", new Vector2(116, 116),
-                new Vector2(-206, -318), out readyKeyLabel, 56);
+            var readyKey = CareUiSkin.KeyBadge(readyCanvas, CareInput.ConfirmLabel, new Vector2(80, 80),
+                new Vector2(-143, -222), out readyKeyLabel, 40);
             readyKey.transform.SetAsLastSibling();
             readyPrompt = CareRoundView.Label("Ready prompt",
-                readyCanvas, "PRESS A TO START",
-                new Vector2(420, 72), new Vector2(56, -318), 42,
+                readyCanvas, ReadyGateCopy(),
+                new Vector2(290, 50), new Vector2(39, -222), 32,
                 TextAnchor.MiddleCenter, Color.white);
             readyPrompt.transform.SetAsLastSibling();
             readyGateActive = true;
@@ -309,11 +354,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         void BeginAfterReadyGo()
         {
             goSequenceActive = false;
-            if (readyCanvas)
-            {
-                Destroy(readyCanvas.gameObject);
-                readyCanvas = null;
-            }
+            DestroyReadyGate();
             SetPlayerInputLocked(false);
             TutorialActive = showTutorial && !tutorialCompleted;
             if (TutorialActive)
@@ -326,7 +367,7 @@ namespace ADayAtTheZoo.Monkeys.Care
                 foreach (var npc in monkeys) if (npc) npc.BeginSession();
                 BeginHungerRotation(2.5f);
             }
-            roundView.ShowHud();
+            roundView?.ShowHud();
             GloveInventory?.ShowHud();
             // The stall is behind the opening view, so turn the very first head
             // movement into a "this way" plate instead of leaving players lost.
@@ -345,10 +386,10 @@ namespace ADayAtTheZoo.Monkeys.Care
             TutorialActive = false;
             RoundStarted = true;
             gameTime = 0;
-            if (readyCanvas) Destroy(readyCanvas.gameObject);
+            DestroyReadyGate();
             if (readyFx) Destroy(readyFx);
             GloveInventory?.Close();
-            roundView.ShowHud();
+            roundView?.ShowHud();
             GloveInventory?.ShowHud();
             foreach (var npc in monkeys)
             {
@@ -489,8 +530,13 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
         void Update()
         {
-            if (begun && (!playerCamera || !playerCamera.isActiveAndEnabled))
+            // Camera.allCameras + LINQ allocates every call; while the XR loader
+            // was being torn down the active camera vanished for seconds and this
+            // ran on every frame. Probe at most twice a second.
+            if (begun && (!playerCamera || !playerCamera.isActiveAndEnabled) &&
+                Time.unscaledTime >= nextCameraProbe)
             {
+                nextCameraProbe = Time.unscaledTime + .5f;
                 var camera = Camera.allCameras.FirstOrDefault(c => c.enabled && c.gameObject.activeInHierarchy && c.cameraType == CameraType.Game);
                 if (camera != playerCamera)
                 {
@@ -654,9 +700,26 @@ namespace ADayAtTheZoo.Monkeys.Care
             bool vrNow = CarePlatform.IsVr;
             roundView.DestroyPlates();
             roundView = new CareRoundView(Head, roundArtwork);
+            // The glove inventory carries its own plates (screen-space bag
+            // button on PC, world-space in VR), so it has to switch layouts
+            // with the rest of the HUD or the wrong-layout button lingers.
+            if (GloveInventory != null)
+            {
+                GloveInventory.DestroyPlates();
+                GloveInventory = new CareGloveInventory(this, Head);
+                if (!Round.Frozen) GloveInventory.ShowHud();
+            }
             if (RoundStarted && !Round.Frozen) roundView.ShowHud();
             Debug.Log("[Monkey Care] HUD rebuilt for " + (vrNow ? "VR" : "PC") + " layout.");
         }
+        /// <summary>Rebuild the plates for whichever platform is active right now.</summary>
+        public void RebuildHudForPlatform(bool showPlates = false)
+        {
+            RebuildHudOnPlatformFlip();
+            if (showPlates && roundView != null) roundView.ShowHud();
+        }
+        /// <summary>The live round HUD (PC flat overlay or VR world plates).</summary>
+        public CareRoundView RoundView => roundView;
         void LateUpdate()
         {            // Track whichever transform is the real eye: the rig activates a few
             // frames after Start() and a controller/hand swap can move it again,
@@ -677,6 +740,10 @@ namespace ADayAtTheZoo.Monkeys.Care
                 foreach (var npc in monkeys) npc.StopAtCutoff();
                 if (held) held.Release(); held = null; StopHaptics();
                 GloveInventory?.Close();
+                // The PC bag button lives in its own screen-space root (not
+                // under the head anchor), so the child loop above never sees
+                // it; hide it here or it floats over the results card.
+                GloveInventory?.HideHud();
                 // Results view only: hide every other HUD attached to the
                 // head anchor (score, banana, tutorial, glove, ready gate).
                 foreach (Transform child in Head)
@@ -930,6 +997,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
         void OnDisable()
         {
+            CareInput.LabelsChanged -= RefreshReadyPrompt;
             audioFeedback.Stop();
             StopHaptics(); if (held) held.Release();
             GloveInventory?.Close();

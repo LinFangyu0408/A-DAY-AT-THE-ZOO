@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -22,18 +23,56 @@ namespace ADayAtTheZoo.Monkeys.Care
 
         AudioSource musicSource;
         AudioListener fallbackListener;
+        // The watchdog must not resurrect music the session explicitly stopped.
+        bool musicStopped;
         readonly Dictionary<Transform, AudioSource> effects = new();
 
         public void FollowCamera(Camera camera)
         {
             if (fallbackListener) fallbackListener.enabled = false;
+            fallbackListener = null;
             if (!camera) return;
-            foreach (var listener in UnityEngine.Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None))
-                if (listener.isActiveAndEnabled) return;
-
+            // Exactly one live listener, on the camera that is actually
+            // rendering. The scene ships three disabled AudioListeners (one per
+            // camera) and the platform switcher re-enables the ones under its
+            // own player root, so "any active listener wins" could leave audio
+            // attached to a camera that never renders. Pin the listener to the
+            // live camera instead.
+            foreach (var listener in UnityEngine.Object.FindObjectsByType<AudioListener>(
+                         FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+                if (listener.GetComponent<Camera>() != camera && listener.enabled)
+                    listener.enabled = false;
             fallbackListener = camera.GetComponent<AudioListener>();
             if (!fallbackListener) fallbackListener = camera.gameObject.AddComponent<AudioListener>();
             fallbackListener.enabled = true;
+        }
+
+        // Opening stutter: decoding all eight clips synchronously in Start()
+        // froze the first frame (the music clip alone decompresses ~40MB of
+        // PCM). Stream them in from the background loader, one per frame.
+        public IEnumerator Preload()
+        {
+            yield return LoadAsync(nameof(music), clip => music = music ? music : clip);
+            yield return LoadAsync(nameof(bananaGrab), clip => bananaGrab = bananaGrab ? bananaGrab : clip);
+            yield return LoadAsync(nameof(scratchGrab), clip => scratchGrab = scratchGrab ? scratchGrab : clip);
+            yield return LoadAsync(nameof(bite), clip => bite = bite ? bite : clip);
+            yield return LoadAsync(nameof(stroke), clip => stroke = stroke ? stroke : clip);
+            yield return LoadAsync(nameof(feedSuccess), clip => feedSuccess = feedSuccess ? feedSuccess : clip);
+            yield return LoadAsync(nameof(scratchSuccess), clip => scratchSuccess = scratchSuccess ? scratchSuccess : clip);
+        }
+
+        static IEnumerator LoadAsync(string name, Action<AudioClip> assign)
+        {
+            var request = Resources.LoadAsync<AudioClip>("HighlandLakeAudio/" + name);
+            while (!request.isDone) yield return null;
+            var clip = request.asset as AudioClip;
+            // Clips imported with preloadAudioData off decode lazily; force
+            // the decode up front so the first play can never come out as
+            // silence while the data is still streaming.
+            if (clip && !clip.preloadAudioData) clip.LoadAudioData();
+            assign(clip);
+            // One clip per frame keeps the main thread light during preload.
+            yield return null;
         }
 
         public void StartMusic(Transform owner)
@@ -47,20 +86,48 @@ namespace ADayAtTheZoo.Monkeys.Care
             stroke = Default(stroke, nameof(stroke));
             feedSuccess = Default(feedSuccess, nameof(feedSuccess));
             scratchSuccess = Default(scratchSuccess, nameof(scratchSuccess));
+            musicStopped = false;
             if (!music) return;
-            musicSource = CreateSource(owner, "Care Music");
-            musicSource.loop = true;
+            if (!musicSource)
+            {
+                musicSource = CreateSource(owner, "Care Music");
+                musicSource.loop = true;
+            }
             musicSource.clip = music;
             musicSource.volume = 0;
             musicSource.Play();
         }
 
-        static AudioClip Default(AudioClip clip, string name) =>
-            clip ? clip : Resources.Load<AudioClip>("HighlandLakeAudio/" + name);
+        static AudioClip Default(AudioClip clip, string name)
+        {
+            if (clip) return clip;
+            var loaded = Resources.Load<AudioClip>("HighlandLakeAudio/" + name);
+            if (loaded && !loaded.preloadAudioData) loaded.LoadAudioData();
+            return loaded;
+        }
 
         public void UpdateMusic(bool results)
         {
+            // Drop audio sources whose owner vanished (monkey disabled/deleted);
+            // otherwise silent AudioSources accumulate over long sessions.
+            if (effects.Count > 0)
+            {
+                var stale = new System.Collections.Generic.List<Transform>();
+                foreach (var pair in effects)
+                    if (!pair.Key || !pair.Value) stale.Add(pair.Key);
+                foreach (var key in stale)
+                {
+                    if (effects[key]) UnityEngine.Object.Destroy(effects[key].gameObject);
+                    effects.Remove(key);
+                }
+            }
             if (!musicSource) return;
+            // Music watchdog: if the Windows output endpoint switches (a
+            // headset runtime can grab the device mid-play) the source stops
+            // playing; restart it so the loop never falls silent for good.
+            if (!musicStopped && musicSource.clip && musicSource.volume > 0f &&
+                !musicSource.isPlaying && Time.timeScale > 0f)
+                musicSource.Play();
             float target = musicVolume * (results ? .35f : 1);
             musicSource.volume = Mathf.MoveTowards(musicSource.volume, target, Time.unscaledDeltaTime * .16f);
         }
@@ -144,6 +211,7 @@ namespace ADayAtTheZoo.Monkeys.Care
 
         public void Stop()
         {
+            musicStopped = true;
             if (fallbackListener) fallbackListener.enabled = false;
             if (musicSource) musicSource.Stop();
             foreach (var source in effects.Values)

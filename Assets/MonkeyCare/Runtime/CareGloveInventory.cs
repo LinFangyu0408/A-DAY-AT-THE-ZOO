@@ -12,8 +12,9 @@ namespace ADayAtTheZoo.Monkeys.Care
         readonly Text count, status, confirmButtonLabel, backButtonLabel, actionLabel, bagButtonLabel;
         // Once the player has picked a banana the first time, the glove keeps
         // feeding itself: every throw is followed by a fresh banana and a
-        // restock at the stand re-arms the hand. The bag is never needed again,
-        // so it also stops opening (and its button stops appearing).
+        // restock at the stand re-arms the hand. The corner entry button stays
+        // visible (and B keeps reopening the bag) for the whole round, so the
+        // player can always check or cancel the supply.
         bool autoEquip;
         public bool IsOpen { get; private set; }
         public bool BananaSelected => autoEquip;
@@ -73,15 +74,41 @@ namespace ADayAtTheZoo.Monkeys.Care
             status = Text(string.Empty, root, new Vector2(650, 54), new Vector2(0, -388),
                 40, TextAnchor.MiddleCenter, new Color(.40f, .25f, .14f, 1f));
 
-            bagButton = CareUi.Canvas("Care Backpack HUD", head,
-                new Vector3(-.77f, -.46f, 1.18f), .48f, new Vector2(360, 210));
+            // The bag entry button never disappears once the round allows it:
+            // the old "gone for good after the first selection" behaviour read
+            // as a bug (close the bag or grab a banana and the button vanished).
+            // Keep the corner entry alive for the whole round instead.
+            if (CarePlatform.FlatUi)
+            {
+                // PC flat layout: a screen-space plate pinned to the lower-left
+                // corner, tucked further left than the old world-space copy so
+                // it reads as part of the flat HUD chrome.
+                var flatRoot = CareUi.OverlayRoot("Care PC Bag Root", 55);
+                bagButton = CareUi.Plate("Care Backpack HUD", flatRoot,
+                    new Vector2(92, 44), new Vector2(400, 240),
+                    new Vector2(0f, 0f), new Vector2(0f, 0f));
+                // The corner entry used to be scaled to .72 of an already small
+                // plate, which left the bag icon at roughly 3.5% of the screen
+                // width. .9 with the larger plate keeps it a comfortable,
+                // readable HUD target without crowding the play area.
+                bagButton.localScale = Vector3.one * .9f;
+            }
+            else
+            {
+                bagButton = CareUi.Canvas("Care Backpack HUD", head,
+                    new Vector3(-.77f, -.46f, 1.18f), .48f, new Vector2(400, 240));
+            }
             CareUiSkin.Add(bagButton, "Bag icon", CareUiSkin.BackpackIcon,
-                new Vector2(128, 128), new Vector2(-70, 20), Color.white);
-            CareUiSkin.Add(bagButton, "Bag key thickness", CareUiSkin.RoundedCard,
-                new Vector2(60, 60), new Vector2(-57, -60),
-                new Color(.20f, .06f, .10f, .75f));
-            CareUiSkin.KeyBadge(bagButton, CareInput.BackLabel, new Vector2(52, 52),
-                new Vector2(-58, -57), out bagButtonLabel, 29, "Bag key");
+                new Vector2(180, 180), new Vector2(-64, 24), Color.white);
+            // A thin white ring under the key cap separates it from the brown
+            // bag artwork and the grass behind it (the badge used to sit on a
+            // dark translucent plate that read as a muddy halo).
+            CareUiSkin.Add(bagButton, "Bag key ring", CareUiSkin.KeyCapSprite,
+                new Vector2(88, 88), new Vector2(30, -58), new Color(1f, 1f, 1f, .96f));
+            var bagBadge = CareUiSkin.KeyBadge(bagButton, CareInput.BackLabel, new Vector2(74, 74),
+                new Vector2(30, -58), out bagButtonLabel, 52, "Bag key");
+            // Draw the cap above the icon so the badge never looks clipped.
+            bagBadge.transform.SetAsLastSibling();
 
             root.gameObject.SetActive(false);
             bagButton.gameObject.SetActive(false);
@@ -90,12 +117,13 @@ namespace ADayAtTheZoo.Monkeys.Care
 
         public void Tick(CareInputSnapshot input, CareRound round, bool mayOpen)
         {
-            // The bag entry disappears for good after the first selection.
-            bool showBagButton = mayOpen && !IsOpen && !autoEquip;
+            // The corner entry stays for the whole round: closing the bag or
+            // grabbing the first banana must not destroy or hide it.
+            bool showBagButton = mayOpen && !IsOpen;
             if (bagButton.gameObject.activeSelf != showBagButton)
                 bagButton.gameObject.SetActive(showBagButton);
             bagButtonLabel.text = CareInput.BackLabel;
-            bool canOpen = mayOpen && !autoEquip;
+            bool canOpen = mayOpen;
             if (input.BWasPressed && (IsOpen || canOpen)) Toggle(round, canOpen);
             if (!IsOpen) return;
             Refresh(round);
@@ -140,12 +168,29 @@ namespace ADayAtTheZoo.Monkeys.Care
         public void ShowHud()
         {
             bagButtonLabel.text = CareInput.BackLabel;
-            bagButton.gameObject.SetActive(!autoEquip);
+            bagButton.gameObject.SetActive(true);
         }
 
         public void HideHud()
         {
             if (!IsOpen) bagButton.gameObject.SetActive(false);
+        }
+
+        // The headset can be put on (or taken off) after Play started: the
+        // session rebuilds the whole HUD family for the other layout, so the
+        // bag plates (screen-space on PC, world-space in VR) must follow.
+        public void DestroyPlates()
+        {
+            if (root) UnityEngine.Object.Destroy(root.gameObject);
+            if (bagButton)
+            {
+                var flatRoot = bagButton.parent;
+                UnityEngine.Object.Destroy(bagButton.gameObject);
+                // The flat variant owns a whole overlay canvas; remove it too
+                // or an empty ScreenSpaceOverlay root lingers over VR.
+                if (flatRoot && flatRoot.name == "Care PC Bag Root")
+                    UnityEngine.Object.Destroy(flatRoot.gameObject);
+            }
         }
 
         public void Close()

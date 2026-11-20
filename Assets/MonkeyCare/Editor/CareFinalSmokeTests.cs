@@ -123,9 +123,14 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         var tutorialKey = GameObject.Find("Key GO")?.GetComponent<Image>();
         Check(tutorialTitle && tutorialTitle.text == "WELCOME TO THE ZOO",
             "beginner tutorial opens with a calm welcome step");
-        Check(tutorialBody && tutorialBody.fontSize >= 52,
+        // The PC chip layout uses a 24pt body on a 360-wide plate (same visual
+        // ratio as the old 54pt on the 800-wide VR plate); accept either scale.
+        Check(tutorialBody && tutorialBody.fontSize >= 24 &&
+              tutorialBody.transform.parent.GetComponent<RectTransform>()
+                  .sizeDelta.x > 0f,
             "beginner tutorial body text is enlarged");
-        Check(tutorialKey && tutorialKey.rectTransform.sizeDelta.x >= 132,
+        // PC chip badge is 60px on a 360-wide plate (60/360 == 132/800 ratio).
+        Check(tutorialKey && tutorialKey.rectTransform.sizeDelta.x >= 56,
             "beginner tutorial key badge is enlarged and round");
         Check(tutorialKey && tutorialKey.color.g > tutorialKey.color.b,
             "key badges are colour coded (GO / A green, B red, RT orange)");
@@ -137,9 +142,9 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         var tutorialBagBody = GameObject.Find("Tutorial body")?.GetComponent<Text>();
         var tutorialBagKey = tutorialKey ? tutorialKey.GetComponentInChildren<Text>() : null;
         Check(tutorialBagTitle && tutorialBagTitle.text == "OPEN THE BAG" &&
-              tutorialBagKey && tutorialBagKey.text == "B",
-            "beginner tutorial shows the enlarged round B control");
-        Check(tutorialBagBody && tutorialBagBody.text.Contains("Press B"),
+              tutorialBagKey && tutorialBagKey.text == CareInput.BackLabel,
+            "beginner tutorial shows the enlarged round back control");
+        Check(tutorialBagBody && tutorialBagBody.text.Contains("Press " + CareInput.BackLabel),
             "the bag step names the key before the player acts");
         Check(tutorialKey && tutorialKey.color.r > .6f && tutorialKey.color.g < .5f,
             "the B key cap is red while the A cap stays green");
@@ -169,7 +174,7 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             "the READY GO gate is actually visible while it waits for A");
         Capture("final-ready");
         var readyPrompt = GameObject.Find("Ready prompt")?.GetComponent<Text>();
-        Check(readyPrompt && readyPrompt.text == "PRESS A TO START",
+        Check(readyPrompt && readyPrompt.text == "PRESS " + CareInput.ConfirmLabel + " TO START",
             "ready gate shows the PRESS A TO START hint below Ready Go");
         Check(readyPrompt && readyPrompt.gameObject.activeInHierarchy && !session.RoundStarted,
             "the round waits for a deliberate A press instead of starting itself");
@@ -235,15 +240,23 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         var bagIcon = GameObject.Find("Bag icon")?.GetComponent<Image>();
         Check(bagIcon && bagIcon.sprite && bagIcon.sprite.name == "Care Backpack - bag_icon",
             "persistent backpack uses the supplied bag icon");
+        Check(bagIcon && bagIcon.rectTransform.sizeDelta.x >= 160,
+            "backpack icon was enlarged for readability");
         var bagKeyImage = GameObject.Find("Bag key")?.GetComponent<Image>();
         var bagKeyText = GameObject.Find("Bag key")?.GetComponentInChildren<Text>();
         Check(bagKeyImage && Mathf.Approximately(bagKeyImage.rectTransform.sizeDelta.x,
-                  bagKeyImage.rectTransform.sizeDelta.y) && bagKeyText && bagKeyText.text == "B",
-            "backpack uses a round B key badge");
-        Check(bagKeyImage && bagKeyImage.rectTransform.sizeDelta.x <= 56 &&
+                  bagKeyImage.rectTransform.sizeDelta.y) && bagKeyText && bagKeyText.text == CareInput.BackLabel,
+            "backpack uses a round back-key badge");
+        Check(bagKeyText && bagKeyText.color.r > .9f && bagKeyText.color.g > .9f &&
+              bagKeyText.color.b > .9f,
+            "the key glyph stays white on the coloured cap instead of red-on-red");
+        Check(bagKeyText && !bagKeyText.resizeTextForBestFit,
+            "the badge glyph renders at its authored size, not best-fit resampled");
+        Check(bagKeyImage && bagKeyImage.rectTransform.sizeDelta.x >= 66 &&
+              bagKeyImage.rectTransform.sizeDelta.x <= 84 &&
               !GameObject.Find("Backpack entry plate") &&
               !GameObject.Find("Backpack entry shadow"),
-            "backpack B is smaller with a visible depth edge and no white plate");
+            "backpack back-key badge grew with the icon and keeps a visible depth edge");
         Capture("final-hud");
 
         var stand = GameObject.Find("Banana Market Stand");
@@ -350,8 +363,9 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             "a fresh banana appears in the throwing hand immediately");
         var pickupKey = GameObject.Find("Pickup key");
         var pickupLabel = GameObject.Find("Pickup key label")?.GetComponent<Text>();
-        Check(pickupKey && pickupKey.activeInHierarchy && pickupLabel && pickupLabel.text == "A",
-            "banana storage exposes the A pickup prompt");
+        Check(pickupKey && pickupKey.activeInHierarchy && pickupLabel &&
+              pickupLabel.text == CareInput.ConfirmLabel,
+            "banana storage exposes the confirm pickup prompt");
         var pickupMarker = GetObjectField(session, "bananaPickup") as CarePickupMarker;
         if (stand)
         {
@@ -376,8 +390,8 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         yield return null;
         yield return null;
         Check(session.GloveInventory.AutoEquip &&
-              !session.GloveInventory.BagButtonRoot.gameObject.activeSelf,
-            "the bag never has to be opened again after the first banana");
+              session.GloveInventory.BagButtonRoot.gameObject.activeSelf,
+            "the corner bag entry survives the first banana (never destroyed or hidden)");
         Check(session.HeldItem && !session.GloveInventory.IsOpen,
             "restocking at the stand puts a banana straight back in the hand");
         if (stand)
@@ -449,10 +463,21 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             Vector3 npcFlat = new Vector3(hungry.transform.position.x, 0, hungry.transform.position.z);
             report.Add("OVERHEAD panel=" + (panelRoot ? panelRoot.position.ToString("F2") : "none") +
                        " monkey=" + hungry.transform.position.ToString("F2"));
+            float headTop = BoundsOf(hungry.gameObject).max.y;
+            report.Add("OVERHEAD headTop=" + headTop.ToString("F2") +
+                       " plateBottom=" + (panelRoot ? panelRoot.position.y.ToString("F2") : "-"));
             Check(panelRoot && panelRoot.gameObject.activeInHierarchy &&
                   panelRoot.position.y >= hungry.transform.position.y + .8f &&
+                  panelRoot.position.y >= headTop + .05f &&
                   Vector3.Distance(flat, npcFlat) <= .65f,
                 "the tolerance bar floats above the hungry monkey's head");
+            // Bottom-anchored card: barOffset names the lower edge, so growing the
+            // card can never push half of it back into the skull.
+            Check(panelRoot && Mathf.Approximately(panelRoot.pivot.y, 0f),
+                "the overhead card is anchored by its bottom edge");
+            var billboard = MonkeyCareSession.PlayerCamera;
+            Check(panelRoot && billboard && Vector3.Dot(panelRoot.forward, billboard.transform.forward) > .99f,
+                "the overhead card faces the player on the first visible frame");
             var panelTitle = panelRoot ? panelRoot.Find("Panel title")?.GetComponent<Text>() : null;
             Check(panelTitle && panelTitle.text == "STAMINA",
                 "the overhead bar shows live hunger tolerance");
@@ -550,14 +575,33 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         Check(Mathf.Abs(starAtSix - lineAtSix) <= 1.5f,
             "at six bananas the moving star sits exactly on the yellow passing line");
 
-        // ---- the banana counter turns red at three or fewer ----
+        // ---- the banana counter flashes red below three (0/1/2) ----
         var bananaText = GameObject.Find("Banana count")?.GetComponent<Text>();
         var lowRound = FedRound(0);
-        for (int i = 0; i < CareRound.StartingBananas - 3; i++) lowRound.ConsumeBanana();
+        for (int i = 0; i < CareRound.StartingBananas - 2; i++) lowRound.ConsumeBanana();
         roundView.Update(lowRound, 40f);
-        Check(bananaText && bananaText.text == "×3" && bananaText.color.r > .7f &&
-              bananaText.color.g < .35f,
-            "the banana counter turns red at three bananas");
+        Check(bananaText && bananaText.text == "×2" &&
+              bananaText.color.r > .7f && bananaText.color.g < .35f,
+            "the banana counter turns red at two bananas");
+        // The alarm blinks: over a short wait the red has to let up at least
+        // once (dim phase) instead of staying solid. Sample right after the
+        // view write — the session's LateUpdate repaints the HUD with the
+        // live round each frame, which would mask the alarm colour.
+        bool sawDim = false;
+        for (int frame = 0; frame < 90 && !sawDim; frame++)
+        {
+            roundView.Update(lowRound, 40f);
+            if (bananaText && bananaText.color.r > .7f && bananaText.color.a < .6f) sawDim = true;
+            yield return null;
+        }
+        Check(sawDim, "the low-stock red actually blinks instead of staying solid");
+        // Three bananas sit above the alarm threshold: ink stays dark there.
+        var threeRound = FedRound(0);
+        for (int i = 0; i < CareRound.StartingBananas - 3; i++) threeRound.ConsumeBanana();
+        roundView.Update(threeRound, 40f);
+        Check(bananaText && bananaText.text == "×3" &&
+              !(bananaText.color.r > .7f && bananaText.color.g < .35f),
+            "three bananas sit above the flashing alarm threshold");
         roundView.Update(FedRound(0), 40f);
         Check(bananaText && bananaText.color.g > .1f && !(bananaText.color.r > .7f && bananaText.color.g < .35f),
             "a full banana stock keeps the counter dark");
@@ -735,7 +779,170 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         Capture("final-results");
         Check(round.Score == 7 && round.Stars == 2 && round.IsPassing,
             "seven feedings shows passing two-star results");
+
+        // Driven step by step instead of "yield return PcHudPass()": handing the
+        // nested enumerator to Unity would bypass this driver's try/catch, and a
+        // failed check would then leave the editor stuck in play mode.
+        var pcPass = PcHudPass();
+        while (pcPass.MoveNext()) yield return pcPass.Current;
     }
+
+    // The whole suite above runs with ForceVr, because a headless editor has no
+    // headset and the world-space plates are what it measures. A real desktop
+    // launch builds the flat screen-space HUD instead, and that layout had no
+    // coverage at all — so flip the platform flag at the very end, rebuild
+    // through the same path a live headset hot-swap uses, and check what a PC
+    // player actually sees.
+    IEnumerator PcHudPass()
+    {
+        CarePlatform.ForceVr = false;
+        session.RebuildHudForPlatform();
+        if (session.RoundView != null)
+        {
+            session.RoundView.Continue();
+            session.RoundView.ShowHud();
+        }
+        yield return null;
+        Canvas.ForceUpdateCanvases();
+        yield return null;
+        Canvas.ForceUpdateCanvases();
+
+        var hud = GameObject.Find("Care PC HUD");
+        var hudCanvas = hud ? hud.GetComponent<Canvas>() : null;
+        Check(hudCanvas && hudCanvas.renderMode == RenderMode.ScreenSpaceOverlay,
+            "a PC launch builds the flat screen-space HUD instead of world plates");
+
+        var score = GameObject.Find("Care SCORE HUD")?.transform as RectTransform;
+        var banana = GameObject.Find("Care BANANA HUD")?.transform as RectTransform;
+        var bag = GameObject.Find("Care Backpack HUD")?.transform as RectTransform;
+        Check(score && banana && bag,
+            "the flat HUD carries the score, banana and backpack plates");
+
+        float scoreTop = ArtTop(score), bananaTop = ArtTop(banana);
+        report.Add("PC HUD artTop score=" + scoreTop.ToString("F1") +
+                   " banana=" + bananaTop.ToString("F1") +
+                   " delta=" + (scoreTop - bananaTop).ToString("F1"));
+        Check(Mathf.Abs(scoreTop - bananaTop) <= 14f,
+            "the score plate and the banana counter share the same top line on PC");
+
+        float screenW = hudCanvas.pixelRect.width, screenH = hudCanvas.pixelRect.height;
+        report.Add("PC HUD canvas=" + screenW + "x" + screenH +
+                   " scaleFactor=" + hudCanvas.scaleFactor.ToString("F2") +
+                   " scoreAnchor=" + score.anchorMin + "@" + score.anchoredPosition +
+                   " bananaAnchor=" + banana.anchorMin + "@" + banana.anchoredPosition);
+        foreach (var plate in new[] { score, banana, bag })
+        {
+            // Measure the artwork, not the plate rect: the score plate is
+            // deliberately parked 15px past the top edge so only its
+            // transparent margin is clipped.
+            Rect art = ArtBounds(plate);
+            bool inside = art.xMin >= -4 && art.yMin >= -4 &&
+                          art.xMax <= screenW + 4 && art.yMax <= screenH + 4;
+            report.Add("PC HUD art " + plate.name + "=" + art);
+            Check(inside, "PC plate " + plate.name + " stays inside the screen");
+        }
+
+        var chip = GameObject.Find("Pad style toggle")?.transform as RectTransform;
+        Check(chip && chip.GetComponent<Image>() && chip.GetComponent<Button>(),
+            "the flat HUD exposes the pad-style chip as a clickable button");
+        if (chip)
+        {
+            var corners = new Vector3[4];
+            chip.GetWorldCorners(corners);
+            Check(corners[0].x >= 0 && corners[2].x <= screenW &&
+                  corners[0].y >= 0 && corners[2].y <= screenH,
+                "the pad-style chip sits fully inside the bottom-right corner");
+        }
+        var chipLabel = chip ? chip.Find("Pad style label")?.GetComponent<Text>() : null;
+        bool ps = CareInput.PadStyle == CareInput.PadLayout.PlayStation;
+        Check(chipLabel && chipLabel.text.Contains(ps ? "PS" : "XBOX"),
+            "the chip advertises the layout the game actually detected");
+
+        // ScreenCapture is the only way to see a screen-space overlay: the
+        // camera capture used above renders world plates only. Taken before the
+        // last assertions so a failure still leaves a picture to look at.
+        string pcShot = Path.GetFullPath("work/monkey-care/final-pc-hud.png");
+        if (File.Exists(pcShot)) File.Delete(pcShot);
+        ScreenCapture.CaptureScreenshot(pcShot);
+        yield return null;
+        yield return null;
+        Check(File.Exists(pcShot), "the PC HUD screenshot was written for review");
+
+        // The corner bag entry is hidden behind the results card at this point,
+        // so read the badge from its own subtree instead of the active scene.
+        var bagRoot = session.GloveInventory != null ? session.GloveInventory.BagButtonRoot : null;
+        var bagTexts = bagRoot != null
+            ? bagRoot.GetComponentsInChildren<Text>(true)
+            : new Text[0];
+        var bagKey = bagTexts.FirstOrDefault();
+        report.Add("PC bag root=" + (bagRoot ? bagRoot.name : "null") +
+                   " texts=" + string.Join(" | ", bagTexts.Select(item => item.name + "='" + item.text + "'")) +
+                   " expected='" + CareInput.BackLabel + "'");
+        Check(bagKey && bagKey.text == CareInput.BackLabel,
+            "the PC backpack badge already uses the detected pad glyph");
+
+        // A single magenta object ruins the whole yard shot. Two causes: the
+        // material fell back to the error shader, or its shader is simply not
+        // supported by the active pipeline (both render as flat magenta).
+        var broken = UnityEngine.Object.FindObjectsByType<Renderer>(
+                FindObjectsInactive.Exclude, FindObjectsSortMode.None)
+            .Where(item => item.enabled && item.sharedMaterials.Any(material =>
+                !material || !material.shader || !material.shader.isSupported ||
+                material.shader.name.Contains("InternalErrorShader")))
+            .Select(item => item.name + "(" + string.Join("/", item.sharedMaterials
+                .Where(material => !material || !material.shader || !material.shader.isSupported ||
+                                   material.shader.name.Contains("InternalErrorShader"))
+                .Select(material => material && material.shader ? material.shader.name : "null")) + ")")
+            .Distinct().Take(16).ToArray();
+        report.Add("brokenMaterialRenderers=" + broken.Length +
+                   (broken.Length > 0 ? " [" + string.Join(", ", broken) + "]" : string.Empty));
+
+        // Identify whatever renders magenta in the shot: list the props close to
+        // the camera with their material, so the culprit can be named instead of
+        // squinting at a 875px screenshot.
+        var nearby = UnityEngine.Object.FindObjectsByType<Renderer>(
+                FindObjectsInactive.Exclude, FindObjectsSortMode.None)
+            .Where(item => item.enabled)
+            .Select(item => new { item.name, distance = Vector3.Distance(item.bounds.center, gameCamera.transform.position), item.sharedMaterials })
+            .Where(item => item.distance < 6f)
+            .OrderBy(item => item.distance)
+            .Take(12)
+            .Select(item => item.name + "@" + item.distance.ToString("F1") + "<" +
+                string.Join("/", item.sharedMaterials.Select(material =>
+                    material ? (material.shader ? material.shader.name : "noShader") + ":" + material.name : "null")) + ">");
+        report.Add("nearbyRenderers=" + string.Join(" ", nearby));
+    }
+
+    // Screen-pixel bounds of the artwork inside a plate. preserveAspect
+    // letterboxes the image inside its rect, so the raw rect corners claim a
+    // taller (or wider) panel than the player can actually see.
+    static Rect ArtBounds(RectTransform plate)
+    {
+        if (!plate) return new Rect();
+        var image = plate.GetComponentsInChildren<Image>(true)
+            .Where(item => item && item.sprite && item.rectTransform != plate)
+            .OrderByDescending(item => item.rectTransform.rect.width * item.rectTransform.rect.height)
+            .FirstOrDefault();
+        var corners = new Vector3[4];
+        var rect = image ? image.rectTransform : plate;
+        rect.GetWorldCorners(corners);
+        float xMin = corners[0].x, yMin = corners[0].y;
+        float xMax = corners[2].x, yMax = corners[2].y;
+        if (image && image.preserveAspect && image.sprite.rect.height > 0)
+        {
+            float aspect = image.sprite.rect.width / image.sprite.rect.height;
+            float width = xMax - xMin, height = yMax - yMin;
+            float fitHeight = Mathf.Min(height, width / aspect);
+            float fitWidth = Mathf.Min(width, height * aspect);
+            yMin += (height - fitHeight) * .5f;
+            xMin += (width - fitWidth) * .5f;
+            yMax = yMin + fitHeight;
+            xMax = xMin + fitWidth;
+        }
+        return Rect.MinMaxRect(xMin, yMin, xMax, yMax);
+    }
+
+    static float ArtTop(RectTransform plate) => ArtBounds(plate).yMax;
 
     // Deal the round's hunger episodes and settle a given number of feedings.
     static CareRound FedRound(int bananas)

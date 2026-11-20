@@ -62,6 +62,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         Image emotionImage;
         Text statusText;
         CareTaskRecord record;
+        string statusCache;
         float appearedAt;
         int consecutiveRescues;
         bool rescueRecorded;
@@ -97,8 +98,14 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (CareUiSkin.SvgHappy) ui.happy = CareUiSkin.SvgHappy;
             // Keep the hunger/stamina plate hugging the monkey's head: a plate
             // floating a metre higher drifted into the SCORE HUD.
-            ui.width = Mathf.Clamp(ui.width, 1.0f, 1.1f);
-            ui.barOffset.y = Mathf.Clamp(ui.barOffset.y, 1.25f, 1.45f);
+            ui.width = Mathf.Clamp(ui.width, .80f, .88f);
+            // The card is bottom-anchored now (see CarePanel), so this is the
+            // height of its LOWER edge. Anchor it a hand's width above the top of
+            // the model instead of a fixed 1.45 m: the old fixed centre put the
+            // lower half of the card inside the head, which is exactly what read
+            // as "the bar sits too low / clips the head".
+            float headTop = MeasureHeadTop();
+            ui.barOffset.y = headTop + HeadPlateGap;
             panel = new CarePanel(transform, ui);
             statusText = CareRoundView.Label("Care Status", panel.Root, "", new Vector2(900, 70), new Vector2(0, -170), 36);
             statusText.color = Color.white; statusText.gameObject.AddComponent<Shadow>();
@@ -146,7 +153,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             PlayPhase(need == CareNeed.Hunger ? MonkeyAction.Hungry : MonkeyAction.Scratching,
                 need == CareNeed.Hunger ? hungry : scratching);
             if (teleportPoint) teleportPoint.gameObject.SetActive(false);
-            panel.Root.gameObject.SetActive(true);
+            panel.Root.gameObject.SetActive(true); FacePanel();
             RefreshUi();
             if (need == CareNeed.Hunger)
                 MonkeyCareSession.Instance?.audioFeedback.Whistle(transform);
@@ -277,7 +284,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             // Hide the wide wave in StunExplosion; retain the small demand stars.
             if (demandFx && need == CareNeed.Itch) foreach (var r in demandFx.GetComponentsInChildren<ParticleSystemRenderer>(true)) if (r.sharedMaterial && r.sharedMaterial.name == "wave2") r.enabled = false;
             if (teleportPoint) teleportPoint.gameObject.SetActive(true);
-            panel.Root.gameObject.SetActive(true); RefreshUi();
+            panel.Root.gameObject.SetActive(true); FacePanel(); RefreshUi();
             if (need == CareNeed.Hunger)
                 MonkeyCareSession.Instance?.audioFeedback.Whistle(transform);
         }
@@ -383,7 +390,13 @@ namespace ADayAtTheZoo.Monkeys.Care
                 : target;
             bool showPlate = HasDemand;
             if (panel.Root.gameObject.activeSelf != showPlate)
+            {
                 panel.Root.gameObject.SetActive(showPlate);
+                // Face the camera on the very frame the card appears, otherwise
+                // the first frame inherits the monkey's rotation (upside-down
+                // card whenever the animal has its back to the player).
+                if (showPlate) FacePanel();
+            }
             if (showPlate)
                 panel.Show(satisfied, shownSatisfaction, satisfied ? Progress.StrokeTarget : 1);
             bool showEmotion = Celebrating || (Progress.Late && HasDemand && !EatingNow);
@@ -391,7 +404,9 @@ namespace ADayAtTheZoo.Monkeys.Care
             emotionImage.sprite = Celebrating ? ui.happy : ui.sad;
             if (!showPlate) return;
             float remaining = Progress.Deadline - Progress.Waited;
-            statusText.text = Celebrating
+            // The status line changes at most a few times a second; assigning
+            // it every frame rebuilt the text mesh for nothing.
+            string nextStatus = Celebrating
                 ? (Progress.Late ? "RESCUED! Normal speed next time." : "FED!")
                 : Progress.Late
                     ? (Need == CareNeed.Hunger
@@ -402,9 +417,52 @@ namespace ADayAtTheZoo.Monkeys.Care
                     : remaining <= 10
                         ? "HURRY! " + Mathf.CeilToInt(remaining) + " SEC"
                         : "";
+            if (statusCache != nextStatus)
+            {
+                statusCache = nextStatus;
+                statusText.text = nextStatus;
+            }
             statusText.color = !Celebrating && remaining <= 10 ? Color.Lerp(Color.white, new Color(1, .65f, .2f), .5f + .5f * Mathf.Sin(MonkeyCareSession.GameTime * 6)) : Color.white;
         }
+        // Height of the empty air gap between the top of the monkey's head and
+        // the bottom edge of the patience/satisfaction card.
+        const float HeadPlateGap = .16f;
+
+        // Top of the model in local vertical space. Renderer bounds are enough:
+        // the monkeys are upright and unscaled, and the value is only used to
+        // keep the card clear of the skull.
+        float MeasureHeadTop()
+        {
+            float top = 0f;
+            foreach (var item in GetComponentsInChildren<Renderer>(true))
+            {
+                if (!item || item is ParticleSystemRenderer) continue;
+                top = Mathf.Max(top, item.bounds.max.y);
+            }
+            top -= transform.position.y;
+            if (top < 1.0f || top > 2.6f) top = 1.5f;
+            return top;
+        }
+
         void LateUpdate()
+        {
+            if (panel == null) return;
+            FacePanel();
+            var camera = MonkeyCareSession.PlayerCamera;
+            if (!camera) return;
+            var view = camera.transform;
+            Vector3 offset = Celebrating ? ui.happyOffset : ui.sadOffset;
+            emotion.position = transform.position + view.right * offset.x + Vector3.up * offset.y + view.forward * offset.z;
+            emotion.rotation = view.rotation;
+            if (Progress != null && Need == CareNeed.Itch) RefreshUi();
+        }
+
+        // Billboard the head plate onto the player camera. Called every frame and
+        // again the moment the card is shown: it is parented to the monkey, so
+        // the first frame after activation used to inherit the monkey's rotation
+        // and the card flashed upside down (and mirrored) whenever the animal was
+        // facing away from the player.
+        void FacePanel()
         {
             if (panel == null) return;
             var camera = MonkeyCareSession.PlayerCamera;
@@ -412,10 +470,6 @@ namespace ADayAtTheZoo.Monkeys.Care
             var view = camera.transform;
             panel.Root.position = transform.position + Vector3.up * ui.barOffset.y + view.right * ui.barOffset.x + view.forward * ui.barOffset.z;
             panel.Root.rotation = view.rotation;
-            Vector3 offset = Celebrating ? ui.happyOffset : ui.sadOffset;
-            emotion.position = transform.position + view.right * offset.x + Vector3.up * offset.y + view.forward * offset.z;
-            emotion.rotation = view.rotation;
-            if (Progress != null && Need == CareNeed.Itch) RefreshUi();
         }
         void PlayPhase(MonkeyAction phase, CareAnimation setting)
         {

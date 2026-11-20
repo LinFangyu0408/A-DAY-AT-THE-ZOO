@@ -632,7 +632,10 @@ namespace ADayAtTheZoo.Monkeys.Care
             PlayerInRange = pickupBounds.SqrDistance(playerCamera.transform.position) <= PickupRange * PickupRange;
             int bananas = round != null ? round.Bananas : CareRound.StartingBananas;
             bool needsBananas = bananas < CareRound.StartingBananas;
-            keyLabel.text = CareInput.ConfirmLabel;
+            // Compare first: a blind .text write dirties the whole canvas every
+            // frame (same class of stutter the HUD caches fixed).
+            if (keyLabel.text != CareInput.ConfirmLabel)
+                keyLabel.text = CareInput.ConfirmLabel;
             // Keep the A badge visible so the crate reads as an interactable
             // supply point even before the first banana is thrown.
             keyBadge.gameObject.SetActive(true);

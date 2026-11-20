@@ -10,17 +10,17 @@ namespace ADayAtTheZoo.Monkeys.Care
         float began, duration;
         RectTransform rays;
         CanvasGroup alpha;
-        public static void Decorate(RectTransform root, Sprite star, float seconds)
+        public static void Decorate(RectTransform root, Sprite star, float seconds, float scale = 1f)
         {
-            var glow = CareUi.Rect("Ready gold glow", root, new Vector2(1100, 850), Vector2.zero);
+            var glow = CareUi.Rect("Ready gold glow", root, new Vector2(1100, 850) * scale, Vector2.zero);
             glow.gameObject.AddComponent<CareReadyGraphic>().kind = 0; glow.SetAsFirstSibling();
-            var rays = CareUi.Rect("Ready light rays", root, new Vector2(1040, 800), Vector2.zero);
+            var rays = CareUi.Rect("Ready light rays", root, new Vector2(1040, 800) * scale, Vector2.zero);
             rays.gameObject.AddComponent<CareReadyGraphic>().kind = 1; rays.SetSiblingIndex(1);
-            var ribbon = CareUi.Rect("Ready gold ribbon", root, new Vector2(1000, 210), new Vector2(0, -80));
+            var ribbon = CareUi.Rect("Ready gold ribbon", root, new Vector2(1000, 210) * scale, new Vector2(0, -80) * scale);
             ribbon.gameObject.AddComponent<CareReadyGraphic>().kind = 2; ribbon.SetSiblingIndex(2);
             foreach (var point in new[] { new Vector2(-410, 35), new Vector2(410, 35), new Vector2(-275, -230), new Vector2(275, -230) })
             {
-                var image = CareUi.Image("Ready star", root, star, new Vector2(90, 90), point);
+                var image = CareUi.Image("Ready star", root, star, new Vector2(90, 90) * scale, point * scale);
                 image.rectTransform.localEulerAngles = new Vector3(0, 0, point.x < 0 ? -12 : 12);
             }
             var view = root.gameObject.AddComponent<CareReadyView>(); view.duration = seconds;
