@@ -205,3 +205,10 @@
 - **香蕉必中 / 轨迹正确**：`TargetPoint` 加了合法性校验——只有离猴子 1.5m 内、且在胸-头高度区间内的 `Care Contact` 中心才被采用，否则退回 `猴子位置+0.8m`（此前一个零尺寸/游离触发器把 bounds.center 报成世界原点，香蕉就冻在半空）；吸附半径 1.1 → **1.5m**；出手仍是 `BallisticVelocity` 弹道（正确弧线）+ `ContinuousDynamic` + 扫掠检测。
 - **PC / VR 双设备 UI**：新增 `CarePlatform`（`IsVr` = XR 设备激活或 VR 手在跑；`ForceVr` 测试钩子）。PC（无头显/手柄）走 `CareUi.Overlay` **屏幕空间平面 HUD**（SCORE 顶部居中、香蕉右上、结算居中），VR Meta 3 保留世界空间漂浮板。冒烟测试 `CarePlatform.ForceVr=true` 强制走 VR 布局以保留原有世界坐标断言。
 - 冒烟 **90 断言**全过（VR 布局路径）；自检 273 全过。
+
+## 2026-11-21 00:25 第十五轮（真相：两次录屏都是 PC 回退态）
+- 看了录屏才定位真相：两段"VR/PC"视频里 **XR 都没启动**（Editor.log 00:00:51 `xrGetSystem: XR_ERROR_FORM_FACTOR_UNAVAILABLE`），游戏一直在跑**桌面回退**——所以所有 VR-only 修复（眼锁/手部射线/VR 布局）一行都没执行，用户看到的"VR"其实是 PC。
+- **平面 HUD 巨型化的真凶**：`CareUi.Overlay` 用固定像素（1000x480），Game 视图 2x 缩放下直接铺满屏幕——那个巨型香蕉面板就是把视野全遮住的"飘在天上"。
+- 修复：`CareUi.OverlayRoot`（单一根 Canvas + `CanvasScaler` 2400x1350 参考分辨率）+ `CareUi.Plate`（支持角锚点）；SCORE 略偏左、香蕉用**右上角锚点**（-40,-40）、结算居中，全部随屏幕等比缩放。
+- **平台中途切换**：头显戴上后 `VrPlatformSwitcher` 会激活 rig，但 HUD 是按当时的模式建的——新增 `RebuildHudOnPlatformFlip()`：`CareRoundView.BuiltForVr` 与 `CarePlatform.IsVr` 不一致时销毁旧板重建（日志 `HUD rebuilt for VR/PC layout`）。PC 下手部瞄准线也彻底关掉。
+- 冒烟 90 断言全过（ForceVr 走 VR 布局）。

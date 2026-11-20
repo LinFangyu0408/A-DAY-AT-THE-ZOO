@@ -20,6 +20,10 @@ namespace ADayAtTheZoo.Monkeys.Care
         readonly Transform head;
         readonly RectTransform scoreHud, bananaHud;
         RectTransform results;
+        RectTransform flatHud;
+        // Which layout the plates were built for, so the session can rebuild
+        // them when the headset connects (or is removed) mid-game.
+        public bool BuiltForVr { get; private set; }
         readonly Image progressFill;
         readonly Image[] stars = new Image[3];
         Sprite resultStarSprite;
@@ -75,14 +79,21 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             art = artwork;
             this.head = head;
+            BuiltForVr = !CarePlatform.FlatUi;
 
             // Kept well inside the headset's field of view: the old plate sat 21°
             // above the gaze line and the banana counter 33° to the right, so in
             // the headset both were parked on (or past) the edge of vision. On a
-            // PC (no headset) the same art becomes a flat 2D HUD overlay.
-            scoreHud = CarePlatform.FlatUi
-                ? CareUi.Overlay("Care SCORE HUD", new Vector2(0, 250), new Vector2(1000, 480), 10)
-                : CareUi.Canvas("Care SCORE HUD", head,
+            // PC (no headset) the same art lives in a scaled 2D HUD root.
+            if (CarePlatform.FlatUi)
+            {
+                flatHud = CareUi.OverlayRoot("Care PC HUD", 50);
+                // Score a little left of centre so the counter fits at the corner.
+                scoreHud = CareUi.Plate("Care SCORE HUD", flatHud,
+                    new Vector2(-160, 300), new Vector2(1000, 480));
+            }
+            else
+                scoreHud = CareUi.Canvas("Care SCORE HUD", head,
                     new Vector3(0, .34f, 1.12f), .70f, new Vector2(1000, 480), 10);
             var svgScore = CareUiSkin.SvgScorePanel;
             if (svgScore)
@@ -184,7 +195,9 @@ namespace ADayAtTheZoo.Monkeys.Care
                 new Color(1f, .80f, .24f, 1f));
 
             bananaHud = CarePlatform.FlatUi
-                ? CareUi.Overlay("Care BANANA HUD", new Vector2(540, 210), new Vector2(560, 322), 10)
+                ? CareUi.Plate("Care BANANA HUD", flatHud,
+                    new Vector2(-40, -40), new Vector2(560, 322),
+                    new Vector2(1f, 1f), new Vector2(1f, 1f))
                 : CareUi.Canvas("Care BANANA HUD",
                     art.bananaAnchor ? art.bananaAnchor : head,
                     art.bananaAnchor ? art.bananaOffset : new Vector3(.50f, .26f, 1.12f),
@@ -219,7 +232,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             // COMPLETE ribbon, three airy stat rows, big total score, three
             // stars, next-star hint, CONTINUE pill plus a round green button.
             results = CarePlatform.FlatUi
-                ? CareUi.Overlay("Care RESULTS", new Vector2(0, -10), new Vector2(900, 1300), 100)
+                ? CareUi.Plate("Care RESULTS", flatHud, new Vector2(0, -20), new Vector2(760, 1100))
                 : CareUi.Canvas("Care RESULTS", head,
                     new Vector3(0, -.02f, 1.30f), .50f, new Vector2(900, 1300), 100);
             // The shadow must share the card's rounded silhouette, otherwise a
@@ -307,6 +320,16 @@ namespace ADayAtTheZoo.Monkeys.Care
             button.restart = restart;
             button.image = image;
             return button;
+        }
+
+        // The headset can connect (or be removed) after the round started: tear
+        // the old plates down so the session can rebuild them for the other
+        // layout instead of leaving a giant flat panel over the VR view.
+        public void DestroyPlates()
+        {
+            foreach (var plate in new RectTransform[] { flatHud, scoreHud, bananaHud, results })
+                if (plate) UnityEngine.Object.Destroy(plate.gameObject);
+            flatHud = null; results = null;
         }
 
         public void Update(CareRound round, float elapsed)

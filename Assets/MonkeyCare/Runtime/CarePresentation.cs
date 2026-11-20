@@ -114,18 +114,37 @@ namespace ADayAtTheZoo.Monkeys.Care
             canvas.sortingOrder = sortingOrder;
             return r;
         }
-        // Flat 2D plate for the PC (no-headset) layout: a screen-space overlay
-        // canvas anchored to a screen corner, so the same art reads as a normal
-        // game HUD instead of a floating 3D panel.
-        public static RectTransform Overlay(string name, Vector2 anchor, Vector2 size, int sortingOrder = 0)
+        // Flat 2D HUD for the PC (no-headset) layout. One root canvas carries a
+        // CanvasScaler so every plate scales with the screen: fixed-pixel plates
+        // were rendered raw and a Game view zoom of 2x blew them up to cover the
+        // whole screen.
+        public static RectTransform OverlayRoot(string name, int sortingOrder = 0)
         {
-            var r = Rect(name, null, size, Vector2.zero);
-            var canvas = r.gameObject.AddComponent<Canvas>();
+            var go = new GameObject(name, typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var canvas = go.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = sortingOrder;
-            r.anchorMin = r.anchorMax = new Vector2(.5f, .5f);
-            r.pivot = new Vector2(.5f, .5f);
-            r.anchoredPosition = anchor;
+            var scaler = go.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            // A larger reference keeps the plates at HUD-like proportions
+            // (score ≈ 42% of the width) instead of half the screen.
+            scaler.referenceResolution = new Vector2(2400, 1350);
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            scaler.matchWidthOrHeight = .5f;
+            var r = go.transform as RectTransform;
+            r.anchorMin = Vector2.zero; r.anchorMax = Vector2.one;
+            r.offsetMin = Vector2.zero; r.offsetMax = Vector2.zero;
+            return r;
+        }
+        // A plate inside the flat HUD root. Positions are in the reference space;
+        // pass an anchor/pivot to pin a plate to a screen corner.
+        public static RectTransform Plate(string name, Transform parent, Vector2 anchoredPos, Vector2 size,
+            Vector2? anchor = null, Vector2? pivot = null)
+        {
+            var r = Rect(name, parent, size, anchoredPos);
+            r.anchorMin = r.anchorMax = anchor ?? new Vector2(.5f, .5f);
+            r.pivot = pivot ?? new Vector2(.5f, .5f);
+            r.anchoredPosition = anchoredPos;
             r.sizeDelta = size;
             return r;
         }

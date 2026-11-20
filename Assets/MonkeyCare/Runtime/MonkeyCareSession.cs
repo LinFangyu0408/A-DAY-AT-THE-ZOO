@@ -613,8 +613,9 @@ namespace ADayAtTheZoo.Monkeys.Care
                 arcAiming = false; arcValid = false; arc.enabled = false;
             }
             // The care ray belongs to the banana in hand. Empty-hand targeting
-            // must stay invisible so it cannot obstruct the scene.
-            pointer.enabled = !arcAiming && !menuOpen && held != null;
+            // must stay invisible so it cannot obstruct the scene. PC play gets
+            // no hand ray at all: aiming is done with the reticle-free cursor.
+            pointer.enabled = !CarePlatform.FlatUi && !arcAiming && !menuOpen && held != null;
             if (hasThrowArc)
             {
                 pointer.positionCount = throwPointCount;
@@ -645,12 +646,24 @@ namespace ADayAtTheZoo.Monkeys.Care
                     if (line && line.enabled) line.enabled = false;
             }
         }
+        // The headset can be put on (or removed) after Play started: the HUD must
+        // follow, otherwise the flat PC plates keep covering the VR view.
+        void RebuildHudOnPlatformFlip()
+        {
+            if (roundView == null || roundView.BuiltForVr == CarePlatform.IsVr) return;
+            bool vrNow = CarePlatform.IsVr;
+            roundView.DestroyPlates();
+            roundView = new CareRoundView(Head, roundArtwork);
+            if (RoundStarted && !Round.Frozen) roundView.ShowHud();
+            Debug.Log("[Monkey Care] HUD rebuilt for " + (vrNow ? "VR" : "PC") + " layout.");
+        }
         void LateUpdate()
         {            // Track whichever transform is the real eye: the rig activates a few
             // frames after Start() and a controller/hand swap can move it again,
             // so the anchor is re-parented every frame instead of once.
             if (uiHead) uiHead.Follow(HeadSource());
             SuppressHandRays();
+            RebuildHudOnPlatformFlip();
             // Start() is a coroutine: LateUpdate can run once before the round
             // object exists, so everything below requires a live round.
             if (!begun || Round == null) return;
