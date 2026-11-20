@@ -128,3 +128,13 @@
 - SCORE 条去 0/9 只留百分比；轨道精确对齐贴图+圆角奶油空槽。
 - 结算卡修复 SDF 漏 radius 的假圆角；卡+阴影共享 96px 大圆角。
 - Unity 用特定启动方式会静默退出，用 Bash 后台方式启动。
+
+## 2026-11-20 第八轮（喂食流程/节奏/教程）
+- 致命 bug 1：`CareRound` 构造函数调用 `Random.Range`，MonoBehaviour 字段初始化器禁止 → 抛异常后 Session 后续字段（records/arcPoints）未初始化 → `RegisterTask`/`TraceThrowArc` NRE，喂食永远完不成、score 恒 0%。改为 `DealFeedingTasks()`，在 Start 里调用。
+- 致命 bug 2：`MonkeyCareNpc.Update` 进食分支 `record.startedAt` 无判空，教程猴子 record 为 null 时每帧 NRE（日志 3 万条）。
+- 致命 bug 3：`CareReadyView` 用 `GameTime` 计时，而 Ready 阶段 gameTime 不推进 → CanvasGroup.alpha 恒 0，整块 READY GO 透明（"按 A 开始"提示消失）。改用 `Time.unscaledTime`。
+- Ready 门控：ShowReadyGate 时 `CareInput.ForgetEdges()` + 0.45s 武装期，必须重新按 A 才开始。
+- 饥饿轮转：Session 持有唯一 `HungerOwner`，`BeginHungerRotation` / `NotifyFed`（3-6s 随机）依次派单，三猴不会同时饿；首单耐心 55s（firstPatienceSeconds）。
+- 头顶耐受度条：删除玩家正前方的 `Care STAMINA HUD`，只保留猴子头顶 CarePanel；画布加 sortingOrder（HUD 10 / 头顶 60 / 教程 80 / Ready 90 / 结算 100），头顶条不再被 SCORE 压住。
+- 教程：0/1/2 步先走位与转视角（合计约 15s，带超时兜底），第 3 步才触发饥饿；按键统一成彩色圆形徽章（A 绿 / B 红 / RT 橙），用程序生成的白色圆角底避免贴图颜色相乘发暗。
+- 冒烟测试 56 项全过（含"一次只饿一只"、"头顶条在头上"、"喂完 score 同帧刷新"、"Ready 门控不自动开始"）。

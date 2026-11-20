@@ -18,7 +18,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             session = owner;
             root = CareUi.Canvas("Care Backpack", camera.transform,
-                new Vector3(0, -.17f, 1.16f), .82f, new Vector2(760, 801));
+                new Vector3(0, -.17f, 1.16f), .82f, new Vector2(760, 801), 70);
             var group = root.gameObject.AddComponent<CanvasGroup>();
             group.interactable = false;
             group.blocksRaycasts = false;
@@ -53,20 +53,14 @@ namespace ADayAtTheZoo.Monkeys.Care
             count = Text("10", countBadge.transform, new Vector2(54, 54), Vector2.zero,
                 31, TextAnchor.MiddleCenter, new Color(.30f, .18f, .08f, 1f));
 
-            var confirm = CareUiSkin.Add(root, "Confirm key", CareUiSkin.RoundButton,
-                new Vector2(78, 78), new Vector2(-222, -335),
-                new Color(.25f, .68f, .98f, 1f));
-            confirmButtonLabel = Text(CareInput.ConfirmLabel, confirm.transform,
-                new Vector2(78, 78), Vector2.zero, 46, TextAnchor.MiddleCenter, Color.white);
+            CareUiSkin.KeyBadge(root, CareInput.ConfirmLabel, new Vector2(78, 78),
+                new Vector2(-222, -335), out confirmButtonLabel, 46, "Confirm key");
             actionLabel = Text("SELECT", root, new Vector2(190, 54),
                 new Vector2(-103, -335), 42, TextAnchor.MiddleLeft,
                 new Color(.34f, .20f, .10f, 1f));
 
-            var back = CareUiSkin.Add(root, "Back key", CareUiSkin.RoundButton,
-                new Vector2(78, 78), new Vector2(56, -335),
-                new Color(.94f, .25f, .39f, 1f));
-            backButtonLabel = Text(CareInput.BackLabel, back.transform,
-                new Vector2(78, 78), Vector2.zero, 46, TextAnchor.MiddleCenter, Color.white);
+            CareUiSkin.KeyBadge(root, CareInput.BackLabel, new Vector2(78, 78),
+                new Vector2(56, -335), out backButtonLabel, 46, "Back key");
             Text("CLOSE BAG", root, new Vector2(230, 50), new Vector2(220, -335),
                 42, TextAnchor.MiddleLeft, new Color(.34f, .20f, .10f, 1f));
 
@@ -77,14 +71,11 @@ namespace ADayAtTheZoo.Monkeys.Care
                 new Vector3(-.77f, -.46f, 1.18f), .48f, new Vector2(360, 210));
             CareUiSkin.Add(bagButton, "Bag icon", CareUiSkin.BackpackIcon,
                 new Vector2(128, 128), new Vector2(-70, 20), Color.white);
-            CareUiSkin.Add(bagButton, "Bag key thickness", CareUiSkin.RoundButton,
-                new Vector2(56, 56), new Vector2(-57, -61),
-                new Color(.26f, .08f, .14f, .86f));
-            var bagKey = CareUiSkin.Add(bagButton, "Bag key", CareUiSkin.RoundButton,
-                new Vector2(52, 52), new Vector2(-58, -57),
-                new Color(.94f, .25f, .39f, 1f));
-            bagButtonLabel = Text(CareInput.BackLabel, bagKey.transform,
-                new Vector2(52, 52), Vector2.zero, 29, TextAnchor.MiddleCenter, Color.white);
+            CareUiSkin.Add(bagButton, "Bag key thickness", CareUiSkin.RoundedCard,
+                new Vector2(60, 60), new Vector2(-57, -60),
+                new Color(.20f, .06f, .10f, .75f));
+            CareUiSkin.KeyBadge(bagButton, CareInput.BackLabel, new Vector2(52, 52),
+                new Vector2(-58, -57), out bagButtonLabel, 29, "Bag key");
 
             root.gameObject.SetActive(false);
             bagButton.gameObject.SetActive(false);

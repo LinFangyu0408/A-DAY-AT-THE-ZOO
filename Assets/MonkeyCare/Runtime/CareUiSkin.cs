@@ -96,6 +96,37 @@ namespace ADayAtTheZoo.Monkeys.Care
             return image;
         }
 
+        // Every controller key gets its own colour so a prompt can never be
+        // mistaken for body copy: A green, B red, RT orange, sticks blue.
+        public static Color KeyColor(string key)
+        {
+            switch ((key ?? string.Empty).Trim().ToUpperInvariant())
+            {
+                case "A": return new Color(.20f, .72f, .36f, 1f);
+                case "B": return new Color(.90f, .24f, .32f, 1f);
+                case "RT": return new Color(.98f, .62f, .12f, 1f);
+                case "LT": return new Color(.98f, .45f, .16f, 1f);
+                case "L":
+                case "R": return new Color(.24f, .58f, .95f, 1f);
+                case "GO": return new Color(1f, .72f, .16f, 1f);
+                default: return new Color(.16f, .34f, .55f, 1f);
+            }
+        }
+
+        // Round key cap with the printed label, the visual language used by the
+        // reference artwork (a letter inside a coloured circle).
+        public static Image KeyBadge(Transform parent, string key, Vector2 size,
+            Vector2 position, out Text label, int fontSize = 44, string objectName = null)
+        {
+            // A plain white cap keeps the tint exact; the casual art carries its
+            // own colour and would multiply the key tint into a muddy tone.
+            var badge = Add(parent, string.IsNullOrEmpty(objectName) ? "Key " + key : objectName,
+                Rounded("KeyCap", 128, 64), size, position, KeyColor(key));
+            label = CareRoundView.Label("Key " + key + " label", badge.transform,
+                key, size * .94f, Vector2.zero, fontSize, TextAnchor.MiddleCenter, Color.white);
+            return badge;
+        }
+
         public static Image AddSliced(Transform parent, string name, Sprite sprite,
             Vector2 size, Vector2 position, Color color)
         {

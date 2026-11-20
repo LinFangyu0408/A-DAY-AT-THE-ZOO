@@ -14,6 +14,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         [InspectorName("下一次发痒等待（秒）"), Min(0)] public float itchInterval = 18;
         [InspectorName("补救后额外等待（秒）"), Min(0)] public float recoveryWait = 4;
         [InspectorName("耐心时限（秒）"), Min(.01f)] public float patienceSeconds = 30;
+        [InspectorName("首次耐心时限（秒）"), Min(.01f)] public float firstPatienceSeconds = 55;
         [Header("照顾要求")]
         [InspectorName("正常喂食（秒）"), Min(.01f)] public float feedingSeconds = 8;
         [InspectorName("超时喂食（秒）"), Min(.01f)] public float lateFeedingSeconds = 10;
@@ -88,10 +89,14 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (CareUiSkin.SvgSatisfactionLogo) ui.satisfactionLogo = CareUiSkin.SvgSatisfactionLogo;
             if (CareUiSkin.SvgSad) ui.sad = CareUiSkin.SvgSad;
             if (CareUiSkin.SvgHappy) ui.happy = CareUiSkin.SvgHappy;
+            // Keep the hunger/stamina plate hugging the monkey's head: a plate
+            // floating a metre higher drifted into the SCORE HUD.
+            ui.width = Mathf.Clamp(ui.width, 1.0f, 1.1f);
+            ui.barOffset.y = Mathf.Clamp(ui.barOffset.y, 1.25f, 1.45f);
             panel = new CarePanel(transform, ui);
             statusText = CareRoundView.Label("Care Status", panel.Root, "", new Vector2(900, 70), new Vector2(0, -170), 36);
             statusText.color = Color.white; statusText.gameObject.AddComponent<Shadow>();
-            emotion = CareUi.Canvas("Care Emotion", transform, Vector3.zero, ui.emotionSize, new Vector2(256, 256));
+            emotion = CareUi.Canvas("Care Emotion", transform, Vector3.zero, ui.emotionSize, new Vector2(256, 256), 61);
             emotionImage = CareUi.Image("Emotion", emotion, ui.sad, new Vector2(256, 256), Vector2.zero);
             emotion.gameObject.SetActive(false); panel.Root.gameObject.SetActive(false);
             if (teleportPoint) teleportPoint.gameObject.SetActive(false);
@@ -102,10 +107,18 @@ namespace ADayAtTheZoo.Monkeys.Care
             var round = MonkeyCareSession.Instance ? MonkeyCareSession.Instance.Round : null;
             started = true;
             nextNeed = round != null && round.FeedingOnly ? CareNeed.Hunger : firstNeed;
-            // First hunger request lands within a few seconds so players can
-            // feed right away instead of waiting with nothing to aim at.
-            waitUntil = MonkeyCareSession.GameTime + Mathf.Clamp(firstDelay, 3f, 6f);
+            // Hunger is handed out by the session's rotation, one monkey at a
+            // time; until then this monkey simply waves at the player.
+            waitUntil = float.PositiveInfinity;
             PlayPhase(MonkeyAction.Hi, wave);
+        }
+        // Called by the session rotation: become hungry once the clock passes
+        // the scheduled moment.
+        public void QueueDemand(float at)
+        {
+            if (!enabled || guidedTutorial) return;
+            if (!started) { started = true; waitUntil = at; PlayPhase(MonkeyAction.Hi, wave); return; }
+            waitUntil = at;
         }
         public bool TutorialSatisfied => guidedTutorial && Celebrating;
         public void BeginGuidedTutorial(CareNeed need)
@@ -177,7 +190,11 @@ namespace ADayAtTheZoo.Monkeys.Care
             }
             if (!HasDemand)
             {
-                if (CurrentTaskIndex < tasksPerMonkey && MonkeyCareSession.TaskTime >= waitUntil && MonkeyCareSession.TaskTime < CareRound.Cutoff) BeginDemand(nextNeed);
+                // Only the monkey that currently owns the hunger slot may ask
+                // for food, so the three of them never starve at once.
+                if (MonkeyCareSession.Instance.MayDemand(this) &&
+                    CurrentTaskIndex < tasksPerMonkey && MonkeyCareSession.TaskTime >= waitUntil &&
+                    MonkeyCareSession.TaskTime < CareRound.Cutoff) BeginDemand(nextNeed);
                 return;
             }
             float delta = Mathf.Max(0, MonkeyCareSession.TaskTime - appearedAt - Progress.Waited);
@@ -193,7 +210,7 @@ namespace ADayAtTheZoo.Monkeys.Care
                     // bar and emotion icon until the banana is finished.
                     if (panel.Root.gameObject.activeSelf) panel.Root.gameObject.SetActive(false);
                     if (emotion.gameObject.activeSelf) emotion.gameObject.SetActive(false);
-                    if (record.startedAt < 0)
+                    if (record != null && record.startedAt < 0)
                     {
                         record.startedAt = MonkeyCareSession.TaskTime - delta;
                         MonkeyCareSession.Instance.audioFeedback.Bite(transform);
@@ -239,7 +256,11 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             if (MonkeyCareSession.Instance.Round.FeedingOnly) need = CareNeed.Hunger;
             Need = need; HasDemand = true; Celebrating = false; smokeShown = false; feedingFrame = -1; EatingNow = false;
-            Progress = new CareProgress(patienceSeconds, feedingSeconds, lateFeedingSeconds, scratchCount, lateScratchCount);
+            // The first monkey of a round starves slowly so the player can
+            // learn the controls; later requests use the normal patience.
+            float patience = CurrentTaskIndex == 0
+                ? Mathf.Max(patienceSeconds, firstPatienceSeconds) : patienceSeconds;
+            Progress = new CareProgress(patience, feedingSeconds, lateFeedingSeconds, scratchCount, lateScratchCount);
             appearedAt = MonkeyCareSession.TaskTime; rescueRecorded = false;
             record = MonkeyCareSession.Instance.RegisterTask(Array.IndexOf(MonkeyCareSession.Instance.monkeys, this), CurrentTaskIndex, need, appearedAt);
             shownSatisfaction = fillFrom = fillTarget = 0;
@@ -287,10 +308,9 @@ namespace ADayAtTheZoo.Monkeys.Care
             CurrentTaskIndex++;
             nextNeed = MonkeyCareSession.Instance.Round.FeedingOnly ? CareNeed.Hunger :
                 Need == CareNeed.Hunger ? CareNeed.Itch : CareNeed.Hunger;
-            // The next request follows quickly (5-9s), keeping the round moving;
-            // staggered per-monkey timers make the order feel random.
-            waitUntil = CareRound.NextTime(completedAt, CurrentTaskIndex, Progress.Late,
-                Mathf.Min(hungerInterval, 6f) + UnityEngine.Random.Range(0f, 3f), recoveryWait);
+            // The session owns the schedule: it hands the next hunger request to
+            // another monkey 3-6 seconds from now (see NotifyFed).
+            waitUntil = float.PositiveInfinity;
             HasDemand = false; Celebrating = true; EatingNow = false;
             item.Consume();
             if (demandFx) Destroy(demandFx);

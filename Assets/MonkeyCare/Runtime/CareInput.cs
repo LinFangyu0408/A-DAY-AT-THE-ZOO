@@ -113,7 +113,9 @@ namespace ADayAtTheZoo.Monkeys.Care
             }
             if (allowDesktopFallback && noXrOrPad && Keyboard.current != null)
             {
-                a |= Keyboard.current.aKey.isPressed;
+                // Space also stands in for A so desktop preview matches the
+                // "PRESS A TO START" prompt either way.
+                a |= Keyboard.current.aKey.isPressed || Keyboard.current.spaceKey.isPressed;
                 b |= Keyboard.current.bKey.isPressed;
                 Vector2 keyboardMove = Vector2.zero;
                 if (Keyboard.current.wKey.isPressed) keyboardMove.y += 1;

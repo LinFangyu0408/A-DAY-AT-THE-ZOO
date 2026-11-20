@@ -24,12 +24,16 @@ namespace ADayAtTheZoo.Monkeys.Care
                 image.rectTransform.localEulerAngles = new Vector3(0, 0, point.x < 0 ? -12 : 12);
             }
             var view = root.gameObject.AddComponent<CareReadyView>(); view.duration = seconds;
-            view.originalScale = root.localScale; view.began = MonkeyCareSession.GameTime; view.rays = rays;
+            view.originalScale = root.localScale;
+            // The round clock only starts after the player presses A, so the
+            // intro must animate on real time — otherwise it stays fully
+            // transparent while the gate waits.
+            view.began = Time.unscaledTime; view.rays = rays;
             view.alpha = root.gameObject.AddComponent<CanvasGroup>();
         }
         void Update()
         {
-            float t = MonkeyCareSession.GameTime - began;
+            float t = Time.unscaledTime - began;
             float pop = t < .3f ? Mathf.Lerp(.82f, 1, Mathf.SmoothStep(0, 1, t / .3f)) : 1 + Mathf.Sin((t - .3f) * 3) * .012f;
             transform.localScale = originalScale * pop;
             alpha.alpha = Mathf.Clamp01(t / .1f) * Mathf.Clamp01((duration - t) / .18f);

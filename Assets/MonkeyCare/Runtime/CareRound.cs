@@ -22,6 +22,9 @@ namespace ADayAtTheZoo.Monkeys.Care
         public const float Cutoff = 150;
         public const float Duration = 160;
         public bool FeedingOnly { get; }
+        // Tasks are dealt by DealFeedingTasks(), never inside the constructor:
+        // UnityEngine.Random throws when called from a MonoBehaviour field
+        // initializer, which used to abort the rest of the session's fields.
         readonly int[] feedingTasks = { PlannedFeedings / 3, PlannedFeedings / 3, PlannedFeedings / 3 };
         public int TaskTotal => FeedingOnly ? PlannedFeedings : PlannedTasks;
         public int[] Feedings { get; } = new int[3];
@@ -38,15 +41,16 @@ namespace ADayAtTheZoo.Monkeys.Care
             firstNeeds = feedingOnly ? new[] { CareNeed.Hunger, CareNeed.Hunger, CareNeed.Hunger } :
                 startingNeeds != null && startingNeeds.Length == 3 ? (CareNeed[])startingNeeds.Clone() :
                 new[] { CareNeed.Hunger, CareNeed.Hunger, CareNeed.Hunger };
-            if (feedingOnly)
-            {
-                // Start from two hunger episodes each, then deal the remaining
-                // episodes to random monkeys so every round feels different.
-                int[] tasks = { 2, 2, 2 };
-                for (int i = 0; i < PlannedFeedings - tasks[0] - tasks[1] - tasks[2]; i++)
-                    tasks[UnityEngine.Random.Range(0, 3)]++;
-                feedingTasks = tasks;
-            }
+        }
+        // Deal the nine hunger episodes across the three monkeys. Called from
+        // Awake/Start so Unity's random source is safe to use.
+        public void DealFeedingTasks()
+        {
+            if (!FeedingOnly) return;
+            int[] tasks = { 2, 2, 2 };
+            for (int i = 0; i < PlannedFeedings - tasks[0] - tasks[1] - tasks[2]; i++)
+                tasks[UnityEngine.Random.Range(0, 3)]++;
+            for (int i = 0; i < feedingTasks.Length; i++) feedingTasks[i] = tasks[i];
         }
         public int FeedingTotal => Feedings[0] + Feedings[1] + Feedings[2];
         public int ScratchTotal => Scratches[0] + Scratches[1] + Scratches[2];

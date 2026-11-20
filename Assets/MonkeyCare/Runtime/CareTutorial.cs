@@ -5,13 +5,18 @@ namespace ADayAtTheZoo.Monkeys.Care
 {
     public sealed class CareTutorial : MonoBehaviour
     {
-        const int FinalStep = 8;
+        const int FinalStep = 7;
+        // The first ~15 seconds belong to the player: walk around, look at the
+        // zoo, get comfortable. Only then does the first monkey get hungry and
+        // the bag / feeding instructions appear.
+        const float ExplorationSeconds = 15f;
         MonkeyCareSession session;
         RectTransform root;
         CanvasGroup group;
-        Text stepLabel, title, body, action, keyBadge;
+        Text stepLabel, title, body, action, keyLabel;
+        Image keyCap;
         int step = -1;
-        float shownAt, stepAt, hungerStartedAt;
+        float shownAt, stepAt, beganAt;
         bool finished, hungerStarted;
         string controllerLabels;
 
@@ -19,12 +24,13 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             session = owner;
             shownAt = visibleAt;
+            beganAt = Time.unscaledTime;
             stepAt = Time.unscaledTime;
             // The tutorial must never block the player's view. Park it in the
             // upper-left corner as a compact hint panel, well clear of the
-            // centred SCORE/STAMINA HUD column.
+            // centred SCORE HUD.
             root = CareUi.Canvas("Care Tutorial", camera.transform,
-                new Vector3(-.82f, .24f, 1.34f), .56f, new Vector2(820, 470));
+                new Vector3(-.82f, .24f, 1.34f), .56f, new Vector2(820, 470), 80);
             group = root.gameObject.AddComponent<CanvasGroup>();
             group.alpha = 0;
             group.interactable = false;
@@ -43,12 +49,10 @@ namespace ADayAtTheZoo.Monkeys.Care
                 new Vector2(82, 76), new Vector2(334, 202), new Color(1f, .82f, .20f, 1f));
             star.preserveAspect = true;
 
-            var badgePanel = CareUiSkin.Add(root, "Key badge", CareUiSkin.RoundButton,
-                new Vector2(132, 132), new Vector2(-318, 140), Color.white);
-            keyBadge = Label("Key", badgePanel.transform, string.Empty, new Vector2(128, 128), Vector2.zero,
-                66, TextAnchor.MiddleCenter, new Color(.08f, .18f, .31f, 1));
+            keyCap = CareUiSkin.KeyBadge(root, "GO", new Vector2(132, 132),
+                new Vector2(-318, 140), out keyLabel, 46);
 
-            stepLabel = Label("Tutorial step", root, "STEP 1 / 9", new Vector2(170, 38),
+            stepLabel = Label("Tutorial step", root, "STEP 1 / 8", new Vector2(170, 38),
                 new Vector2(-205, 142), 28, TextAnchor.MiddleCenter, new Color(.95f, .98f, 1f, 1));
             stepLabel.gameObject.SetActive(false);
             title = Label("Tutorial title", root, string.Empty, new Vector2(600, 68),
@@ -57,6 +61,8 @@ namespace ADayAtTheZoo.Monkeys.Care
                 new Vector2(0, -14), 54, TextAnchor.MiddleCenter, new Color(.035f, .10f, .19f, 1));
             CareUiSkin.AddSliced(root, "Tutorial action panel", CareUiSkin.Button,
                 new Vector2(736, 92), new Vector2(0, -166), new Color(.78f, .94f, 1f, 1f));
+            // One key cap only (in the header) keeps the card quiet; the action
+            // bar repeats the instruction in words instead of a second badge.
             action = Label("Tutorial action", root, string.Empty, new Vector2(700, 72),
                 new Vector2(0, -166), 44, TextAnchor.MiddleCenter, Color.white);
 
@@ -82,50 +88,66 @@ namespace ADayAtTheZoo.Monkeys.Care
             switch (step)
             {
                 case 0:
-                    if (Elapsed >= 1.5f) ShowStep(1);
+                    if (StepElapsed >= 2.5f) ShowStep(1);
                     break;
                 case 1:
-                    if (input.LeftStick.sqrMagnitude > .08f) ShowStep(2);
+                    // Move around first; the fallback keeps the tutorial from
+                    // stalling if the player only watches.
+                    if ((input.LeftStick.sqrMagnitude > .08f && StepElapsed >= 2f) || TotalElapsed >= 8f)
+                        ShowStep(2);
                     break;
                 case 2:
-                    if (Mathf.Abs(input.RightStick.x) > .25f) ShowStep(3);
+                    if ((Mathf.Abs(input.RightStick.x) > .18f && StepElapsed >= 2f) || TotalElapsed >= 14.5f)
+                        ShowStep(3);
                     break;
                 case 3:
-                    if (Elapsed >= 4f) ShowStep(4);
+                    if (!hungerStarted)
+                    {
+                        hungerStarted = true;
+                        session.BeginTutorialHunger();
+                    }
+                    if (session.GloveInventory != null && session.GloveInventory.IsOpen) ShowStep(4);
                     break;
                 case 4:
-                    if (session.GloveInventory != null && session.GloveInventory.IsOpen) ShowStep(5);
+                    if (session.HeldItem && session.HeldItem.kind == CareNeed.Hunger &&
+                        session.GloveInventory != null && !session.GloveInventory.IsOpen) ShowStep(5);
                     break;
                 case 5:
-                    if (session.HeldItem && session.HeldItem.kind == CareNeed.Hunger &&
-                        session.GloveInventory != null && !session.GloveInventory.IsOpen) ShowStep(6);
+                    if (input.TriggerHeld && session.HeldItem) ShowStep(6);
                     break;
                 case 6:
-                    if (input.TriggerHeld && session.HeldItem) ShowStep(7);
-                    break;
-                case 7:
-                    if (session.TutorialHungerSatisfied) ShowStep(8);
+                    if (session.TutorialHungerSatisfied) ShowStep(FinalStep);
                     else if (HoldingFood && (session.GloveInventory == null || !session.GloveInventory.IsOpen))
-                        ShowStep(6);
-                    else if (Elapsed >= 1.5f && !HoldingFood &&
+                    {
+                        // Stay on the throw step while the banana is in hand.
+                    }
+                    else if (StepElapsed >= 1.5f &&
                              (session.GloveInventory == null || !session.GloveInventory.IsOpen))
                     {
-                        action.text = "RELEASE RT TO TRY AGAIN";
-                        keyBadge.text = "RT";
+                        action.text = "RELEASE TRIGGER TO TRY AGAIN";
+                        SetKey("RT");
                     }
                     break;
                 case FinalStep:
-                    if (Elapsed >= 3f) Finish();
+                    if (StepElapsed >= 3f) Finish();
                     break;
             }
             if (step == 4 && session.GloveInventory != null && session.GloveInventory.IsOpen)
-                keyBadge.text = CareInput.BackLabel;
+                SetKey(CareInput.BackLabel);
             stepLabel.text = "STEP " + (step + 1) + " / " + (FinalStep + 1);
         }
 
         float Elapsed => Time.unscaledTime - stepAt;
+        float StepElapsed => Elapsed;
+        float TotalElapsed => Time.unscaledTime - beganAt;
 
         bool HoldingFood => session.HeldItem && session.HeldItem.kind == CareNeed.Hunger;
+
+        void SetKey(string key)
+        {
+            keyLabel.text = key;
+            keyCap.color = CareUiSkin.KeyColor(key);
+        }
 
         void ShowStep(int value)
         {
@@ -135,64 +157,63 @@ namespace ADayAtTheZoo.Monkeys.Care
             switch (step)
             {
                 case 0:
-                    title.text = "FEED MONKEYS";
-                    body.text = "Learn the controls in under a minute.";
+                    title.text = "WELCOME TO THE ZOO";
+                    body.text = "Take a look around first.";
                     action.text = "GET READY";
-                    keyBadge.text = "GO";
+                    SetKey("GO");
                     break;
                 case 1:
                     title.text = "WALK";
-                    body.text = "Use the left stick.";
-                    action.text = "MOVE TO CONTINUE";
-                    keyBadge.text = "L";
+                    body.text = "Use the left stick to move.";
+                    action.text = "WALK TO CONTINUE";
+                    SetKey("L");
                     break;
                 case 2:
                     title.text = "LOOK AROUND";
-                    body.text = "Use the right stick.";
+                    body.text = "Use the right stick to look.";
                     action.text = "LOOK TO CONTINUE";
-                    keyBadge.text = "R";
+                    SetKey("R");
                     break;
                 case 3:
                     if (!hungerStarted)
                     {
                         hungerStarted = true;
-                        hungerStartedAt = Time.unscaledTime;
                         session.BeginTutorialHunger();
                     }
                     title.text = "A MONKEY IS HUNGRY";
-                    body.text = "Find it and open your bag.";
+                    body.text = "Find it, then open your bag.";
                     action.text = "FIND THE MONKEY";
-                    keyBadge.text = "!";
+                    SetKey("!");
                     break;
                 case 4:
                     title.text = "OPEN THE BAG";
-                    body.text = "Press " + CareInput.BackLabel + ".";
-                    action.text = "PRESS " + CareInput.BackLabel + " TO OPEN";
-                    keyBadge.text = CareInput.BackLabel;
+                    body.text = "Open the bag to take a banana.";
+                    action.text = "PRESS TO OPEN THE BAG";
+                    SetKey(CareInput.BackLabel);
                     break;
                 case 5:
                     title.text = "TAKE A BANANA";
-                    body.text = "Press " + CareInput.ConfirmLabel + ".";
-                    action.text = "PRESS " + CareInput.ConfirmLabel + " TO SELECT";
-                    keyBadge.text = CareInput.ConfirmLabel;
+                    body.text = "Select the banana in the bag.";
+                    action.text = "PRESS TO SELECT";
+                    SetKey(CareInput.ConfirmLabel);
                     break;
                 case 6:
                     title.text = "AIM";
-                    body.text = "Hold RT on the monkey.";
-                    action.text = HoldingFood ? "HOLD RT TO AIM" : "OPEN THE BAG AND TAKE A BANANA";
-                    keyBadge.text = "RT";
+                    body.text = "Hold the trigger on the monkey.";
+                    action.text = HoldingFood ? "HOLD TO AIM" : "TAKE A BANANA FIRST";
+                    SetKey("RT");
                     break;
-                case 7:
+                case FinalStep:
                     title.text = "THROW";
-                    body.text = "Release RT to throw.";
-                    action.text = session.TutorialHungerSatisfied ? "GOOD THROW!" : "RELEASE RT TO THROW";
-                    keyBadge.text = "RT";
+                    body.text = "Release the trigger to throw.";
+                    action.text = "RELEASE TO THROW";
+                    SetKey("RT");
                     break;
                 default:
                     title.text = "GREAT JOB";
                     body.text = "Keep feeding the monkeys.";
                     action.text = "TUTORIAL COMPLETE";
-                    keyBadge.text = "OK";
+                    SetKey("OK");
                     break;
             }
         }
@@ -222,14 +243,6 @@ namespace ADayAtTheZoo.Monkeys.Care
             text.raycastTarget = false;
             text.text = value;
             return CareRoundView.Legible(text, fontSize);
-        }
-
-        static void AddOutline(Graphic graphic, Color color, Vector2 distance)
-        {
-            var outline = graphic.gameObject.AddComponent<Outline>();
-            outline.effectColor = color;
-            outline.effectDistance = distance;
-            outline.useGraphicAlpha = true;
         }
     }
 }

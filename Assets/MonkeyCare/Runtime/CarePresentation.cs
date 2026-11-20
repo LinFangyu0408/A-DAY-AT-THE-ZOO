@@ -102,13 +102,16 @@ namespace ADayAtTheZoo.Monkeys.Care
             var r = Rect(name, parent, size, pos); var image = r.gameObject.AddComponent<Image>();
             image.sprite = sprite; image.raycastTarget = false; return image;
         }
-        public static RectTransform Canvas(string name, Transform parent, Vector3 position, float width, Vector2 size)
+        public static RectTransform Canvas(string name, Transform parent, Vector3 position, float width, Vector2 size, int sortingOrder = 0)
         {
             var r = Rect(name, parent, size, Vector2.zero); r.localPosition = position;
             Vector3 parentScale = parent ? parent.lossyScale : Vector3.one;
             float unit = width / size.x;
             r.localScale = new Vector3(unit / parentScale.x, unit / parentScale.y, unit / parentScale.z);
             var canvas = r.gameObject.AddComponent<Canvas>(); canvas.renderMode = RenderMode.WorldSpace;
+            // World-space canvases sort by distance unless an explicit order is
+            // given; the monkey's head plate must win over the fixed HUD.
+            canvas.sortingOrder = sortingOrder;
             return r;
         }
     }
@@ -127,7 +130,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         public CarePanel(Transform parent, CareUiStyle value)
         {
             style = value;
-            Root = CareUi.Canvas("Care Progress", parent, value.barOffset, value.width, new Vector2(640, 290));
+            Root = CareUi.Canvas("Care Progress", parent, value.barOffset, value.width, new Vector2(640, 290), 60);
             panel = CareUi.Image("Panel", Root, value.stamina, new Vector2(640, 290), Vector2.zero);
             // Cover the baked English title and the old white separator so the
             // gameplay caption can switch between patience and satisfaction in

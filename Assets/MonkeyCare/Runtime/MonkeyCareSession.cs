@@ -55,7 +55,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         public static Camera PlayerCamera => Instance ? Instance.playerCamera : null;
         public static float GameTime => Instance ? Instance.gameTime : Time.time;
         public static float TaskTime => Mathf.Min(GameTime, CareRound.Cutoff);
-        public CareRound Round { get; private set; } = new CareRound();
+        public CareRound Round { get; private set; }
         public bool UsingVrHands =>
             rig && rig.gameObject.activeInHierarchy &&
             rig.leftControllerAnchor && rig.rightControllerAnchor;
@@ -118,7 +118,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         bool begun, focused = true, arcAiming, arcValid, suppressUntilRelease;
         bool tutorialCompleted;
         bool readyGateActive, goSequenceActive;
-        float goUntil;
+        float goUntil, readyArmedAt;
         bool hapticControllerLogged;
         Vector3 lastThrowVelocity;
         bool hasThrowSolution;
@@ -146,6 +146,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (locomotion) locomotion.externalRightHandControl = true;
             begun = true;
             Round = new CareRound(MonkeyStartingNeeds(), feedingOnly);
+            Round.DealFeedingTasks();
             rigStartPosition = rig.transform.position; rigStartRotation = rig.transform.rotation;
             SetupFeedingOnlyScene();
             farmEnvironment = CareFarmEnvironment.Create(playerCamera);
@@ -221,7 +222,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             if (readyCanvas) Destroy(readyCanvas.gameObject);
             readyCanvas = CareUi.Canvas("Care READY GO", playerCamera.transform,
-                new Vector3(0, 0, 1.45f), .94f, new Vector2(960, 760));
+                new Vector3(0, 0, 1.45f), .94f, new Vector2(960, 760), 90);
             var readyArt = CareUiSkin.SvgReadyGo ? CareUiSkin.SvgReadyGo : readyGo;
             if (readyArt)
                 CareUi.Image("READY GO", readyCanvas, readyArt, new Vector2(960, 560), Vector2.zero);
@@ -234,12 +235,9 @@ namespace ADayAtTheZoo.Monkeys.Care
             CareUiSkin.AddSliced(readyCanvas, "Ready prompt plate", CareUiSkin.Slot,
                 new Vector2(620, 108), new Vector2(0, -318), new Color(.08f, .25f, .42f, .94f))
                 .transform.SetAsLastSibling();
-            var readyKey = CareUiSkin.Add(readyCanvas, "Ready key", CareUiSkin.RoundButton,
-                new Vector2(116, 116), new Vector2(-206, -318), Color.white);
+            var readyKey = CareUiSkin.KeyBadge(readyCanvas, "A", new Vector2(116, 116),
+                new Vector2(-206, -318), out readyKeyLabel, 56);
             readyKey.transform.SetAsLastSibling();
-            readyKeyLabel = CareRoundView.Label("Ready key label", readyKey.transform,
-                "A", new Vector2(112, 112), Vector2.zero, 56,
-                TextAnchor.MiddleCenter, new Color(.08f, .18f, .31f, 1f));
             readyPrompt = CareRoundView.Label("Ready prompt",
                 readyCanvas, "PRESS A TO START",
                 new Vector2(420, 72), new Vector2(56, -318), 42,
@@ -247,6 +245,10 @@ namespace ADayAtTheZoo.Monkeys.Care
             readyPrompt.transform.SetAsLastSibling();
             readyGateActive = true;
             goSequenceActive = false;
+            // Starting the round must be a deliberate press: drop any edge the
+            // movement stick / keyboard left behind and ignore A for a moment.
+            CareInput.ForgetEdges();
+            readyArmedAt = Time.unscaledTime + .45f;
             SetPlayerInputLocked(true);
         }
         void AcceptReadyGate()
@@ -279,6 +281,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             {
                 RoundStarted = true;
                 foreach (var npc in monkeys) if (npc) npc.BeginSession();
+                BeginHungerRotation(2.5f);
             }
             roundView.ShowHud();
             GloveInventory?.ShowHud();
@@ -306,11 +309,50 @@ namespace ADayAtTheZoo.Monkeys.Care
                 npc.EndGuidedTutorial();
                 npc.BeginSession();
             }
+            BeginHungerRotation(2.5f);
         }
         public void BeginTutorialHunger()
         {
             if (!TutorialActive || RoundStarted) return;
             TutorialMonkey?.BeginGuidedTutorial(CareNeed.Hunger);
+        }
+        // ---- hunger rotation -------------------------------------------------
+        // Exactly one monkey may be hungry at a time. Feeding it hands the
+        // request to the next monkey 3-6 seconds later, so three monkeys never
+        // stack up and the round always shows a single clear target.
+        public MonkeyCareNpc HungerOwner { get; private set; }
+        int hungerCursor;
+        public bool MayDemand(MonkeyCareNpc npc) => npc && HungerOwner == npc;
+        public void BeginHungerRotation(float delay = 2.5f)
+        {
+            hungerCursor = -1;
+            ScheduleNextHunger(delay);
+        }
+        public void NotifyFed(MonkeyCareNpc fed)
+        {
+            if (Round == null || Round.Frozen) return;
+            if (Round.FeedingTotal >= Round.TaskTotal) { HungerOwner = null; return; }
+            // 3-6s pause after a successful feeding, then the next monkey asks.
+            ScheduleNextHunger(UnityEngine.Random.Range(3f, 6f));
+        }
+        void ScheduleNextHunger(float delay)
+        {
+            if (monkeys == null || monkeys.Length == 0 || Round == null) { HungerOwner = null; return; }
+            MonkeyCareNpc repeat = null;
+            for (int step = 1; step <= monkeys.Length; step++)
+            {
+                int index = (hungerCursor + step + monkeys.Length) % monkeys.Length;
+                var npc = monkeys[index];
+                if (!npc || npc.CurrentTaskIndex >= Round.TasksForMonkey(index)) continue;
+                if (npc == HungerOwner) { repeat = npc; continue; }
+                hungerCursor = index;
+                HungerOwner = npc;
+                npc.QueueDemand(TaskTime + delay);
+                return;
+            }
+            // Only the monkey that was just fed still has episodes left.
+            HungerOwner = repeat;
+            if (repeat) repeat.QueueDemand(TaskTime + delay);
         }
         public void SetGloveMenuOpen(bool open)
         {
@@ -411,7 +453,14 @@ namespace ADayAtTheZoo.Monkeys.Care
                 if (pointer) pointer.enabled = false;
                 if (arc) arc.enabled = false;
                 StopHaptics();
-                if (Input.AWasPressed) AcceptReadyGate();
+                // Keep the instruction alive and pulsing so it can never be
+                // mistaken for a decorative label.
+                if (readyPrompt)
+                {
+                    float pulse = .72f + .28f * (.5f + .5f * Mathf.Sin(Time.unscaledTime * 3.4f));
+                    readyPrompt.color = new Color(1f, 1f, 1f, pulse);
+                }
+                if (Input.AWasPressed && Time.unscaledTime >= readyArmedAt) AcceptReadyGate();
                 return;
             }
             if (goSequenceActive)
@@ -528,6 +577,7 @@ namespace ADayAtTheZoo.Monkeys.Care
                 (gameTime >= CareRound.Cutoff || Round.FeedingTotal >= Round.TaskTotal))
             {
                 Round.Freeze();
+                HungerOwner = null;
                 foreach (var npc in monkeys) npc.StopAtCutoff();
                 if (held) held.Release(); held = null; StopHaptics();
                 GloveInventory?.Close();
@@ -541,7 +591,6 @@ namespace ADayAtTheZoo.Monkeys.Care
             }
             if (begun && !readyGateActive && !goSequenceActive && roundView != null)
             {
-                roundView.StaminaFill = AverageMonkeyStamina();
                 roundView.Update(Round, gameTime);
             }
             audioFeedback.UpdateMusic(Round.Frozen);
@@ -643,22 +692,6 @@ namespace ADayAtTheZoo.Monkeys.Care
             for (int i = 0; i < count; i++) arc.SetPosition(i, arcPoints[i]);
             arc.startColor = arc.endColor = arcValid ? Color.cyan : new Color(1, .3f, .3f);
         }
-        // Average satisfaction of every monkey with an active demand; full bar
-        // when nobody needs anything (everyone is content).
-        float AverageMonkeyStamina()
-        {
-            float sum = 0f; int count = 0;
-            foreach (var npc in monkeys)
-            {
-                if (!npc || npc.Progress == null) continue;
-                if (!npc.HasDemand || npc.Celebrating) continue;
-                float ratio = npc.Need == CareNeed.Itch
-                    ? (float)npc.Progress.Strokes / Mathf.Max(1, npc.Progress.StrokeTarget)
-                    : npc.Progress.Fed / Mathf.Max(.01f, npc.Progress.FeedTarget);
-                sum += Mathf.Clamp01(ratio); count++;
-            }
-            return count > 0 ? sum / count : 1f;
-        }
         void SetHaptics(float amplitude)
         {
             CareXboxInput.SetMotorSpeeds(amplitude * .68f, amplitude);
@@ -703,8 +736,18 @@ namespace ADayAtTheZoo.Monkeys.Care
         public bool CompleteTask(MonkeyCareNpc npc, float timestamp)
         {
             int index = System.Array.IndexOf(monkeys, npc);
-            if (timestamp < 10) return false;
-            return Round.Complete(index, npc.CurrentTaskIndex, npc.Need, timestamp);
+            if (Round == null || Round.Frozen || index < 0 || timestamp < 1) return false;
+            bool completed = Round.Complete(index, npc.CurrentTaskIndex, npc.Need, timestamp);
+            if (!completed) return false;
+            // The score bar must reflect a finished feeding in the same frame:
+            // repaint the HUD now instead of waiting for the next LateUpdate.
+            SyncHud();
+            NotifyFed(npc);
+            return true;
+        }
+        public void SyncHud()
+        {
+            if (roundView != null && Round != null && begun) roundView.Update(Round, gameTime);
         }
         public void ContinueExploring() { if (Round.Frozen) roundView.Continue(); }
         public void RestartRound()
@@ -712,7 +755,9 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (!Round.Frozen) return;
             StopHaptics(); if (held) held.Release(); held = null;
             Round = new CareRound(MonkeyStartingNeeds(), feedingOnly);
+            Round.DealFeedingTasks();
             records.Clear(); gameTime = 0;
+            HungerOwner = null; hungerCursor = -1;
             TutorialActive = false; RoundStarted = false;
             rig.transform.SetPositionAndRotation(rigStartPosition, rigStartRotation);
             roundView.Reset();

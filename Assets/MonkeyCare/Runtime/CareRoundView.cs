@@ -18,18 +18,14 @@ namespace ADayAtTheZoo.Monkeys.Care
     {
         readonly CareRoundArtwork art;
         readonly Camera camera;
-        readonly RectTransform scoreHud, bananaHud, staminaHud;
+        readonly RectTransform scoreHud, bananaHud;
         RectTransform results;
         readonly Image progressFill;
         readonly Image[] stars = new Image[3];
-        Image staminaFill;
         Sprite resultStarSprite;
         readonly Text score, clock, bananas;
         Text feedingValue, penaltyValue, finalValue, passValue, starHint;
         CareResultButton[] buttons;
-
-        // Player HUD stamina bar (0..1), refreshed by the session each frame.
-        public float StaminaFill { get; set; } = 1f;
 
         public static Text Label(string name, Transform parent, string value, Vector2 size,
             Vector2 pos, int fontSize, TextAnchor align = TextAnchor.MiddleCenter,
@@ -78,7 +74,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             this.camera = camera;
 
             scoreHud = CareUi.Canvas("Care SCORE HUD", camera.transform,
-                new Vector3(0, .45f, 1.18f), .80f, new Vector2(1000, 480));
+                new Vector3(0, .45f, 1.18f), .80f, new Vector2(1000, 480), 10);
             var svgScore = CareUiSkin.SvgScorePanel;
             if (svgScore)
             {
@@ -171,7 +167,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             bananaHud = CareUi.Canvas("Care BANANA HUD",
                 art.bananaAnchor ? art.bananaAnchor : camera.transform,
                 art.bananaAnchor ? art.bananaOffset : new Vector3(.82f, .46f, 1.28f),
-                art.bananaWidth, new Vector2(560, 322));
+                art.bananaWidth, new Vector2(560, 322), 10);
             var bananaArt = CareUiSkin.SvgBananaPanel ? CareUiSkin.SvgBananaPanel : art.bananaPanel;
             if (bananaArt)
             {
@@ -188,32 +184,9 @@ namespace ADayAtTheZoo.Monkeys.Care
                 new Vector2(150, -20), 78, TextAnchor.MiddleCenter,
                 new Color(.14f, .14f, .18f, 1f));
 
-            // STAMINA plate below the score HUD, mirroring the reference layout:
-            // baked title plate, teal gradient bar, lightning badge on the left.
-            staminaHud = CareUi.Canvas("Care STAMINA HUD", camera.transform,
-                new Vector3(0, .125f, 1.19f), .52f, new Vector2(700, 330));
-            var staminaPanel = CareUiSkin.Add(staminaHud, "Stamina panel",
-                CareUiSkin.SvgStaminaPanel, new Vector2(700, 315), Vector2.zero, Color.white);
-            staminaPanel.preserveAspect = true;
-            var staminaBarSprite = CareUiSkin.SvgStaminaBar;
-            var staminaTrack = CareUi.Rect("Stamina track", staminaHud,
-                new Vector2(500, 64), new Vector2(14, -82));
-            var staminaTrackBackground = staminaTrack.gameObject.AddComponent<Image>();
-            staminaTrackBackground.sprite = staminaBarSprite ? staminaBarSprite : CareUiSkin.ProgressTrack;
-            staminaTrackBackground.type = staminaBarSprite ? Image.Type.Simple : Image.Type.Sliced;
-            staminaTrackBackground.color = new Color(.40f, .48f, .54f, .50f);
-            staminaTrackBackground.raycastTarget = false;
-            staminaFill = CareUi.Image("Stamina fill", staminaTrack,
-                staminaBarSprite ? staminaBarSprite : CareUiSkin.ProgressFill,
-                new Vector2(486, 52), Vector2.zero);
-            staminaFill.type = Image.Type.Filled;
-            staminaFill.fillMethod = Image.FillMethod.Horizontal;
-            staminaFill.fillOrigin = 0;
-            staminaFill.fillAmount = 1;
-            staminaFill.color = staminaBarSprite ? Color.white : new Color(.16f, .78f, .72f, 1f);
-            var staminaLogo = CareUiSkin.Add(staminaHud, "Stamina logo",
-                CareUiSkin.SvgStaminaLogo, new Vector2(92, 93), new Vector2(-206, -82), Color.white);
-            staminaLogo.preserveAspect = true;
+            // STAMINA lives above the hungry monkey's head (see MonkeyCareNpc /
+            // CarePanel). A second plate floating in front of the player only
+            // duplicated the value and blocked the view, so it is gone.
 
             BuildResults();
             Reset();
@@ -225,7 +198,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             // COMPLETE ribbon, three airy stat rows, big total score, three
             // stars, next-star hint, CONTINUE pill plus a round green button.
             results = CareUi.Canvas("Care RESULTS", camera.transform,
-                new Vector3(0, -.02f, 1.30f), .50f, new Vector2(900, 1300));
+                new Vector3(0, -.02f, 1.30f), .50f, new Vector2(900, 1300), 100);
             // The shadow must share the card's rounded silhouette, otherwise a
             // square dark rim shows around the rounded card corners.
             var shadow = CareUiSkin.AddSliced(results, "Results shadow", CareUiSkin.RoundedCard,
@@ -334,7 +307,6 @@ namespace ADayAtTheZoo.Monkeys.Care
             progressFill.fillAmount = ratio;
             score.text = Mathf.RoundToInt(ratio * 100f) + "%";
             bananas.text = "×" + round.Bananas;
-            staminaFill.fillAmount = Mathf.Clamp01(StaminaFill);
 
             int remaining = Mathf.CeilToInt(Mathf.Max(0, CareRound.Cutoff - elapsed));
             clock.text = round.Frozen
@@ -367,14 +339,12 @@ namespace ADayAtTheZoo.Monkeys.Care
             results.gameObject.SetActive(true);
             scoreHud.gameObject.SetActive(false);
             bananaHud.gameObject.SetActive(false);
-            staminaHud.gameObject.SetActive(false);
         }
 
         public void ShowHud()
         {
             scoreHud.gameObject.SetActive(true);
             bananaHud.gameObject.SetActive(true);
-            staminaHud.gameObject.SetActive(true);
         }
 
         public void Continue()
@@ -388,7 +358,6 @@ namespace ADayAtTheZoo.Monkeys.Care
             results.gameObject.SetActive(false);
             scoreHud.gameObject.SetActive(false);
             bananaHud.gameObject.SetActive(false);
-            staminaHud.gameObject.SetActive(false);
         }
     }
 }

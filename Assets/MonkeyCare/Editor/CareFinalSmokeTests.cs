@@ -116,13 +116,15 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         yield return new WaitForSecondsRealtime(.55f);
         var tutorialTitle = GameObject.Find("Tutorial title")?.GetComponent<Text>();
         var tutorialBody = GameObject.Find("Tutorial body")?.GetComponent<Text>();
-        var tutorialKey = GameObject.Find("Key badge")?.GetComponent<Image>();
-        Check(tutorialTitle && tutorialTitle.text == "FEED MONKEYS",
-            "beginner tutorial uses short English title");
+        var tutorialKey = GameObject.Find("Key GO")?.GetComponent<Image>();
+        Check(tutorialTitle && tutorialTitle.text == "WELCOME TO THE ZOO",
+            "beginner tutorial opens with a calm welcome step");
         Check(tutorialBody && tutorialBody.fontSize >= 52,
             "beginner tutorial body text is enlarged");
         Check(tutorialKey && tutorialKey.rectTransform.sizeDelta.x >= 132,
             "beginner tutorial key badge is enlarged and round");
+        Check(tutorialKey && tutorialKey.color.g > tutorialKey.color.b,
+            "key badges are colour coded (GO / A green, B red, RT orange)");
         Capture("final-tutorial");
         typeof(CareTutorial).GetMethod("ShowStep", BindingFlags.Instance | BindingFlags.NonPublic)
             ?.Invoke(tutorial, new object[] { 4 });
@@ -132,6 +134,8 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         Check(tutorialBagTitle && tutorialBagTitle.text == "OPEN THE BAG" &&
               tutorialBagKey && tutorialBagKey.text == "B",
             "beginner tutorial shows the enlarged round B control");
+        Check(tutorialKey && tutorialKey.color.r > .6f && tutorialKey.color.g < .5f,
+            "the B key cap is red while the A cap stays green");
         Capture("final-tutorial-bag");
         UnityEngine.Object.Destroy(tutorialHost);
         yield return null;
@@ -143,10 +147,26 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         SetSessionField("recordingHand", hand);
 
         yield return null;
+        var readyCanvasField = typeof(MonkeyCareSession).GetField("readyCanvas",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        var readyCanvas = readyCanvasField?.GetValue(session) as RectTransform;
+        report.Add("READY canvas=" + (readyCanvas ? readyCanvas.name : "none") +
+                   " active=" + (readyCanvas && readyCanvas.gameObject.activeInHierarchy) +
+                   " pos=" + (readyCanvas ? readyCanvas.position.ToString("F2") : "-") +
+                   " scale=" + (readyCanvas ? readyCanvas.lossyScale.x.ToString("F4") : "-") +
+                   " cam=" + gameCamera.transform.position.ToString("F2") +
+                   " camName=" + gameCamera.name +
+                   " sessionCam=" + (MonkeyCareSession.PlayerCamera ? MonkeyCareSession.PlayerCamera.name : "none"));
+        var readyGroup = readyCanvas ? readyCanvas.GetComponent<CanvasGroup>() : null;
+        Check(readyGroup && readyGroup.alpha > .8f,
+            "the READY GO gate is actually visible while it waits for A");
         Capture("final-ready");
         var readyPrompt = GameObject.Find("Ready prompt")?.GetComponent<Text>();
         Check(readyPrompt && readyPrompt.text == "PRESS A TO START",
             "ready gate shows the PRESS A TO START hint below Ready Go");
+        Check(readyPrompt && readyPrompt.gameObject.activeInHierarchy && !session.RoundStarted,
+            "the round waits for a deliberate A press instead of starting itself");
+        yield return new WaitForSecondsRealtime(.6f);
         yield return Press("recordingA");
         yield return WaitUntil(() => session.RoundStarted, 3);
         Check(session.RoundStarted, "A starts the round");
@@ -166,6 +186,8 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         Check(!GameObject.Find("Progress value") &&
               scoreText && scoreText.fontSize >= 30,
             "top progress shows only the percentage (no raw 0/9 counter)");
+        Check(!GameObject.Find("Care STAMINA HUD"),
+            "no stamina plate floats in front of the player any more");
         // Readability fix: the variable Fredoka face renders hairline-thin on
         // Unity's legacy Text, so gameplay copy now uses a real bold face.
         // Accept either a bold readable face or the themed Fredoka fallback.
@@ -362,7 +384,72 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         yield return new WaitForSecondsRealtime(.35f);
         Capture("final-monkey-happy");
 
+        // ---- one hungry monkey at a time, bar above its head, instant score ----
+        yield return WaitUntil(() => session.monkeys.Any(item => item && item.HasDemand), 10);
+        var demanding = session.monkeys.Where(item => item && item.HasDemand).ToArray();
+        report.Add("HUNGER demanding=" + demanding.Length +
+                   " owner=" + (session.HungerOwner ? session.HungerOwner.name : "none"));
+        Check(demanding.Length <= 1,
+            "the hunger rotation keeps only one monkey hungry at a time");
+        Check(demanding.Length == 1, "a monkey is asking for food after the rotation starts");
+        if (demanding.Length == 1)
+        {
+            var hungry = demanding[0];
+            var panelField = typeof(MonkeyCareNpc).GetField("panel",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            var panel = panelField?.GetValue(hungry) as CarePanel;
+            var panelRoot = panel?.Root;
+            Vector3 flat = panelRoot ? new Vector3(panelRoot.position.x, 0, panelRoot.position.z) : Vector3.zero;
+            Vector3 npcFlat = new Vector3(hungry.transform.position.x, 0, hungry.transform.position.z);
+            report.Add("OVERHEAD panel=" + (panelRoot ? panelRoot.position.ToString("F2") : "none") +
+                       " monkey=" + hungry.transform.position.ToString("F2"));
+            Check(panelRoot && panelRoot.gameObject.activeInHierarchy &&
+                  panelRoot.position.y >= hungry.transform.position.y + .8f &&
+                  Vector3.Distance(flat, npcFlat) <= .65f,
+                "the tolerance bar floats above the hungry monkey's head");
+            var panelTitle = panelRoot ? panelRoot.Find("Panel title")?.GetComponent<Text>() : null;
+            Check(panelTitle && panelTitle.text == "STAMINA",
+                "the overhead bar shows live hunger tolerance");
+            Capture("final-hunger-bar");
+
+            // Feeding must move the score bar in the very same frame.
+            int before = session.Round.FeedingTotal;
+            // Leave the guided-tutorial lane so the feed counts on the round.
+            hungry.EndGuidedTutorial();
+            hungry.BeginSession();
+            hungry.feedingSeconds = .3f;
+            hungry.BeginDemand(CareNeed.Hunger);
+            if (!session.HeldItem) session.EquipBananaFromGlove(false);
+            Aim(hungry);
+            yield return null;
+            // Eating only starts for a thrown banana, so release RT at it.
+            SetSessionField("recordingTrigger", true);
+            for (int frame = 0; frame < 4; frame++) yield return null;
+            SetSessionField("recordingTrigger", false);
+            yield return WaitUntil(() => session.Round.FeedingTotal > before, 5);
+            report.Add("FEED total=" + session.Round.FeedingTotal +
+                       " task=" + hungry.CurrentTaskIndex +
+                       " celebrating=" + hungry.Celebrating +
+                       " demand=" + hungry.HasDemand +
+                       " fed=" + (hungry.Progress != null ? hungry.Progress.Fed.ToString("F2") : "none") +
+                       " timeout=" + (hungry.Progress != null ? hungry.Progress.Deadline.ToString("F1") : "-") +
+                       " held=" + (session.HeldItem ? session.HeldItem.name : "none") +
+                       " ray=" + (session.RayNpc ? session.RayNpc.name : "none") +
+                       " frozen=" + session.Round.Frozen +
+                       " feedings=" + string.Join(",", session.Round.Feedings));
+            Check(session.Round.FeedingTotal == before + 1,
+                "a completed feeding raises the round score right away");
+            int expected = Mathf.RoundToInt(100f * session.Round.FeedingTotal / session.Round.TaskTotal);
+            Check(scoreText && scoreText.text == expected + "%",
+                "the score percentage repaints without waiting for the next frame");
+            var scoreFill = GameObject.Find("Progress fill")?.GetComponent<Image>();
+            Check(scoreFill && scoreFill.fillAmount > 0f,
+                "the score bar fill advances immediately after feeding");
+            Capture("final-score-after-feed");
+        }
+
         var round = new CareRound();
+        round.DealFeedingTasks();
         int completed = 0;
         for (int task = 0; task < 4 && completed < 7; task++)
         {
