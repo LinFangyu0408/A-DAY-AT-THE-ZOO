@@ -114,6 +114,21 @@ namespace ADayAtTheZoo.Monkeys.Care
             canvas.sortingOrder = sortingOrder;
             return r;
         }
+        // Flat 2D plate for the PC (no-headset) layout: a screen-space overlay
+        // canvas anchored to a screen corner, so the same art reads as a normal
+        // game HUD instead of a floating 3D panel.
+        public static RectTransform Overlay(string name, Vector2 anchor, Vector2 size, int sortingOrder = 0)
+        {
+            var r = Rect(name, null, size, Vector2.zero);
+            var canvas = r.gameObject.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = sortingOrder;
+            r.anchorMin = r.anchorMax = new Vector2(.5f, .5f);
+            r.pivot = new Vector2(.5f, .5f);
+            r.anchoredPosition = anchor;
+            r.sizeDelta = size;
+            return r;
+        }
     }
 
     public sealed class CarePanel

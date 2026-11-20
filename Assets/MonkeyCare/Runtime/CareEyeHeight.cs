@@ -11,7 +11,9 @@ namespace ADayAtTheZoo.Monkeys.Care
     [DefaultExecutionOrder(500), DisallowMultipleComponent]
     public sealed class CareEyeHeight : MonoBehaviour
     {
-        public const float StandingEyeHeight = 1.6f;
+        // Slightly lower than the average standing eye: the yard reads best at a
+        // touch under 1.5m, which also matches "lower the initial view".
+        public const float StandingEyeHeight = 1.45f;
         // The ground itself may rise/fall gently while walking; it is followed at
         // walking speed rather than snapped so slopes never feel like teleports.
         public const float FloorFollowSpeed = 6f;
@@ -22,6 +24,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         OVRCameraRig rig;
         float floorY;
         bool floorKnown;
+        bool loggedOnce;
 
         public float FloorY => floorY;
         public float EyeAboveFloor => rig && rig.centerEyeAnchor
@@ -48,8 +51,16 @@ namespace ADayAtTheZoo.Monkeys.Care
             Vector3 head = rig.centerEyeAnchor.position;
             if (!TryGround(head, out float ground))
             {
-                if (!floorKnown) return;
-                ground = floorY;
+                if (!floorKnown)
+                {
+                    // No floor found on the first frame: assume the authored rig
+                    // height is roughly right and derive the floor from it, so a
+                    // bad raycast can never leave the player floating or sunk.
+                    floorY = head.y - StandingEyeHeight;
+                    floorKnown = true;
+                    ground = floorY;
+                }
+                else ground = floorY;
             }
             if (!floorKnown)
             {
@@ -70,6 +81,13 @@ namespace ADayAtTheZoo.Monkeys.Care
                 Vector3 position = rig.transform.position;
                 position.y += delta;
                 rig.transform.position = position;
+            }
+
+            if (!loggedOnce)
+            {
+                loggedOnce = true;
+                Debug.Log("[Monkey Care] Eye height locked: floor " + floorY.ToString("F2") +
+                          "m, eye " + StandingEyeHeight.ToString("F2") + "m above ground.");
             }
 
             // Artificial vertical offsets written into the tracking space lift the

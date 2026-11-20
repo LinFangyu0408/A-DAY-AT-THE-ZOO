@@ -274,7 +274,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             }
 
             if (!assist || !assist.Accepts(kind)) return;
-            if (Vector3.Distance(now, TargetPoint(assist)) > 1.1f) return;
+            if (Vector3.Distance(now, TargetPoint(assist)) > 1.5f) return;
             Target = assist;
             caughtTarget = assist;
             CatchAtTarget();
@@ -305,7 +305,18 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             var contact = npc.transform.Find("Care Contact");
             var collider = contact ? contact.GetComponent<Collider>() : null;
-            return collider ? collider.bounds.center : npc.transform.position + Vector3.up * .8f;
+            if (collider && collider.enabled)
+            {
+                Vector3 center = collider.bounds.center;
+                // The contact box is only trusted when it actually hugs the
+                // monkey: a zero-sized or stray trigger reports bounds at the
+                // world origin, which froze the banana in mid-air.
+                if ((center - npc.transform.position).sqrMagnitude < 2.25f &&
+                    center.y > npc.transform.position.y - .5f &&
+                    center.y < npc.transform.position.y + 3f)
+                    return center;
+            }
+            return npc.transform.position + Vector3.up * .8f;
         }
         void SetVisible(bool visible, bool collide)
         {

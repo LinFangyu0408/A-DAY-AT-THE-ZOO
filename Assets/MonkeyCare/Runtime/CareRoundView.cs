@@ -78,9 +78,12 @@ namespace ADayAtTheZoo.Monkeys.Care
 
             // Kept well inside the headset's field of view: the old plate sat 21°
             // above the gaze line and the banana counter 33° to the right, so in
-            // the headset both were parked on (or past) the edge of vision.
-            scoreHud = CareUi.Canvas("Care SCORE HUD", head,
-                new Vector3(0, .34f, 1.12f), .70f, new Vector2(1000, 480), 10);
+            // the headset both were parked on (or past) the edge of vision. On a
+            // PC (no headset) the same art becomes a flat 2D HUD overlay.
+            scoreHud = CarePlatform.FlatUi
+                ? CareUi.Overlay("Care SCORE HUD", new Vector2(0, 250), new Vector2(1000, 480), 10)
+                : CareUi.Canvas("Care SCORE HUD", head,
+                    new Vector3(0, .34f, 1.12f), .70f, new Vector2(1000, 480), 10);
             var svgScore = CareUiSkin.SvgScorePanel;
             if (svgScore)
             {
@@ -180,10 +183,12 @@ namespace ADayAtTheZoo.Monkeys.Care
                 new Vector2(0, -248), 30, TextAnchor.MiddleCenter,
                 new Color(1f, .80f, .24f, 1f));
 
-            bananaHud = CareUi.Canvas("Care BANANA HUD",
-                art.bananaAnchor ? art.bananaAnchor : head,
-                art.bananaAnchor ? art.bananaOffset : new Vector3(.50f, .26f, 1.12f),
-                art.bananaWidth, new Vector2(560, 322), 10);
+            bananaHud = CarePlatform.FlatUi
+                ? CareUi.Overlay("Care BANANA HUD", new Vector2(540, 210), new Vector2(560, 322), 10)
+                : CareUi.Canvas("Care BANANA HUD",
+                    art.bananaAnchor ? art.bananaAnchor : head,
+                    art.bananaAnchor ? art.bananaOffset : new Vector3(.50f, .26f, 1.12f),
+                    art.bananaWidth, new Vector2(560, 322), 10);
             var bananaArt = CareUiSkin.SvgBananaPanel ? CareUiSkin.SvgBananaPanel : art.bananaPanel;
             if (bananaArt)
             {
@@ -213,8 +218,10 @@ namespace ADayAtTheZoo.Monkeys.Care
             // Reference card: big-corner white rounded plate, blue LEVEL
             // COMPLETE ribbon, three airy stat rows, big total score, three
             // stars, next-star hint, CONTINUE pill plus a round green button.
-            results = CareUi.Canvas("Care RESULTS", head,
-                new Vector3(0, -.02f, 1.30f), .50f, new Vector2(900, 1300), 100);
+            results = CarePlatform.FlatUi
+                ? CareUi.Overlay("Care RESULTS", new Vector2(0, -10), new Vector2(900, 1300), 100)
+                : CareUi.Canvas("Care RESULTS", head,
+                    new Vector3(0, -.02f, 1.30f), .50f, new Vector2(900, 1300), 100);
             // The shadow must share the card's rounded silhouette, otherwise a
             // square dark rim shows around the rounded card corners.
             var shadow = CareUiSkin.AddSliced(results, "Results shadow", CareUiSkin.RoundedCard,
@@ -304,7 +311,9 @@ namespace ADayAtTheZoo.Monkeys.Care
 
         public void Update(CareRound round, float elapsed)
         {
-            if (art.bananaAnchor)
+            // The banana plate only tracks the head/anchor in VR; the flat PC
+            // overlay stays put at its screen corner.
+            if (!CarePlatform.FlatUi && art.bananaAnchor)
             {
                 if (art.bananaAnchor == head)
                 {

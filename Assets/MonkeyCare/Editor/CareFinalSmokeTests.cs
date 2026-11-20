@@ -105,6 +105,10 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
 
     IEnumerator Run()
     {
+        // The headless test scene has no active XR device, so the HUD would pick
+        // the flat PC overlay. Force VR mode here so the world-space layout (and
+        // every positional assertion below) is what actually runs.
+        CarePlatform.ForceVr = true;
         while (!session || !session.Begun) yield return null;
         gameCamera = Camera.allCameras.FirstOrDefault(item =>
             item && item.enabled && item.gameObject.activeInHierarchy &&

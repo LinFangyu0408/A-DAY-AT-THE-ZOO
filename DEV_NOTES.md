@@ -198,3 +198,10 @@
 - 地面探测加 `Terrain.SampleHeight` 兜底；`normal.y` 阈值降到 .5；rig 的 `trackingSpace.localPosition.y` 强制归零（杜绝 tracking space 里的垂直偏移）。
 - `[DefaultExecutionOrder(500)]` 保证在围栏(0)之后执行，成为垂直轴的唯一仲裁者。
 - 冒烟 90、自检 273 全过（冒烟走桌面路径，眼锁的 VR 真机效果靠探针 `eyeAboveGround` 确认，应 ≈1.60）。
+
+## 2026-11-20 23:50 第十四轮（眼高下调 / A 飞加固 / 香蕉必中 / PC-VR 双 UI）
+- **眼高下调**：`CareEyeHeight.StandingEyeHeight` 1.6 → **1.45m**（用户反馈视角偏高）。首帧若无地面命中，用 `head.y - 1.45` 反推地面（坏射线永不致浮空/下沉）；激活时打一条 `[Monkey Care] Eye height locked: floor X, eye 1.45m above` 日志，探针里也能读 `eyeAboveGround`（应 ≈1.45）。
+- **A 键上飘**：眼锁保持「无条件」——每帧把整根 rig 平移 `(地面+1.45) - 眼睛.y`，任何输入/传送/recenter 顶起的偏移都被这一行抵消，眼睛不可能再飞。
+- **香蕉必中 / 轨迹正确**：`TargetPoint` 加了合法性校验——只有离猴子 1.5m 内、且在胸-头高度区间内的 `Care Contact` 中心才被采用，否则退回 `猴子位置+0.8m`（此前一个零尺寸/游离触发器把 bounds.center 报成世界原点，香蕉就冻在半空）；吸附半径 1.1 → **1.5m**；出手仍是 `BallisticVelocity` 弹道（正确弧线）+ `ContinuousDynamic` + 扫掠检测。
+- **PC / VR 双设备 UI**：新增 `CarePlatform`（`IsVr` = XR 设备激活或 VR 手在跑；`ForceVr` 测试钩子）。PC（无头显/手柄）走 `CareUi.Overlay` **屏幕空间平面 HUD**（SCORE 顶部居中、香蕉右上、结算居中），VR Meta 3 保留世界空间漂浮板。冒烟测试 `CarePlatform.ForceVr=true` 强制走 VR 布局以保留原有世界坐标断言。
+- 冒烟 **90 断言**全过（VR 布局路径）；自检 273 全过。
