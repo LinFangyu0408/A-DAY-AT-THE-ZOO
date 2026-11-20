@@ -2,26 +2,21 @@ using UnityEngine;
 
 namespace ADayAtTheZoo.Monkeys.Care
 {
-    // The care rig runs on a device-level XR origin: the head pose sits on the
-    // rig root (the eye is only ~2cm above it), which means the rig's Y *is* the
-    // player's eye height. Nothing kept that in sync with the ground, so the eye
-    // ended up half a metre above the grass and the yard was viewed as if the
-    // player were sitting on the floor.
-    //
-    // This component owns the vertical axis while the care scene is running: the
-    // eye is held a fixed standing height above the walkable ground, so no input
-    // path can lift, jump or climb. Props (monkeys, the stall, the fence) are
-    // ignored by the ground probe, which is what used to ratchet the player up.
-    [DefaultExecutionOrder(200), DisallowMultipleComponent]
+    // The view is locked at a fixed standing height above the ground, exactly as
+    // requested: the eye is held 1.6m over the walkable floor, every frame, no
+    // matter what moves the rig (a button, a teleport ray, a stick push, a
+    // recenter). The correction is applied by shifting the rig root so it works
+    // for both device-level and floor-level tracking origins and for any rig
+    // hierarchy, because the head pose is always relative to the rig root.
+    [DefaultExecutionOrder(500), DisallowMultipleComponent]
     public sealed class CareEyeHeight : MonoBehaviour
     {
-        public const float StandingEyeHeight = 1.58f;
-        // Ground is followed at walking speed, never teleported.
+        public const float StandingEyeHeight = 1.6f;
+        // The ground itself may rise/fall gently while walking; it is followed at
+        // walking speed rather than snapped so slopes never feel like teleports.
         public const float FloorFollowSpeed = 6f;
-        // How far the floor may jump between two frames (a step or a slope).
-        public const float FloorStepLimit = 1.1f;
-        // True while this component is the one placing the eye; the fence skips
-        // its own vertical clamp then so the two never fight.
+        public const float FloorStepLimit = 1.2f;
+
         public static bool Active { get; private set; }
 
         OVRCameraRig rig;
@@ -29,7 +24,6 @@ namespace ADayAtTheZoo.Monkeys.Care
         bool floorKnown;
 
         public float FloorY => floorY;
-        public bool Driving => Active;
         public float EyeAboveFloor => rig && rig.centerEyeAnchor
             ? rig.centerEyeAnchor.position.y - floorY : 0f;
 
@@ -49,50 +43,59 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             Active = false;
             if (!rig || !rig.centerEyeAnchor || !rig.gameObject.activeInHierarchy) return;
-
-            // A floor-level origin already reports the head ~1.6m above the rig;
-            // only the device-level rig needs the correction.
-            float eyeOffset = rig.centerEyeAnchor.position.y - rig.transform.position.y;
-            if (eyeOffset >= .8f) return;
-
             Active = true;
+
             Vector3 head = rig.centerEyeAnchor.position;
             if (!TryGround(head, out float ground))
             {
                 if (!floorKnown) return;
                 ground = floorY;
             }
-
-            Vector3 position = rig.transform.position;
             if (!floorKnown)
             {
                 floorY = ground;
                 floorKnown = true;
-                position.y = floorY + StandingEyeHeight;
-                rig.transform.position = position;
-                return;
+            }
+            else
+            {
+                float step = Mathf.Clamp(ground - floorY, -FloorStepLimit, FloorStepLimit);
+                floorY = Mathf.MoveTowards(floorY, floorY + step, FloorFollowSpeed * Time.deltaTime);
             }
 
-            floorY = Mathf.MoveTowards(floorY, ground, FloorFollowSpeed * Time.deltaTime);
-            float wanted = floorY + StandingEyeHeight;
-            if (Mathf.Abs(position.y - wanted) > .001f)
+            // Move the whole rig so the eye lands exactly on floor + eye height.
+            // No origin-mode branching: this is correct for every rig layout.
+            float delta = (floorY + StandingEyeHeight) - head.y;
+            if (Mathf.Abs(delta) > .0005f)
             {
-                position.y = Mathf.MoveTowards(position.y, wanted, 12f * Time.deltaTime);
+                Vector3 position = rig.transform.position;
+                position.y += delta;
                 rig.transform.position = position;
+            }
+
+            // Artificial vertical offsets written into the tracking space lift the
+            // view even when the rig root is pinned; keep it at its base height.
+            if (rig.trackingSpace)
+            {
+                Vector3 local = rig.trackingSpace.localPosition;
+                if (Mathf.Abs(local.y) > .001f)
+                {
+                    local.y = 0f;
+                    rig.trackingSpace.localPosition = local;
+                }
             }
         }
 
         bool TryGround(Vector3 head, out float ground)
         {
             ground = floorY;
-            float ceiling = floorKnown ? floorY + FloorStepLimit : head.y + .6f;
-            Vector3 origin = new(head.x, Mathf.Max(head.y, floorKnown ? floorY : head.y) + 40f, head.z);
+            float ceiling = floorKnown ? floorY + FloorStepLimit : head.y + 1.5f;
+            Vector3 origin = new(head.x, Mathf.Max(head.y, floorKnown ? floorY : head.y) + 60f, head.z);
             bool found = false;
             float best = float.NegativeInfinity;
-            foreach (RaycastHit hit in Physics.RaycastAll(origin, Vector3.down, 200f,
+            foreach (RaycastHit hit in Physics.RaycastAll(origin, Vector3.down, 300f,
                          ~((1 << 2) | (1 << 5)), QueryTriggerInteraction.Ignore))
             {
-                if (hit.normal.y < .6f) continue;
+                if (hit.normal.y < .5f) continue;
                 if (hit.transform.IsChildOf(rig.transform)) continue;
                 if (hit.collider.GetComponentInParent<MonkeyCareNpc>()) continue;
                 if (hit.collider.GetComponentInParent<CareItem>()) continue;
@@ -100,6 +103,12 @@ namespace ADayAtTheZoo.Monkeys.Care
                 if (hit.point.y <= best) continue;
                 best = hit.point.y;
                 found = true;
+            }
+            if (!found && Terrain.activeTerrain)
+            {
+                best = Terrain.activeTerrain.SampleHeight(new Vector3(head.x, 0f, head.z)) +
+                       Terrain.activeTerrain.transform.position.y;
+                found = best <= ceiling + .5f;
             }
             if (found) ground = best;
             return found;

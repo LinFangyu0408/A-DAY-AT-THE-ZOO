@@ -191,3 +191,10 @@
 - 探针新增 `ground y` / `eyeAboveGround`，可以直接判断眼高是否正常（应 ≈1.58）。
 - 期间 Unity 编辑器崩过一次（日志里正常 shutdown + JobTempAlloc 泄漏），已用 `dangerouslyDisableSandbox` 直接拉起 `Unity.exe -projectPath` 恢复。
 - 冒烟 **90 断言**全过；自检 273 全过。
+
+## 2026-11-20 23:00 第十三轮补充：视线硬锁 1.6m
+- 之前 `CareEyeHeight` 只在「设备级 origin」时生效（`eyeOffset < .8` 才接管），floor-level 时直接 return，结果按 A 又飞。
+- 改为**无条件锁眼**：每帧把整根 rig 上下平移 `delta = (地面+1.6) - 眼睛.y`，眼睛就精确停在**地面 + 1.6m**。不区分 tracking origin 模式、不依赖 rig 层级（head pose 永远相对 rig 根），任何把玩家顶起来的输入（按键/传送/摇杆/recenter）都被这一行抵消。
+- 地面探测加 `Terrain.SampleHeight` 兜底；`normal.y` 阈值降到 .5；rig 的 `trackingSpace.localPosition.y` 强制归零（杜绝 tracking space 里的垂直偏移）。
+- `[DefaultExecutionOrder(500)]` 保证在围栏(0)之后执行，成为垂直轴的唯一仲裁者。
+- 冒烟 90、自检 273 全过（冒烟走桌面路径，眼锁的 VR 真机效果靠探针 `eyeAboveGround` 确认，应 ≈1.60）。
