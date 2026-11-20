@@ -41,6 +41,12 @@ namespace ADayAtTheZoo.Monkeys.Care
         public CareTeleportPoint teleportPoint;
 
         public CareProgress Progress { get; private set; }
+        // A bite window longer than this made nine feedings physically impossible
+        // inside the 2:30 countdown, so three stars could never be reached.
+        public const float MaxFeedSeconds = 3.5f;
+        public float FeedSeconds => Mathf.Clamp(feedingSeconds, .5f, MaxFeedSeconds);
+        public float LateFeedSeconds => Mathf.Max(FeedSeconds,
+            Mathf.Min(lateFeedingSeconds, FeedSeconds + 1.2f));
         public CareNeed Need { get; private set; }
         public bool HasDemand { get; private set; }
         public bool Celebrating { get; private set; }
@@ -131,7 +137,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             Celebrating = false;
             smokeShown = false;
             feedingFrame = -1;
-            Progress = new CareProgress(Mathf.Max(patienceSeconds, 60), feedingSeconds, lateFeedingSeconds,
+            Progress = new CareProgress(Mathf.Max(patienceSeconds, 60), FeedSeconds, LateFeedSeconds,
                 scratchCount, lateScratchCount);
             appearedAt = MonkeyCareSession.TaskTime;
             rescueRecorded = false;
@@ -206,10 +212,10 @@ namespace ADayAtTheZoo.Monkeys.Care
                 {
                     if (!smokeShown) { smokeEffect.Spawn(transform); smokeShown = true; }
                     PlayPhase(MonkeyAction.Eating, eating);
-                    // Eating is self-explanatory: hide the overhead satisfaction
-                    // bar and emotion icon until the banana is finished.
-                    if (panel.Root.gameObject.activeSelf) panel.Root.gameObject.SetActive(false);
-                    if (emotion.gameObject.activeSelf) emotion.gameObject.SetActive(false);
+                    // The hunger plate stays on screen while the banana is being
+                    // eaten (its tolerance keeps sliding down) and disappears the
+                    // moment the feeding resolves. Only the animation is shown,
+                    // never a satisfaction value.
                     if (record != null && record.startedAt < 0)
                     {
                         record.startedAt = MonkeyCareSession.TaskTime - delta;
@@ -241,8 +247,6 @@ namespace ADayAtTheZoo.Monkeys.Care
             {
                 if (!smokeShown) { smokeEffect.Spawn(transform); smokeShown = true; }
                 PlayPhase(MonkeyAction.Eating, eating);
-                if (panel.Root.gameObject.activeSelf) panel.Root.gameObject.SetActive(false);
-                if (emotion.gameObject.activeSelf) emotion.gameObject.SetActive(false);
                 if (Progress.Advance(delta, true)) CompleteGuided(feedingItem);
             }
             else
@@ -260,7 +264,8 @@ namespace ADayAtTheZoo.Monkeys.Care
             // learn the controls; later requests use the normal patience.
             float patience = CurrentTaskIndex == 0
                 ? Mathf.Max(patienceSeconds, firstPatienceSeconds) : patienceSeconds;
-            Progress = new CareProgress(patience, feedingSeconds, lateFeedingSeconds, scratchCount, lateScratchCount);
+            Progress = new CareProgress(patience, FeedSeconds, LateFeedSeconds,
+                scratchCount, lateScratchCount);
             appearedAt = MonkeyCareSession.TaskTime; rescueRecorded = false;
             record = MonkeyCareSession.Instance.RegisterTask(Array.IndexOf(MonkeyCareSession.Instance.monkeys, this), CurrentTaskIndex, need, appearedAt);
             shownSatisfaction = fillFrom = fillTarget = 0;
@@ -324,9 +329,13 @@ namespace ADayAtTheZoo.Monkeys.Care
             HasDemand = false;
             Celebrating = true;
             smokeShown = true;
+            EatingNow = false;
             item.Consume();
+            // The tutorial banana is a real feeding: it scores and pushes the
+            // top progress bar exactly like a round feeding does.
+            MonkeyCareSession.Instance?.RegisterTutorialFeeding();
+            if (panel != null) panel.Root.gameObject.SetActive(false);
             Celebrate(CareNeed.Hunger);
-            if (panel != null) panel.Root.gameObject.SetActive(true);
             RefreshUi();
         }
         void Celebrate(CareNeed completedNeed)
@@ -345,23 +354,34 @@ namespace ADayAtTheZoo.Monkeys.Care
         void RefreshUi()
         {
             if (Progress == null || panel == null) return;
-            bool satisfied = Progress.Locked;
-            float target = Need == CareNeed.Itch && satisfied ? (float)Progress.Strokes / Progress.StrokeTarget : Progress.Satisfaction(Need);
-            if (Need == CareNeed.Itch && !Mathf.Approximately(fillTarget, target))
+            // The overhead plate only reports hunger tolerance. A finished
+            // banana never flips it to a satisfaction meter: the plate simply
+            // disappears and the monkey plays its happy reaction instead.
+            bool satisfied = Need == CareNeed.Itch && Progress.Locked;
+            float target = satisfied
+                ? (float)Progress.Strokes / Progress.StrokeTarget
+                : Progress.Patience;
+            if (satisfied && !Mathf.Approximately(fillTarget, target))
             { fillFrom = shownSatisfaction; fillTarget = target; fillStarted = MonkeyCareSession.GameTime; }
-            shownSatisfaction = Need == CareNeed.Itch ? Mathf.Lerp(fillFrom, fillTarget, Mathf.Pow(Mathf.Clamp01((MonkeyCareSession.GameTime - fillStarted) / .2f), 2)) : target;
-            if (Celebrating) shownSatisfaction = 1;
-            int segments = Progress.StrokeTarget;
-            panel.Show(satisfied, satisfied ? shownSatisfaction : Progress.Patience, satisfied ? segments : 1);
-            bool showEmotion = Celebrating || Progress.Late;
-            emotion.gameObject.SetActive(showEmotion); emotionImage.sprite = Celebrating ? ui.happy : ui.sad;
+            shownSatisfaction = satisfied
+                ? Mathf.Lerp(fillFrom, fillTarget, Mathf.Pow(Mathf.Clamp01((MonkeyCareSession.GameTime - fillStarted) / .2f), 2))
+                : target;
+            bool showPlate = HasDemand;
+            if (panel.Root.gameObject.activeSelf != showPlate)
+                panel.Root.gameObject.SetActive(showPlate);
+            if (showPlate)
+                panel.Show(satisfied, shownSatisfaction, satisfied ? Progress.StrokeTarget : 1);
+            bool showEmotion = Celebrating || (Progress.Late && HasDemand && !EatingNow);
+            emotion.gameObject.SetActive(showEmotion);
+            emotionImage.sprite = Celebrating ? ui.happy : ui.sad;
+            if (!showPlate) return;
             float remaining = Progress.Deadline - Progress.Waited;
             statusText.text = Celebrating
                 ? (Progress.Late ? "RESCUED! Normal speed next time." : "FED!")
                 : Progress.Late
                     ? (Need == CareNeed.Hunger
-                        ? "PATIENCE LOST -1: EAT " + feedingSeconds.ToString("0") +
-                          " → " + lateFeedingSeconds.ToString("0") + " SEC"
+                        ? "PATIENCE LOST -1: EAT " + Progress.FeedTarget.ToString("0.0") +
+                          " SEC"
                         : "PATIENCE LOST -1: SCRATCH " + scratchCount +
                           " → " + lateScratchCount + " TIMES")
                     : remaining <= 10

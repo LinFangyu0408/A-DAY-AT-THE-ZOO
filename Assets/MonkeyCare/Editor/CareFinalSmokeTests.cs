@@ -127,13 +127,16 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             "key badges are colour coded (GO / A green, B red, RT orange)");
         Capture("final-tutorial");
         typeof(CareTutorial).GetMethod("ShowStep", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?.Invoke(tutorial, new object[] { 4 });
+            ?.Invoke(tutorial, new object[] { 3 });
         yield return null;
         var tutorialBagTitle = GameObject.Find("Tutorial title")?.GetComponent<Text>();
+        var tutorialBagBody = GameObject.Find("Tutorial body")?.GetComponent<Text>();
         var tutorialBagKey = tutorialKey ? tutorialKey.GetComponentInChildren<Text>() : null;
         Check(tutorialBagTitle && tutorialBagTitle.text == "OPEN THE BAG" &&
               tutorialBagKey && tutorialBagKey.text == "B",
             "beginner tutorial shows the enlarged round B control");
+        Check(tutorialBagBody && tutorialBagBody.text.Contains("Press B"),
+            "the bag step names the key before the player acts");
         Check(tutorialKey && tutorialKey.color.r > .6f && tutorialKey.color.g < .5f,
             "the B key cap is red while the A cap stays green");
         Capture("final-tutorial-bag");
@@ -174,8 +177,14 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         Check(GameObject.Find("SVG score panel") && GameObject.Find("Static score bar cover") &&
               progressTrack && progressTrack.enabled && progressTrack.color.a >= .18f,
             "top progress uses the supplied artwork with a visible empty track");
-        Check(GameObject.Find("Progress pass marker") && GameObject.Find("Progress pass caption"),
-            "sixty-percent passing line is marked on the score bar");
+        Check(GameObject.Find("Progress pass marker"),
+            "the sixty-percent passing line is still drawn on the bar");
+        var starBadge = GameObject.Find("Score star badge")?.GetComponent<RectTransform>();
+        var passMarkerRect = GameObject.Find("Progress pass marker")?.GetComponent<RectTransform>();
+        Check(starBadge && passMarkerRect &&
+              Mathf.Abs(starBadge.position.x - passMarkerRect.position.x) <= .004f &&
+              Mathf.Abs(starBadge.position.y - passMarkerRect.position.y) <= .004f,
+            "the star badge sits on the yellow passing line and covers it");
         var bananaHud = GameObject.Find("Care BANANA HUD")?.GetComponent<RectTransform>();
         Check(bananaHud && bananaHud.localPosition.x >= .75f && bananaHud.localPosition.y >= .35f,
             "banana counter is fixed in the upper-right");
@@ -367,9 +376,17 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         yield return null;
         Check(monkey.Celebrating, "completed feeding enters the celebrating state");
         Check(monkey.Phase == MonkeyAction.Happy, "monkey state switches to Happy");
-        var satisfactionTitle = GameObject.Find("Panel title")?.GetComponent<Text>();
-        Check(satisfactionTitle && satisfactionTitle.text == "SATISFACTION",
-            "feeding progress switches to the English satisfaction bar");
+        // Requirement: the tutorial banana scores like a real one.
+        Check(session.Round.TutorialFeedings == 1 && session.Round.FeedingTotal >= 1,
+            "the tutorial banana scores and moves the progress bar");
+        var monkeyPanel = typeof(MonkeyCareNpc)
+            .GetField("panel", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(monkey) as CarePanel;
+        var monkeyEmotion = GameObject.Find("Emotion")?.GetComponent<Image>();
+        Check(monkeyPanel != null && !monkeyPanel.Root.gameObject.activeInHierarchy,
+            "the overhead hunger bar disappears once the banana is eaten");
+        Check(monkeyEmotion && monkeyEmotion.gameObject.activeInHierarchy &&
+              monkeyEmotion.sprite == monkey.ui.happy,
+            "a happy reaction replaces the old satisfaction bar");
         var actor = monkey.GetComponent<MonkeyNpcAnimator>();
         AnimatorStateInfo animationState = monkey.animator.IsInTransition(0)
             ? monkey.animator.GetNextAnimatorStateInfo(0)
@@ -410,6 +427,9 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             var panelTitle = panelRoot ? panelRoot.Find("Panel title")?.GetComponent<Text>() : null;
             Check(panelTitle && panelTitle.text == "STAMINA",
                 "the overhead bar shows live hunger tolerance");
+            Aim(hungry);
+            yield return null;
+            yield return null;
             Capture("final-hunger-bar");
 
             // Feeding must move the score bar in the very same frame.
@@ -417,7 +437,7 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             // Leave the guided-tutorial lane so the feed counts on the round.
             hungry.EndGuidedTutorial();
             hungry.BeginSession();
-            hungry.feedingSeconds = .3f;
+            hungry.feedingSeconds = 2f;
             hungry.BeginDemand(CareNeed.Hunger);
             if (!session.HeldItem) session.EquipBananaFromGlove(false);
             Aim(hungry);
@@ -426,7 +446,10 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             SetSessionField("recordingTrigger", true);
             for (int frame = 0; frame < 4; frame++) yield return null;
             SetSessionField("recordingTrigger", false);
-            yield return WaitUntil(() => session.Round.FeedingTotal > before, 5);
+            yield return WaitUntil(() => hungry.EatingNow, 4);
+            Check(hungry.EatingNow && panelRoot && panelRoot.gameObject.activeInHierarchy,
+                "the hunger bar keeps showing (and draining) while the monkey eats");
+            yield return WaitUntil(() => session.Round.FeedingTotal > before, 8);
             report.Add("FEED total=" + session.Round.FeedingTotal +
                        " task=" + hungry.CurrentTaskIndex +
                        " celebrating=" + hungry.Celebrating +
@@ -445,29 +468,49 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             var scoreFill = GameObject.Find("Progress fill")?.GetComponent<Image>();
             Check(scoreFill && scoreFill.fillAmount > 0f,
                 "the score bar fill advances immediately after feeding");
+            Check(panelRoot && !panelRoot.gameObject.activeInHierarchy,
+                "the hunger bar clears the moment the feeding resolves");
             Capture("final-score-after-feed");
         }
 
-        var round = new CareRound();
-        round.DealFeedingTasks();
-        int completed = 0;
-        for (int task = 0; task < 4 && completed < 7; task++)
-        {
-            for (int index = 0; index < 3 && completed < 7; index++)
-            {
-                if (!round.Complete(index, task, CareNeed.Hunger, 100)) continue;
-                completed++;
-            }
-        }
-        round.Freeze();
-        // Mirror the session freeze path so NPC world-space HUDs (satisfaction
-        // bars, emotions) are hidden exactly like the real round end does.
-        if (session.monkeys != null)
-            foreach (var npc in session.monkeys) npc.StopAtCutoff();
         var viewField = typeof(MonkeyCareSession).GetField("roundView",
             BindingFlags.Instance | BindingFlags.NonPublic);
         var roundView = viewField?.GetValue(session) as CareRoundView;
         Check(roundView != null, "round view is available");
+
+        // ---- final twenty seconds name the goal instead of leaving dead air ----
+        var sprintText = GameObject.Find("Final sprint")?.GetComponent<Text>();
+        roundView.Update(session.Round, CareRound.Cutoff - 12f);
+        Check(sprintText && sprintText.text.StartsWith("FINAL 12s") &&
+              sprintText.text.Contains("MORE"),
+            "the last twenty seconds spell out the remaining goal");
+        Capture("final-sprint");
+
+        // ---- star tiers are absolute banana counts ----
+        var probe9 = FedRound(9);
+        report.Add("TIERS 2=" + TierStars(2) + " 3=" + TierStars(3) + " 5=" + TierStars(5) +
+                   " 6=" + TierStars(6) + " 8=" + TierStars(8) + " 9=" + probe9.Stars +
+                   " fed9=" + probe9.FeedingTotal +
+                   " tasks=" + probe9.TasksForMonkey(0) + "/" + probe9.TasksForMonkey(1) + "/" +
+                   probe9.TasksForMonkey(2) +
+                   " feedings=" + string.Join(",", probe9.Feedings));
+        Check(TierStars(2) == 0 && TierStars(3) == 1 && TierStars(5) == 1 &&
+              TierStars(6) == 2 && TierStars(8) == 2 && TierStars(9) == 3,
+            "stars follow the 0-2 / 3-5 / 6-8 / 9-10 banana tiers");
+        Check(FedRound(9).FeedingRatio >= 1.0,
+            "nine bananas fill the progress bar completely");
+        var tutorialRound = new CareRound();
+        tutorialRound.DealFeedingTasks();
+        Check(tutorialRound.RegisterTutorialFeeding() &&
+              tutorialRound.FeedingTotal == 1 && tutorialRound.FeedingRatio > .1,
+            "the tutorial banana counts as a scored feeding");
+
+        var round = FedRound(7);
+        round.Freeze();
+        // Mirror the session freeze path so NPC world-space HUDs (hunger bars,
+        // emotions) are hidden exactly like the real round end does.
+        if (session.monkeys != null)
+            foreach (var npc in session.monkeys) npc.StopAtCutoff();
         roundView.ShowResults();
         roundView.Update(round, 240);
         yield return null;
@@ -487,9 +530,28 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
               totalTitle && totalTitle.fontSize >= 72,
             "results copy uses the enlarged readable font");
         Capture("final-results");
-        Check(round.Score == 7 && round.Stars == 1 && round.IsPassing,
-            "seven feedings shows passing one-star results");
+        Check(round.Score == 7 && round.Stars == 2 && round.IsPassing,
+            "seven feedings shows passing two-star results");
     }
+
+    // Deal the round's hunger episodes and settle a given number of feedings.
+    static CareRound FedRound(int bananas)
+    {
+        var probe = new CareRound();
+        probe.DealFeedingTasks();
+        int done = 0;
+        for (int task = 0; task < 8 && done < bananas; task++)
+        {
+            for (int index = 0; index < 3 && done < bananas; index++)
+            {
+                if (!probe.Complete(index, task, CareNeed.Hunger, 100)) continue;
+                done++;
+            }
+        }
+        return probe;
+    }
+
+    static int TierStars(int bananas) => FedRound(bananas).Stars;
 
     IEnumerator Press(string fieldName)
     {

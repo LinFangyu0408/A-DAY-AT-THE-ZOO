@@ -14,9 +14,13 @@ namespace ADayAtTheZoo.Monkeys.Care
         public const int PlannedTasks = 18;
         public const int StartingBananas = 10;
         public const int BananaPickupAmount = 10;
-        // 60% of the bar is the passing line; stars scale with the ratio.
+        // Star tiers are absolute banana counts so the bar, the passing line and
+        // the result card can never disagree: 0-2 none, 3-5 one, 6-8 two, 9-10 three.
+        public const int OneStarFeedings = 3;
+        public const int TwoStarFeedings = 6;
+        public const int ThreeStarFeedings = 9;
+        // 60% of the bar is the passing line; stars use the tiers above.
         public const float PassingRatio = .6f;
-        public const float TwoStarRatio = .8f;
         // Shortened round: two and a half minutes keeps the nine random
         // hunger episodes comfortably reachable while staying snappy.
         public const float Cutoff = 150;
@@ -48,13 +52,21 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             if (!FeedingOnly) return;
             int[] tasks = { 2, 2, 2 };
-            for (int i = 0; i < PlannedFeedings - tasks[0] - tasks[1] - tasks[2]; i++)
+            // The extra count must be captured ONCE: reading it from the running
+            // sum inside the loop bound stops the loop early and silently leaves
+            // the round one episode short, which made the ninth (three-star)
+            // banana impossible to reach.
+            int extra = PlannedFeedings - 2 - 2 - 2;
+            for (int i = 0; i < extra; i++)
                 tasks[UnityEngine.Random.Range(0, 3)]++;
             for (int i = 0; i < feedingTasks.Length; i++) feedingTasks[i] = tasks[i];
         }
-        public int FeedingTotal => Feedings[0] + Feedings[1] + Feedings[2];
+        public int FeedingTotal => Feedings[0] + Feedings[1] + Feedings[2] + TutorialFeedings;
         public int ScratchTotal => Scratches[0] + Scratches[1] + Scratches[2];
         public int CompletedTotal => FeedingTotal + ScratchTotal;
+        // The guided tutorial banana is a real feeding: it scores and it moves
+        // the top progress bar, so the opening lesson is never "wasted".
+        public int TutorialFeedings { get; private set; }
         public int TasksForMonkey(int monkey)
         {
             int index = Math.Max(0, Math.Min(2, monkey));
@@ -64,21 +76,35 @@ namespace ADayAtTheZoo.Monkeys.Care
         // exactly this value. Patience penalties are recorded for the report
         // but no longer deduct from the displayed rating.
         public double Score => Math.Max(0, Math.Min(TaskTotal, FeedingTotal));
-        public double FeedingRatio => TaskTotal == 0 ? 0 : (double)FeedingTotal / TaskTotal;
-        public int PassingFeedings => (int)Math.Ceiling(PassingRatio * TaskTotal);
-        public bool IsPassing => FeedingRatio >= PassingRatio;
+        // The bar fills at nine bananas; the tutorial banana counts towards it,
+        // so nine total (tutorial included) is a full bar.
+        public double FeedingRatio => TaskTotal == 0 ? 0
+            : Math.Min(1.0, (double)FeedingTotal / TaskTotal);
+        public int PassingFeedings => TwoStarFeedings;
+        public bool IsPassing => FeedingTotal >= TwoStarFeedings;
         public double ResolvedPercent => FeedingOnly
-            ? 100.0 * FeedingTotal / PlannedFeedings
+            ? Math.Min(100.0, 100.0 * FeedingTotal / PlannedFeedings)
             : 100.0 * ScratchTotal / PlannedScratches;
-        public int Stars => FeedingRatio >= 1 ? 3 : FeedingRatio >= TwoStarRatio ? 2 :
-            FeedingRatio >= PassingRatio ? 1 : 0;
-        public double NextStarPoints => Stars == 3 ? 0 : Math.Max(0,
-            (int)Math.Ceiling((Stars == 0 ? PassingRatio : Stars == 1 ? TwoStarRatio : 1f) * TaskTotal) - FeedingTotal);
+        public int Stars => FeedingTotal >= ThreeStarFeedings ? 3 :
+            FeedingTotal >= TwoStarFeedings ? 2 :
+            FeedingTotal >= OneStarFeedings ? 1 : 0;
+        public int NextStarFeedings => Stars >= 3 ? 0 :
+            (Stars == 0 ? OneStarFeedings : Stars == 1 ? TwoStarFeedings : ThreeStarFeedings) - FeedingTotal;
+        public int NextStarPoints => NextStarFeedings;
+        public bool RegisterTutorialFeeding()
+        {
+            if (Frozen || !FeedingOnly || TutorialFeedings >= 1) return false;
+            TutorialFeedings++;
+            return true;
+        }
 
         public bool Complete(int monkey, int task, CareNeed need, float timestamp)
         {
+            // A banana swallowed a heartbeat after the whistle still counts: the
+            // resolution timestamp can land a fraction past the cutoff because
+            // feeding is sampled once per frame.
             if (Frozen || monkey < 0 || monkey > 2 || task < 0 ||
-                task >= TasksForMonkey(monkey) || timestamp > Cutoff + .00001f) return false;
+                task >= TasksForMonkey(monkey) || timestamp > Cutoff + .75f) return false;
             CareNeed expected = FeedingOnly ? CareNeed.Hunger :
                 task % 2 == 0 ? firstNeeds[monkey] : firstNeeds[monkey] == CareNeed.Hunger ? CareNeed.Itch : CareNeed.Hunger;
             if (need != expected || task != Feedings[monkey] + Scratches[monkey]) return false;

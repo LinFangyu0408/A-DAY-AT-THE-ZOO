@@ -17,7 +17,7 @@ public static class CareSelfTests
         var progress = New();
         Check(progress.Patience == 1, "patience starts full");
         progress.Wait(15);
-        Check(Mathf.Approximately(progress.Patience, .75f), "quadratic patience");
+        Check(Mathf.Approximately(progress.Patience, .5f), "linear patience drains every second");
         Check(!progress.Feed(2), "food does not finish immediately");
         progress.Wait(2);
         Check(progress.Fed == 2 && !progress.Late, "pause preserves effective feeding");
@@ -68,7 +68,7 @@ public static class CareSelfTests
         }
 
         var exact = new CareRound();
-        Check(exact.Complete(0, 0, CareNeed.Hunger, 230), "cutoff equality accepted before freeze");
+        Check(exact.Complete(0, 0, CareNeed.Hunger, CareRound.Cutoff), "cutoff equality accepted before freeze");
         Check(exact.TaskTotal == 9, "feeding-only rounds plan nine hunger episodes");
         Check(!exact.Complete(0, 1, CareNeed.Itch, 40), "feeding-only round rejects itching");
         var ignoredNeeds = new CareRound(new[] { CareNeed.Itch, CareNeed.Itch, CareNeed.Itch });
@@ -99,23 +99,32 @@ public static class CareSelfTests
         Check(penalties.ResolvedPercent > 99.999, "full run reports one hundred percent");
 
         var passing = new CareRound();
-        for (int i = 0; i < passing.PassingFeedings; i++)
+        for (int i = 0; i < CareRound.TwoStarFeedings; i++)
         {
             int monkey = 0, task = i;
             while (task >= passing.TasksForMonkey(monkey)) task -= passing.TasksForMonkey(monkey++);
             Check(passing.Complete(monkey, task, CareNeed.Hunger, 100), "sixtieth-percent feed completes");
         }
-        Check(passing.IsPassing && passing.Stars == 1, "sixty percent is the one-star passing line");
+        Check(passing.IsPassing && passing.Stars == 2, "six bananas pass the round with two stars");
 
-        var twoStar = new CareRound();
-        int twoStarTarget = (int)Math.Ceiling(CareRound.TwoStarRatio * CareRound.PlannedFeedings);
-        for (int i = 0; i < twoStarTarget; i++)
+        var oneStar = new CareRound();
+        for (int i = 0; i < CareRound.OneStarFeedings; i++)
         {
             int monkey = 0, task = i;
-            while (task >= twoStar.TasksForMonkey(monkey)) task -= twoStar.TasksForMonkey(monkey++);
-            Check(twoStar.Complete(monkey, task, CareNeed.Hunger, 100), "eighty-percent feed completes");
+            while (task >= oneStar.TasksForMonkey(monkey)) task -= oneStar.TasksForMonkey(monkey++);
+            Check(oneStar.Complete(monkey, task, CareNeed.Hunger, 100), "three-banana feed completes");
         }
-        Check(twoStar.Stars == 2 && !twoStar.Frozen, "eighty percent earns two stars");
+        Check(oneStar.Stars == 1 && !oneStar.IsPassing, "three bananas already earn one star");
+
+        var threeStar = new CareRound();
+        for (int i = 0; i < CareRound.ThreeStarFeedings; i++)
+        {
+            int monkey = 0, task = i;
+            while (task >= threeStar.TasksForMonkey(monkey)) task -= threeStar.TasksForMonkey(monkey++);
+            Check(threeStar.Complete(monkey, task, CareNeed.Hunger, 100), "nine-banana feed completes");
+        }
+        Check(threeStar.Stars == 3 && threeStar.FeedingRatio >= 1,
+            "nine bananas fill the bar and earn three stars");
 
         var mixed = new CareRound(new[] { CareNeed.Hunger, CareNeed.Itch, CareNeed.Hunger }, false);
         Check(mixed.TasksForMonkey(1) == 6 && mixed.Complete(1, 0, CareNeed.Itch, 40),

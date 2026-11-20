@@ -53,6 +53,8 @@ namespace ADayAtTheZoo.Monkeys.Care
 #endif
             Time.timeScale > 0;
         public static Camera PlayerCamera => Instance ? Instance.playerCamera : null;
+        // Below this many seconds left the HUD switches to "final sprint" mode.
+        public const float FinalSprintSeconds = 20;
         public static float GameTime => Instance ? Instance.gameTime : Time.time;
         public static float TaskTime => Mathf.Min(GameTime, CareRound.Cutoff);
         public CareRound Round { get; private set; }
@@ -110,6 +112,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         Text readyKeyLabel;
         GameObject readyFx;
         CareRoundView roundView;
+        CareDirectionHint standHint;
         CareFarmEnvironment farmEnvironment;
         CarePickupMarker bananaPickup;
         readonly List<CareTaskRecord> records = new();
@@ -285,6 +288,10 @@ namespace ADayAtTheZoo.Monkeys.Care
             }
             roundView.ShowHud();
             GloveInventory?.ShowHud();
+            // The stall is behind the opening view, so turn the very first head
+            // movement into a "this way" plate instead of leaving players lost.
+            if (!standHint && bananaPickup)
+                standHint = CareDirectionHint.Create(playerCamera, this, bananaPickup.transform);
         }
         void SetPlayerInputLocked(bool locked)
         {
@@ -316,6 +323,14 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (!TutorialActive || RoundStarted) return;
             TutorialMonkey?.BeginGuidedTutorial(CareNeed.Hunger);
         }
+        // The banana the player feeds during the lesson counts on the round
+        // score, so the progress bar moves before the clock even starts.
+        public void RegisterTutorialFeeding()
+        {
+            if (Round == null || Round.Frozen) return;
+            if (Round.RegisterTutorialFeeding()) SyncHud();
+        }
+        public CarePickupMarker BananaPickup => bananaPickup;
         // ---- hunger rotation -------------------------------------------------
         // Exactly one monkey may be hungry at a time. Feeding it hands the
         // request to the next monkey 3-6 seconds later, so three monkeys never
@@ -594,6 +609,14 @@ namespace ADayAtTheZoo.Monkeys.Care
             }
             if (begun && !readyGateActive && !goSequenceActive && roundView != null)
             {
+                // Final sprint: the last twenty seconds must never be dead air.
+                // If nobody owns the hunger slot, hand it out right away so the
+                // player always has a target and can still chase the last star.
+                if (RoundStarted && !Round.Frozen &&
+                    CareRound.Cutoff - gameTime <= FinalSprintSeconds &&
+                    Round.FeedingTotal < Round.TaskTotal &&
+                    (!HungerOwner || (!HungerOwner.HasDemand && HungerOwner.NextIn > 1.2f)))
+                    ScheduleNextHunger(.4f);
                 roundView.Update(Round, gameTime);
             }
             audioFeedback.UpdateMusic(Round.Frozen);
@@ -763,6 +786,11 @@ namespace ADayAtTheZoo.Monkeys.Care
             HungerOwner = null; hungerCursor = -1;
             TutorialActive = false; RoundStarted = false;
             rig.transform.SetPositionAndRotation(rigStartPosition, rigStartRotation);
+            // The results screen switched every "Care ..." camera overlay off;
+            // switch them back on so the second round has its full HUD again.
+            foreach (Transform child in playerCamera.transform)
+                if (child.name.StartsWith("Care ") && child.name != "Care RESULTS")
+                    child.gameObject.SetActive(true);
             roundView.Reset();
             if (bananaPickup) bananaPickup.gameObject.SetActive(true);
             GloveInventory?.Reset(Round);

@@ -5,7 +5,7 @@ namespace ADayAtTheZoo.Monkeys.Care
 {
     public sealed class CareTutorial : MonoBehaviour
     {
-        const int FinalStep = 7;
+        const int FinalStep = 6;
         // The first ~15 seconds belong to the player: walk around, look at the
         // zoo, get comfortable. Only then does the first monkey get hungry and
         // the bag / feeding instructions appear.
@@ -101,11 +101,8 @@ namespace ADayAtTheZoo.Monkeys.Care
                         ShowStep(3);
                     break;
                 case 3:
-                    if (!hungerStarted)
-                    {
-                        hungerStarted = true;
-                        session.BeginTutorialHunger();
-                    }
+                    // The instruction (and its B badge) is already on screen
+                    // before the player opens the bag — never after.
                     if (session.GloveInventory != null && session.GloveInventory.IsOpen) ShowStep(4);
                     break;
                 case 4:
@@ -113,27 +110,14 @@ namespace ADayAtTheZoo.Monkeys.Care
                         session.GloveInventory != null && !session.GloveInventory.IsOpen) ShowStep(5);
                     break;
                 case 5:
-                    if (input.TriggerHeld && session.HeldItem) ShowStep(6);
-                    break;
-                case 6:
+                    // Aim and throw are one instruction so the player reads
+                    // "release to throw" before releasing, not afterwards.
                     if (session.TutorialHungerSatisfied) ShowStep(FinalStep);
-                    else if (HoldingFood && (session.GloveInventory == null || !session.GloveInventory.IsOpen))
-                    {
-                        // Stay on the throw step while the banana is in hand.
-                    }
-                    else if (StepElapsed >= 1.5f &&
-                             (session.GloveInventory == null || !session.GloveInventory.IsOpen))
-                    {
-                        action.text = "RELEASE TRIGGER TO TRY AGAIN";
-                        SetKey("RT");
-                    }
                     break;
                 case FinalStep:
                     if (StepElapsed >= 3f) Finish();
                     break;
             }
-            if (step == 4 && session.GloveInventory != null && session.GloveInventory.IsOpen)
-                SetKey(CareInput.BackLabel);
             stepLabel.text = "STEP " + (step + 1) + " / " + (FinalStep + 1);
         }
 
@@ -180,36 +164,24 @@ namespace ADayAtTheZoo.Monkeys.Care
                         hungerStarted = true;
                         session.BeginTutorialHunger();
                     }
-                    title.text = "A MONKEY IS HUNGRY";
-                    body.text = "Find it, then open your bag.";
-                    action.text = "FIND THE MONKEY";
-                    SetKey("!");
-                    break;
-                case 4:
                     title.text = "OPEN THE BAG";
-                    body.text = "Open the bag to take a banana.";
-                    action.text = "PRESS TO OPEN THE BAG";
+                    body.text = "A monkey is hungry. Press B to open your bag.";
+                    action.text = "PRESS B TO OPEN";
                     SetKey(CareInput.BackLabel);
                     break;
-                case 5:
+                case 4:
                     title.text = "TAKE A BANANA";
-                    body.text = "Select the banana in the bag.";
-                    action.text = "PRESS TO SELECT";
+                    body.text = "Pick the banana with A.";
+                    action.text = "PRESS A TO SELECT";
                     SetKey(CareInput.ConfirmLabel);
                     break;
-                case 6:
-                    title.text = "AIM";
-                    body.text = "Hold the trigger on the monkey.";
-                    action.text = HoldingFood ? "HOLD TO AIM" : "TAKE A BANANA FIRST";
+                case 5:
+                    title.text = "AIM AND THROW";
+                    body.text = "Hold RT to aim, release to throw.";
+                    action.text = "HOLD RT, THEN RELEASE";
                     SetKey("RT");
                     break;
                 case FinalStep:
-                    title.text = "THROW";
-                    body.text = "Release the trigger to throw.";
-                    action.text = "RELEASE TO THROW";
-                    SetKey("RT");
-                    break;
-                default:
                     title.text = "GREAT JOB";
                     body.text = "Keep feeding the monkeys.";
                     action.text = "TUTORIAL COMPLETE";

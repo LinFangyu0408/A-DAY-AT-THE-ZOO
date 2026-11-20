@@ -138,3 +138,17 @@
 - 头顶耐受度条：删除玩家正前方的 `Care STAMINA HUD`，只保留猴子头顶 CarePanel；画布加 sortingOrder（HUD 10 / 头顶 60 / 教程 80 / Ready 90 / 结算 100），头顶条不再被 SCORE 压住。
 - 教程：0/1/2 步先走位与转视角（合计约 15s，带超时兜底），第 3 步才触发饥饿；按键统一成彩色圆形徽章（A 绿 / B 红 / RT 橙），用程序生成的白色圆角底避免贴图颜色相乘发暗。
 - 冒烟测试 56 项全过（含"一次只饿一只"、"头顶条在头上"、"喂完 score 同帧刷新"、"Ready 门控不自动开始"）。
+
+## 2026-11-20 第九轮（计分/节奏/提示/收尾）
+- **3 星永远拿不到的真因**：`DealFeedingTasks()` 的循环边界自引用 —— `for (i=0; i < PlannedFeedings - tasks[0]-tasks[1]-tasks[2]; i++)`，每加一次总数就增加，判断立刻失效，实际只发出 **8** 个饥饿任务（2/2/4），而进度条需要 9 → 永远差一根。改为先算 `extra = PlannedFeedings - 6` 再一次发牌。
+- 计分统一按香蕉根数：0-2 无星 / 3-5 一星 / 6-8 二星 / 9-10 三星（`OneStarFeedings/TwoStarFeedings/ThreeStarFeedings`）。`IsPassing` = ≥6 根（60% 线）。
+- 新手引导喂的那根也计分：`CareRound.RegisterTutorialFeeding()`，`FeedingTotal` 含教程分，进度条立刻上涨（早期 11% 不再是"白喂")。
+- 喂食时长上限 `MaxFeedSeconds = 3.5s`（场景里 8 秒太久，9 只在 150 秒内根本喂不完）；超时惩罚目标 = min(late, feed+1.2)。
+- 头顶饥饿条：`CareProgress.Patience` 改为线性下降（原来是 t²，前半段几乎不动，看起来"没在掉"）；进食期间**保持显示**（上一版进食时隐藏，被用户判为 bug），吃完立即消失。
+- 移除满意值：`RefreshUi` 只显示 STAMINA；吃完 → 面板隐藏 + Happy 表情（不再切 SATISFACTION）。
+- 教程：步数 7→6，把"瞄准/投掷"合成一步（先讲 release to throw 再让玩家松手），每步都先给出按键徽章与文案，不再"做完才提示"。
+- 最后 20 秒：`MonkeyCareSession.FinalSprintSeconds`，HUD 金色横幅 "FINAL 12s · 1 MORE FOR 1 STAR"，时钟变橙；若当前没有饥饿猴子，立刻补派一只（0.4s），杜绝干等。
+- 星星 UI 移到 60% 黄线上并盖住黄线（`Score star badge` 用 passMarker 的 x），删掉冗余的 "PASS 60%" 文案。
+- 小摊方向提示（方案 A）：`CareDirectionHint`，玩家累计转头 ≥35° 且小摊不在正前 55° 锥内时，屏幕下方出现可旋转箭头 + "BANANA STAND 10m"，开局面朝反方向时先给 6 秒引导；香蕉 ≤2 根时常驻。
+- 第二轮 HUD 恢复：`RestartRound` 重新激活所有 "Care ..." 相机子物体（之前结算时被关掉就再也不回来）。
+- 冒烟测试 66 项全过。

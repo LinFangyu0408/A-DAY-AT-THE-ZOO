@@ -63,7 +63,9 @@ namespace ADayAtTheZoo.Monkeys.Care
             Locked = true; Strokes = Mathf.Min(StrokeTarget, Strokes + 1);
             Completed = Strokes >= StrokeTarget; return Completed;
         }
-        public float Patience => 1 - Mathf.Pow(Mathf.Clamp01(Waited / Deadline), 2);
+        // Linear drain: the overhead hunger bar must visibly slide down every
+        // second (a squared curve looked frozen for the first half of the wait).
+        public float Patience => 1 - Mathf.Clamp01(Waited / Deadline);
         public float Satisfaction(CareNeed need) => !Locked ? 0 : Mathf.Pow(Mathf.Clamp01(
             need == CareNeed.Hunger ? Fed / FeedTarget : (float)Strokes / StrokeTarget), 2);
     }
