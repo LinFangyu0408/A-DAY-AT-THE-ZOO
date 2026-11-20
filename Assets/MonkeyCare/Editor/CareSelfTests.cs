@@ -166,6 +166,18 @@ public static class CareSelfTests
         Check(!stroke.Sample(1, true, .08f, .06f), "initial touch not stroke");
         Check(stroke.Sample(.9f, true, .08f, .06f), "legacy scratching logic remains intact");
 
+        // Long throws used to be launched as ~20 m/s bullets (the flight time was
+        // capped at .7s), fast enough to tunnel through the monkey's contact box.
+        Vector3 from = new(0, 1.4f, 0);
+        Vector3 to = new(0, 1.2f, 12f);
+        Vector3 launch = CareItem.BallisticVelocity(from, to, 9);
+        Check(launch.magnitude < 15f,
+            "a twelve-metre banana throw stays under fifteen metres per second");
+        float flight = Mathf.Clamp(12f / 9f, .25f, 1.05f);
+        Vector3 landed = from + launch * flight + Physics.gravity * (.5f * flight * flight);
+        Check(Vector3.Distance(landed, to) < .2f,
+            "the ballistic solution still lands on the aimed point");
+
         Directory.CreateDirectory("work/monkey-care");
         File.WriteAllText("work/monkey-care/self-tests.txt",
             "PASS " + checks + " assertions; feeding-only v2\n" + DateTime.Now.ToString("s"));

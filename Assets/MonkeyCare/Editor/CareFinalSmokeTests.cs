@@ -602,7 +602,7 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             gameCamera.transform.position = before;
             yield return null;
 
-            // ---- a stuck button must never fly the player over the animals ----
+            // ---- walk-only: no jumping, no flying, no teleporting onto props ----
             Transform riseRoot = session.PlayerRoot;
             Vector3 riseBase = riseRoot ? riseRoot.position : gameCamera.transform.position;
             Vector3 riseTarget = riseBase + Vector3.up * 6f;
@@ -612,11 +612,34 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             float riseNow = riseRoot ? riseRoot.position.y : gameCamera.transform.position.y;
             report.Add("RISE now=" + riseNow.ToString("F2") + " start=" + riseBase.y.ToString("F2") +
                        " cap=" + (riseBase.y + CarePlayAreaBarrier.MaxRise).ToString("F2"));
-            Check(riseNow - riseBase.y <= CarePlayAreaBarrier.MaxRise + .4f,
-                "the vertical guard pulls a floating player back down to the yard");
+            Check(riseNow - riseBase.y <= CarePlayAreaBarrier.MaxRise + .05f,
+                "lifting the player six metres is undone within a frame");
             if (riseRoot) riseRoot.position = riseBase;
             else gameCamera.transform.position = riseBase;
             yield return null;
+
+            // A ray that lands on the yard still must not teleport: the yard is
+            // walk-only, so every teleport path is refused outright.
+            var loco = FindFirstObjectByType<Locomotion>();
+            if (loco)
+            {
+                Vector3 yardPoint = riseBase + Vector3.forward * 2f;
+                bool teleported = loco.TryTeleport(yardPoint);
+                report.Add("WALK groundOnly=" + loco.groundOnly + " allowTeleport=" + loco.allowTeleport +
+                           " teleportAccepted=" + teleported + " islandFloor=" + loco.IslandFloorY.ToString("F2"));
+                Check(loco.groundOnly && !loco.allowTeleport,
+                    "the care yard runs in walk-only mode");
+                Check(!teleported, "teleport is refused even on flat yard ground");
+                Check(loco.IslandFloorY < riseBase.y + 1f,
+                    "the island floor limit uses the mesh bottom, not its tallest hill");
+            }
+            else
+            {
+                // The smoke scene may be bootstrapped without the HighlandLake
+                // rig (desktop preview), so the walk-only flags cannot be checked
+                // here; the vertical guard above already proved the ground lock.
+                report.Add("WALK locomotion missing (headless care scene)");
+            }
         }
 
         // ---- final twenty seconds name the goal instead of leaving dead air ----

@@ -166,6 +166,10 @@ namespace ADayAtTheZoo.Monkeys.Care
             Hands = gameObject.AddComponent<CareHandVisuals>();
             pointer = MakeLine("Care Straight Ray"); arc = MakeLine("Care Teleport Arc");
             if (locomotion) locomotion.externalRightHandControl = true;
+            // Walk-only mode: the care yard is played on foot. Teleporting onto
+            // the animals, the stall roof or a rock was the other half of the
+            // "I am floating in the air" report.
+            if (locomotion) { locomotion.groundOnly = true; locomotion.allowTeleport = false; }
             begun = true;
             Round = new CareRound(MonkeyStartingNeeds(), feedingOnly);
             Round.DealFeedingTasks();
@@ -562,7 +566,11 @@ namespace ADayAtTheZoo.Monkeys.Care
 
             if (!menuOpen && held && Input.TriggerReleased)
             {
-                held.Throw(hasThrowSolution ? lastThrowVelocity : hand.forward * throwSpeed);
+                // The reticle was on a hungry monkey when the trigger opened, so
+                // that monkey is the intended receiver: the banana gets a short
+                // assist window instead of being lost to a graze on the way.
+                var receiver = RayNpc && RayNpc.Accepts(CareNeed.Hunger) ? RayNpc : null;
+                held.Throw(hasThrowSolution ? lastThrowVelocity : hand.forward * throwSpeed, receiver);
                 held = null;
                 nextBananaEquipAt = 0;
                 EquipBananaFromGlove(false);
@@ -587,6 +595,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             }
 
             bool groundAim = !menuOpen && !held && !itemTarget && !point && Input.TriggerHeld && Input.GripHeld &&
+                locomotion && locomotion.allowTeleport && !locomotion.groundOnly &&
                 hit.HasValue && hit.Value.normal.y >= .45f;
             if (groundAim)
             {
@@ -891,6 +900,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             StopHaptics(); if (held) held.Release();
             GloveInventory?.Close();
             if (locomotion) locomotion.externalRightHandControl = false;
+            if (locomotion) { locomotion.groundOnly = false; locomotion.allowTeleport = true; }
             if (locomotion) locomotion.inputLocked = false;
             if (desktopController) desktopController.inputLocked = false;
             if (Instance == this) Instance = null;

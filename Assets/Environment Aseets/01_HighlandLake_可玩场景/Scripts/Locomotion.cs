@@ -35,6 +35,11 @@ public sealed class Locomotion : MonoBehaviour
     public bool crouchToggleByRightClick = true;
     public bool resetViewByYButton = true;
     [System.NonSerialized] public bool inputLocked;
+    // Walking-only mode used by the care scene: the player stays on the yard
+    // floor, so every path that could lift the rig is closed (stick teleport,
+    // ray teleport onto a teleport point, and the island floor snap).
+    [System.NonSerialized] public bool groundOnly;
+    public bool allowTeleport = true;
 
     [Header("Crouch and teleport angles")]
     [Min(0.1f)] public float crouchDrop = 0.55f;
@@ -351,6 +356,10 @@ public sealed class Locomotion : MonoBehaviour
 
     public bool TryTeleport(Vector3 point)
     {
+        // Walking-only scenes never teleport: a ray that lands on a monkey, a
+        // rock or the stall roof used to drop the player on top of it, which is
+        // exactly the "I am floating in the air" report.
+        if (groundOnly || !allowTeleport) return false;
         if (rig == null || rig.centerEyeAnchor == null ||
             IsWaterSurface(point) || !IsLandingClear(point))
         {
@@ -574,8 +583,15 @@ public sealed class Locomotion : MonoBehaviour
             direction * turnAngle);
     }
 
+    // Falling off the island is only corrected when the player is genuinely
+    // below the floor. The old version snapped the rig to the island collider's
+    // BOUNDING BOX TOP, which is the highest hill of the whole mesh, so the
+    // player was launched metres into the air on the first frame of input.
+    public float IslandFloorY => islandMinimumFloorY;
+
     private void EnforceIslandFloorLimit()
     {
+        if (groundOnly) return;
         if (!islandFloorLimitResolved)
         {
             islandFloorLimitResolved = true;
@@ -593,14 +609,17 @@ public sealed class Locomotion : MonoBehaviour
                 Collider islandCollider = candidate.GetComponent<Collider>();
                 if (islandCollider != null)
                 {
+                    // Floor of the mesh, not its top: anything above this is a
+                    // hill or a tree, never a place the player may stand.
                     islandMinimumFloorY =
-                        islandCollider.bounds.max.y + floorClearance;
+                        islandCollider.bounds.min.y + floorClearance;
                 }
                 break;
             }
         }
 
-        if (transform.position.y < islandMinimumFloorY)
+        if (islandMinimumFloorY < -1f) return;
+        if (transform.position.y < islandMinimumFloorY - 2f)
         {
             Vector3 position = transform.position;
             position.y = islandMinimumFloorY;

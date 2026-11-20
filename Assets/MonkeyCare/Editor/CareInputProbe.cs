@@ -57,7 +57,40 @@ public static class CareInputProbe
         }
         catch (Exception e) { sb.AppendLine("ovrError=" + e.Message); }
 
+        AppendPlayerHeight(sb);
+
         File.WriteAllText(Folder + "input-probe.txt", sb.ToString());
+    }
+
+    // Height telemetry: the "I float in the air" report can only be judged from
+    // numbers, so the rig root, the eye and the tracking-space offset are all
+    // written out every second.
+    static void AppendPlayerHeight(StringBuilder sb)
+    {
+        if (!EditorApplication.isPlaying) return;
+        try
+        {
+            var session = UnityEngine.Object.FindFirstObjectByType<ADayAtTheZoo.Monkeys.Care.MonkeyCareSession>();
+            if (!session) { sb.AppendLine("session=none"); return; }
+            Transform root = session.PlayerRoot;
+            sb.AppendLine("playerRoot=" + (root ? root.name + " y=" + root.position.y.ToString("F2") +
+                " xz=(" + root.position.x.ToString("F2") + "," + root.position.z.ToString("F2") + ")" : "null"));
+            var loco = UnityEngine.Object.FindFirstObjectByType<Locomotion>();
+            if (loco)
+            {
+                sb.AppendLine("locomotion groundOnly=" + loco.groundOnly + " allowTeleport=" + loco.allowTeleport +
+                    " islandFloor=" + loco.IslandFloorY.ToString("F2"));
+            }
+            if (session.rig)
+            {
+                sb.AppendLine("rig y=" + session.rig.transform.position.y.ToString("F2") +
+                    " eyeY=" + (session.rig.centerEyeAnchor ? session.rig.centerEyeAnchor.position.y.ToString("F2") : "?") +
+                    " trackingLocalY=" + (session.rig.trackingSpace ? session.rig.trackingSpace.localPosition.y.ToString("F3") : "?"));
+            }
+            var barrier = UnityEngine.Object.FindFirstObjectByType<ADayAtTheZoo.Monkeys.Care.CarePlayAreaBarrier>();
+            if (barrier) sb.AppendLine("barrier startY=" + barrier.StartY.ToString("F2"));
+        }
+        catch (Exception e) { sb.AppendLine("heightError=" + e.Message); }
     }
 
     static void AppendNode(StringBuilder sb, string name, XRNode node)

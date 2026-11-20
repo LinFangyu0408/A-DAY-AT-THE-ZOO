@@ -21,20 +21,28 @@ namespace ADayAtTheZoo.Monkeys.Care
         public const float WallThickness = .6f;
         // How far inside the wall the soft clamp keeps the player.
         public const float ClampInset = .55f;
-        // The yard is a flattened strip, so the root should never rise more than
-        // a step above where the round started. Any bigger climb means an input
-        // path is driving the rig upward (a stuck A button did exactly that) and
-        // the player ends up floating over the animals.
-        public const float MaxRise = 1.2f;
+        // The yard is a flattened strip, so the root must stay on the floor it
+        // started on. A few centimetres of tolerance absorb uneven ground, and
+        // anything above that (a stuck button, a teleport ray, a stick push into
+        // a slope) is pulled straight back down: this mode is walk-only.
+        public const float MaxRise = .15f;
+        public const float MaxDrop = .9f;
+        // Artificial offsets written into the tracking space lift the view even
+        // when the rig root itself is pinned, so they are clamped as well.
+        public const float TrackingTolerance = .06f;
 
         public Vector3 Center { get; private set; }
         public float Radius { get; private set; }
         public int Segments { get; private set; }
+        public float StartY => startY;
 
         MonkeyCareSession session;
         Transform playerRoot;
         Camera view;
         float startY;
+        bool startCaptured;
+        bool trackingCaptured;
+        float trackingBaseY;
 
         public static CarePlayAreaBarrier Create(MonkeyCareSession owner, Camera camera, Transform stand)
         {
@@ -100,18 +108,26 @@ namespace ADayAtTheZoo.Monkeys.Care
             // (desktop); both ignore collision, so the clamp is what actually
             // stops the player at the fence.
             Transform root = playerRoot;
-            if (root && !view.transform.IsChildOf(root)) root = view.transform.root;
+            bool rigLive = session && session.rig && session.rig.gameObject.activeInHierarchy;
+            if (rigLive) root = session.rig.transform;
+            else if (root && !view.transform.IsChildOf(root)) root = view.transform.root;
             Transform target = root ? root : view.transform;
+
+            // The floor height must come from the rig root, never from the eye:
+            // capturing it off the camera would lock the player 1.7m up.
+            if (!startCaptured)
+            {
+                if (rigLive || playerRoot)
+                {
+                    startY = (rigLive ? root : playerRoot).position.y;
+                    startCaptured = true;
+                }
+                else return;
+            }
 
             // Vertical guard runs before the horizontal early-out so a floating
             // player is pulled back down even while standing inside the fence.
-            Vector3 guarded = target.position;
-            float ceiling = startY + MaxRise;
-            if (guarded.y > ceiling)
-            {
-                guarded.y = ceiling;
-                target.position = guarded;
-            }
+            GuardVertical(target);
 
             Vector3 flat = new(view.transform.position.x - Center.x, 0f,
                 view.transform.position.z - Center.z);
@@ -119,6 +135,46 @@ namespace ADayAtTheZoo.Monkeys.Care
             float limit = Radius - ClampInset;
             if (distance <= limit || distance < .0001f) return;
             target.position += -flat / distance * (distance - limit);
+        }
+
+        void GuardVertical(Transform target)
+        {
+            ClampY(target);
+            // Locomotion moves ITS OWN transform (the rig is usually a child of
+            // "Player and Locomotion"), so pinning only the rig would let the
+            // parent drift upwards every frame while the child compensated.
+            if (session && session.locomotion && session.locomotion.transform != target)
+                ClampY(session.locomotion.transform);
+
+            // Locomotion and recentering can offset the tracking space instead
+            // of the root; clamping it keeps the eye at standing height.
+            if (!session || !session.rig || !session.rig.trackingSpace) return;
+            Transform space = session.rig.trackingSpace;
+            Vector3 local = space.localPosition;
+            if (!trackingCaptured)
+            {
+                trackingBaseY = local.y;
+                trackingCaptured = true;
+            }
+            float wanted = Mathf.Clamp(local.y, trackingBaseY - TrackingTolerance,
+                trackingBaseY + TrackingTolerance);
+            if (Mathf.Abs(local.y - wanted) > .0005f)
+            {
+                local.y = wanted;
+                space.localPosition = local;
+            }
+        }
+
+        void ClampY(Transform target)
+        {
+            if (!target) return;
+            Vector3 guarded = target.position;
+            float clamped = Mathf.Clamp(guarded.y, startY - MaxDrop, startY + MaxRise);
+            if (Mathf.Abs(guarded.y - clamped) > .0005f)
+            {
+                guarded.y = clamped;
+                target.position = guarded;
+            }
         }
 
         static float GroundAt(Vector3 near)

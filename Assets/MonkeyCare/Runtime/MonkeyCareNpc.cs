@@ -302,12 +302,27 @@ namespace ADayAtTheZoo.Monkeys.Care
         void Complete(CareItem item, float completedAt)
         {
             if (!HasDemand) return;
+            // A demand raised in the very first second of the round produced a
+            // timestamp below 1, which the round rejects as "not started yet".
+            // The feeding then looped forever with the banana frozen on the
+            // monkey's mouth, so the timestamp is clamped into the round.
+            completedAt = Mathf.Max(1f, completedAt);
             if (guidedTutorial)
             {
                 CompleteGuided(item);
                 return;
             }
-            if (!MonkeyCareSession.Instance.CompleteTask(this, completedAt)) return;
+            if (!MonkeyCareSession.Instance.CompleteTask(this, completedAt))
+            {
+                // Never leave the banana stuck in the air: take it and re-arm the
+                // same demand a moment later so the player can simply try again.
+                HasDemand = false; Celebrating = false; EatingNow = false;
+                item.Consume();
+                waitUntil = MonkeyCareSession.TaskTime + 1.5f;
+                PlayPhase(MonkeyAction.Hungry, hungry);
+                RefreshUi();
+                return;
+            }
             record.completedAt = completedAt;
             if (!Progress.Late) consecutiveRescues = 0;
             CurrentTaskIndex++;

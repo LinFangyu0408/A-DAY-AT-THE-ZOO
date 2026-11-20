@@ -35,6 +35,9 @@ namespace ADayAtTheZoo.Monkeys.Care
         readonly ScratchStroke stroke = new();
         MonkeyCareNpc previousScratchTarget;
         MonkeyCareNpc caughtTarget;
+        MonkeyCareNpc assist;
+        Vector3 flightFrom;
+        float caughtAt;
 
         void Awake()
         {
@@ -89,10 +92,15 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
         public static Vector3 BallisticVelocity(Vector3 origin, Vector3 destination, float speed)
         {
-            float flight = Mathf.Clamp(Vector3.Distance(origin, destination) / Mathf.Max(4f, speed), .25f, .7f);
+            // A longer allowed flight keeps the launch speed human: the old .7s
+            // cap turned a ten-metre throw into a 20 m/s bullet that tunneled
+            // straight through the monkey's small contact trigger.
+            float flight = Mathf.Clamp(Vector3.Distance(origin, destination) / Mathf.Max(4f, speed),
+                .25f, 1.05f);
             return (destination - origin) / flight - Physics.gravity * (.5f * flight);
         }
-        public void Throw(Vector3 velocity)
+        public void Throw(Vector3 velocity) => Throw(velocity, null);
+        public void Throw(Vector3 velocity, MonkeyCareNpc assistTarget)
         {
             if (!Held) return;
             Held = false; Caring = false; Target = null;
@@ -101,9 +109,16 @@ namespace ADayAtTheZoo.Monkeys.Care
             transform.position += velocity.normalized * .08f;
             body.isKinematic = false;
             body.useGravity = true;
+            // A hand-thrown banana covers ~25cm per physics step; without
+            // continuous detection it passes through the small "Care Contact"
+            // trigger and ends up hovering behind the monkey.
+            body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             body.linearVelocity = velocity;
             body.angularVelocity = UnityEngine.Random.onUnitSphere * 7f;
             Thrown = true;
+            flightFrom = transform.position;
+            assist = assistTarget && assistTarget.Accepts(CareNeed.Hunger) ? assistTarget : null;
+            caughtAt = 0f;
             returnAt = Time.time + missedThrowSeconds;
             if (ghost) Destroy(ghost);
             if (kind == CareNeed.Hunger) MonkeyCareSession.Instance?.ConsumeThrownBanana();
@@ -115,6 +130,8 @@ namespace ADayAtTheZoo.Monkeys.Care
             Available = false; Held = false; Caring = false; Target = null;
             Thrown = false;
             caughtTarget = null;
+            caughtAt = 0f;
+            assist = null;
             transform.SetParent(homeParent, true); body.isKinematic = true; touching.Clear(); stroke.Reset();
             if (ghost) Destroy(ghost);
             SetVisible(false, false);
@@ -125,6 +142,9 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             if (Held) { Held = false; Caring = false; Target = null; }
             caughtTarget = null;
+            caughtAt = 0f;
+            assist = null;
+            Thrown = false;
             returnAt = float.PositiveInfinity;
             Available = true; Caring = false; Target = null;
             Thrown = false;
@@ -153,6 +173,17 @@ namespace ADayAtTheZoo.Monkeys.Care
                 RestoreSupply();
                 return;
             }
+            // A caught banana that the monkey never actually starts eating (its
+            // task was already closed, the round froze, or the completion was
+            // rejected) used to stay frozen in mid-air forever. Give it a moment
+            // and hand it back to the player instead.
+            if (caughtTarget && body.isKinematic && !caughtTarget.EatingNow &&
+                caughtAt > 0f && Time.time - caughtAt > 1.2f)
+            {
+                RestoreSupply();
+                return;
+            }
+            AssistFlight();
             if (!Held && (Time.time >= returnAt ||
                 (!gloveMode && Available && (transform.position.y < -.4f || Vector3.Distance(transform.position, homePosition) > 45))))
             {
@@ -206,6 +237,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             // Keep the thrown state active while the monkey eats so each frame can
             // continue advancing satisfaction until Consume() clears the banana.
             returnAt = float.PositiveInfinity;
+            caughtAt = Time.time;
             if (!body.isKinematic)
             {
                 body.linearVelocity = Vector3.zero;
@@ -214,6 +246,39 @@ namespace ADayAtTheZoo.Monkeys.Care
             body.isKinematic = true;
             transform.position = TargetPoint(Target);
             transform.rotation = Quaternion.LookRotation(Target.transform.forward, Vector3.up);
+        }
+        // Fast throws can pass the small contact trigger between two physics
+        // steps, and a throw aimed at a hungry monkey should never be lost to a
+        // rail or a leaf on the way. This swept test plus the short-range snap
+        // make the banana land in the monkey's hands whenever the reticle was on
+        // it at release.
+        void AssistFlight()
+        {
+            if (!Thrown || Held || caughtTarget) return;
+            Vector3 now = transform.position;
+            float step = Vector3.Distance(flightFrom, now);
+            if (step > .0005f)
+            {
+                Vector3 direction = (now - flightFrom) / step;
+                foreach (var hit in Physics.SphereCastAll(flightFrom, .12f, direction,
+                             step + .12f, ~((1 << 2) | (1 << 5)), QueryTriggerInteraction.Collide))
+                {
+                    var npc = hit.collider.GetComponentInParent<MonkeyCareNpc>();
+                    if (npc && npc != caughtTarget && npc.Accepts(kind))
+                    {
+                        touching.Add(hit.collider);
+                        break;
+                    }
+                }
+                flightFrom = now;
+            }
+
+            if (!assist || !assist.Accepts(kind)) return;
+            if (Vector3.Distance(now, TargetPoint(assist)) > 1.1f) return;
+            Target = assist;
+            caughtTarget = assist;
+            CatchAtTarget();
+            assist.OfferFood(this);
         }
         MonkeyCareNpc ContactTarget()
         {

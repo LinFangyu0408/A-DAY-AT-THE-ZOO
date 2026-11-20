@@ -171,3 +171,15 @@
 - **香蕉弹不到猴子**：`ThrowAimPoint` 的 VR 分支原来是 `hand.position + hand.forward * max(3, rayDistance*.5)`（凭空猜一个点），出手速度又是 `hand.forward * throwSpeed` 的**纯直线**，重力一拉就落到猴子脚下。改为：瞄准点 = 手射线的真实命中点（命中猴子时取 `Care Contact` 触发器中心），出手速度统一走 `CareItem.BallisticVelocity`，使抛物线与射线终点一致。
 - 冒烟测试 86 → **90 断言**（新增：SCORE/BANANA 挂在 `Care Head Anchor` 下、`session.Head` 指向锚点、弹道解算落点误差 <0.2m、垂直护栏把抬高 6m 的玩家拉回）。
 - 顺带确认：`Oculus Mirror` 在 Quest Link V2 + OpenXR 下始终停在 "Waiting for VR session"（OVR 服务端 `hmd0Valid=false`，Mirror 只认 OVR 会话），VR 预览改用 Unity Game 视图的 **Left Eye**。
+
+## 2026-11-20 第十二轮（只能走路 / 香蕉必然进猴子手里）
+- **往上飘的真凶**：`Locomotion.EnforceIslandFloorLimit()` 把玩家高度锁到 `Island_1` **碰撞体包围盒的顶部** `bounds.max.y` —— 那是整座岛的**最高山丘**，不是脚下的地面，所以一有输入就把玩家弹到几米高。改为 `bounds.min.y + floorClearance`（网格底部），并且只在玩家掉到地面以下 2 米时才拉起；`groundOnly` 模式下整段跳过。
+- **禁止传送**：新增 `Locomotion.groundOnly` / `allowTeleport`，会话启动即设成"只能走路"。`TryTeleport` 直接返回 false；会话里地面弧线（grip+trigger）也一并关闭。之前射线落在猴子头顶/小摊棚顶/岩石上，一传送就站到物体上——这是"漂浮"的另一半原因。
+- **垂直硬护栏收紧**：`CarePlayAreaBarrier.MaxRise` 1.2 → **0.15m**，`MaxDrop` 0.9m；每帧同时夹 **rig 根** 与 **Locomotion 自己的 transform**（rig 通常是 "Player and Locomotion" 的子物体，只夹子物体父级会一直累积漂移），并把 `trackingSpace.localPosition.y` 夹在基准 ±6cm（Locomotion 的蹲伏/重定位会改这个值，头就会凭空升高）。`startY` 改在第一次 LateUpdate 里从 rig 根捕获（不再从眼睛相机取，否则会把玩家锁在 1.7m）。
+- **香蕉浮在半空**：三个原因一起修
+  1. `BallisticVelocity` 的飞行时间上限 .7s → **1.05s**，十米投掷从 ~20m/s 降到 ~11m/s，不再一帧跨越 25cm 从猴子的 `Care Contact` 触发器里穿过去。
+  2. 出手时设 `CollisionDetectionMode.ContinuousDynamic`，并对飞行做**扫掠检测**（`SphereCastAll` 半径 12cm），帧间穿模也能补上命中。
+  3. **瞄准辅助**：投掷瞬间若准星正对着饥饿猴子，该猴子作为 `assist` 目标，香蕉进入其接食点 1.1m 内直接吸附到它手上；再加**看守**：被接住却 1.2s 没开始吃（任务已关闭/回合冻结/结算被拒）就还给玩家，绝不再悬在空中。
+- `MonkeyCareNpc.Complete`：`completedAt` 下限钳到 1 秒（回合开始时 `<1` 的时间戳会被 `Round.Complete` 判为"还没开始"，导致吃不完、香蕉永远冻在嘴上）；任务结算仍失败时清空需求、1.5s 后重新要食，而不是死循环。
+- 输入探针新增高度遥测：`playerRoot y` / `rig y` / `eyeY` / `trackingLocalY` / `locomotion groundOnly` / `barrier startY`，下次"还在飘"可以直接看出是哪一层在动。
+- 自检 271 → **273**（长距离弹道速度 <15m/s 且落点误差 <0.2m）；冒烟 **90 断言**全过（抬 6 米一帧内回到 +0.03m）。
