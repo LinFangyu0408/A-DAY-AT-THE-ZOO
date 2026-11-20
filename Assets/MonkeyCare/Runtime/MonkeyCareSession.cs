@@ -53,6 +53,17 @@ namespace ADayAtTheZoo.Monkeys.Care
 #endif
             Time.timeScale > 0;
         public static Camera PlayerCamera => Instance ? Instance.playerCamera : null;
+        // Every world-space plate hangs off this transform. In VR the camera the
+        // session grabbed during Start() can be the desktop stand-in, which the
+        // headset rig disables a few frames later — parenting the HUD to it made
+        // the whole interface vanish inside the headset. The anchor always rides
+        // the real eye, so the UI follows the player instead of a dead camera.
+        public Transform Head => uiHead ? uiHead.transform
+            : playerCamera ? playerCamera.transform : transform;
+        Transform HeadSource() =>
+            rig && rig.gameObject.activeInHierarchy && rig.centerEyeAnchor
+                ? rig.centerEyeAnchor
+                : playerCamera ? playerCamera.transform : transform;
         // Root that actually carries the player: the VR rig in headset play, the
         // character controller on desktop. Used by the invisible play-area fence.
         public Transform PlayerRoot =>
@@ -119,6 +130,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         GameObject readyFx;
         CareRoundView roundView;
         CareDirectionHint standHint;
+        CareHeadAnchor uiHead;
         CareFarmEnvironment farmEnvironment;
         CarePlayAreaBarrier playArea;
         CarePickupMarker bananaPickup;
@@ -157,6 +169,11 @@ namespace ADayAtTheZoo.Monkeys.Care
             begun = true;
             Round = new CareRound(MonkeyStartingNeeds(), feedingOnly);
             Round.DealFeedingTasks();
+            // The HUD anchor must exist before any artwork is parented to it.
+            var headObject = new GameObject("Care Head Anchor");
+            var headAnchor = headObject.AddComponent<CareHeadAnchor>();
+            headAnchor.Follow(HeadSource());
+            uiHead = headAnchor;
             rigStartPosition = rig.transform.position; rigStartRotation = rig.transform.rotation;
             SetupFeedingOnlyScene();
             farmEnvironment = CareFarmEnvironment.Create(playerCamera);
@@ -169,8 +186,8 @@ namespace ADayAtTheZoo.Monkeys.Care
                     ? farmEnvironment.Stand
                     : bananaPickup ? bananaPickup.transform : null);
             Hands.Begin(this);
-            roundView = new CareRoundView(playerCamera, roundArtwork);
-            GloveInventory = new CareGloveInventory(this, playerCamera);
+            roundView = new CareRoundView(Head, roundArtwork);
+            GloveInventory = new CareGloveInventory(this, Head);
             audioFeedback.FollowCamera(playerCamera);
             audioFeedback.StartMusic(transform);
             TutorialActive = false;
@@ -201,7 +218,7 @@ namespace ADayAtTheZoo.Monkeys.Care
                 }
             }
             HideSupplyToolbox("Sractch");
-            roundArtwork.bananaAnchor = playerCamera.transform;
+            roundArtwork.bananaAnchor = Head;
             roundArtwork.bananaOffset = new Vector3(.82f, .46f, 1.28f);
             roundArtwork.bananaWidth = .34f;
         }
@@ -237,7 +254,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         void ShowReadyGate()
         {
             if (readyCanvas) Destroy(readyCanvas.gameObject);
-            readyCanvas = CareUi.Canvas("Care READY GO", playerCamera.transform,
+            readyCanvas = CareUi.Canvas("Care READY GO", Head,
                 new Vector3(0, 0, 1.45f), .94f, new Vector2(960, 760), 90);
             var readyArt = CareUiSkin.SvgReadyGo ? CareUiSkin.SvgReadyGo : readyGo;
             if (readyArt)
@@ -291,7 +308,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             TutorialActive = showTutorial && !tutorialCompleted;
             if (TutorialActive)
             {
-                gameObject.AddComponent<CareTutorial>().Begin(this, playerCamera, Time.unscaledTime);
+                gameObject.AddComponent<CareTutorial>().Begin(this, Head, Time.unscaledTime);
             }
             else
             {
@@ -304,7 +321,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             // The stall is behind the opening view, so turn the very first head
             // movement into a "this way" plate instead of leaving players lost.
             if (!standHint && bananaPickup)
-                standHint = CareDirectionHint.Create(playerCamera, this, bananaPickup.transform);
+                standHint = CareDirectionHint.Create(Head, this, bananaPickup.transform);
         }
         void SetPlayerInputLocked(bool locked)
         {
@@ -524,9 +541,9 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (hasThrowArc)
             {
                 Vector3 destination = ThrowAimPoint(hand);
-                throwVelocity = hand == desktopRightHand
-                    ? CareItem.BallisticVelocity(hand.position, destination, throwSpeed)
-                    : hand.forward * throwSpeed;
+                // Always solve the arc for the aimed point: a straight palm
+                // forward vector dropped short of the monkey every time.
+                throwVelocity = CareItem.BallisticVelocity(hand.position, destination, throwSpeed);
                 throwPointCount = TraceThrowArc(hand, throwVelocity, out hit, out MonkeyCareNpc trajectoryNpc);
                 RayNpc = trajectoryNpc;
                 lastThrowVelocity = throwVelocity;
@@ -600,6 +617,10 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
         void LateUpdate()
         {
+            // Track whichever transform is the real eye: the rig activates a few
+            // frames after Start() and a controller/hand swap can move it again,
+            // so the anchor is re-parented every frame instead of once.
+            if (uiHead) uiHead.Follow(HeadSource());
             // Start() is a coroutine: LateUpdate can run once before the round
             // object exists, so everything below requires a live round.
             if (!begun || Round == null) return;
@@ -614,8 +635,8 @@ namespace ADayAtTheZoo.Monkeys.Care
                 if (held) held.Release(); held = null; StopHaptics();
                 GloveInventory?.Close();
                 // Results view only: hide every other HUD attached to the
-                // camera (score, banana, stamina, tutorial, glove, ready gate).
-                foreach (Transform child in playerCamera.transform)
+                // head anchor (score, banana, tutorial, glove, ready gate).
+                foreach (Transform child in Head)
                     if (child.name.StartsWith("Care ") && child.name != "Care RESULTS")
                         child.gameObject.SetActive(false);
                 if (bananaPickup) bananaPickup.gameObject.SetActive(false);
@@ -681,12 +702,27 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
         Vector3 ThrowAimPoint(Transform hand)
         {
-            if (hand != desktopRightHand)
-                return hand.position + hand.forward * Mathf.Max(3f, rayDistance * .5f);
-            var aimHit = Cast(playerCamera.transform.position, playerCamera.transform.forward, rayDistance, true);
-            return aimHit.HasValue
-                ? aimHit.Value.point
-                : playerCamera.transform.position + playerCamera.transform.forward * Mathf.Max(8f, rayDistance * .5f);
+            // Aim exactly where the reticle points. The VR branch used to guess a
+            // point straight out of the palm, so the banana flew to empty air
+            // while the ray was already highlighting a monkey.
+            bool desktop = hand == desktopRightHand;
+            Vector3 origin = desktop ? playerCamera.transform.position : hand.position;
+            Vector3 direction = desktop ? playerCamera.transform.forward : hand.forward;
+            var aimHit = Cast(origin, direction, rayDistance, true);
+            if (aimHit.HasValue)
+            {
+                var npc = aimHit.Value.collider.GetComponentInParent<MonkeyCareNpc>();
+                if (npc)
+                {
+                    // Throw into the feeding trigger, not at the collider skin:
+                    // the contact box is what actually accepts the banana.
+                    var contact = npc.transform.Find("Care Contact");
+                    if (contact && contact.TryGetComponent(out Collider contactBox))
+                        return contactBox.bounds.center;
+                }
+                return aimHit.Value.point;
+            }
+            return origin + direction * Mathf.Max(8f, rayDistance * .5f);
         }
         int TraceThrowArc(Transform hand, Vector3 velocity, out RaycastHit? impact, out MonkeyCareNpc npc)
         {
@@ -800,9 +836,9 @@ namespace ADayAtTheZoo.Monkeys.Care
             HungerOwner = null; hungerCursor = -1;
             TutorialActive = false; RoundStarted = false;
             rig.transform.SetPositionAndRotation(rigStartPosition, rigStartRotation);
-            // The results screen switched every "Care ..." camera overlay off;
-            // switch them back on so the second round has its full HUD again.
-            foreach (Transform child in playerCamera.transform)
+            // The results screen switched every "Care ..." overlay off; switch
+            // them back on so the second round has its full HUD again.
+            foreach (Transform child in Head)
                 if (child.name.StartsWith("Care ") && child.name != "Care RESULTS")
                     child.gameObject.SetActive(true);
             roundView.Reset();

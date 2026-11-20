@@ -17,7 +17,7 @@ namespace ADayAtTheZoo.Monkeys.Care
     public sealed class CareRoundView
     {
         readonly CareRoundArtwork art;
-        readonly Camera camera;
+        readonly Transform head;
         readonly RectTransform scoreHud, bananaHud;
         RectTransform results;
         readonly Image progressFill;
@@ -71,12 +71,12 @@ namespace ADayAtTheZoo.Monkeys.Care
             return text;
         }
 
-        public CareRoundView(Camera camera, CareRoundArtwork artwork)
+        public CareRoundView(Transform head, CareRoundArtwork artwork)
         {
             art = artwork;
-            this.camera = camera;
+            this.head = head;
 
-            scoreHud = CareUi.Canvas("Care SCORE HUD", camera.transform,
+            scoreHud = CareUi.Canvas("Care SCORE HUD", head,
                 new Vector3(0, .45f, 1.18f), .80f, new Vector2(1000, 480), 10);
             var svgScore = CareUiSkin.SvgScorePanel;
             if (svgScore)
@@ -178,7 +178,7 @@ namespace ADayAtTheZoo.Monkeys.Care
                 new Color(1f, .80f, .24f, 1f));
 
             bananaHud = CareUi.Canvas("Care BANANA HUD",
-                art.bananaAnchor ? art.bananaAnchor : camera.transform,
+                art.bananaAnchor ? art.bananaAnchor : head,
                 art.bananaAnchor ? art.bananaOffset : new Vector3(.82f, .46f, 1.28f),
                 art.bananaWidth, new Vector2(560, 322), 10);
             var bananaArt = CareUiSkin.SvgBananaPanel ? CareUiSkin.SvgBananaPanel : art.bananaPanel;
@@ -210,7 +210,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             // Reference card: big-corner white rounded plate, blue LEVEL
             // COMPLETE ribbon, three airy stat rows, big total score, three
             // stars, next-star hint, CONTINUE pill plus a round green button.
-            results = CareUi.Canvas("Care RESULTS", camera.transform,
+            results = CareUi.Canvas("Care RESULTS", head,
                 new Vector3(0, -.02f, 1.30f), .50f, new Vector2(900, 1300), 100);
             // The shadow must share the card's rounded silhouette, otherwise a
             // square dark rim shows around the rounded card corners.
@@ -303,7 +303,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             if (art.bananaAnchor)
             {
-                if (art.bananaAnchor == camera.transform)
+                if (art.bananaAnchor == head)
                 {
                     bananaHud.localPosition = art.bananaOffset;
                     bananaHud.localRotation = Quaternion.identity;
@@ -311,7 +311,7 @@ namespace ADayAtTheZoo.Monkeys.Care
                 else
                 {
                     bananaHud.position = art.bananaAnchor.position + art.bananaOffset;
-                    bananaHud.rotation = camera.transform.rotation;
+                    bananaHud.rotation = head.rotation;
                 }
             }
 

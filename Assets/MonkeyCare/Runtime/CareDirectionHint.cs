@@ -17,7 +17,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         public const float LowStockBananas = 3;
 
         MonkeyCareSession session;
-        Camera view;
+        Transform head;
         Transform target;
         RectTransform root;
         CanvasGroup group;
@@ -28,14 +28,14 @@ namespace ADayAtTheZoo.Monkeys.Care
 
         public bool Showing => root && root.gameObject.activeSelf;
 
-        public static CareDirectionHint Create(Camera camera, MonkeyCareSession owner, Transform stand)
+        public static CareDirectionHint Create(Transform head, MonkeyCareSession owner, Transform stand)
         {
-            if (!camera || !owner) return null;
+            if (!head || !owner) return null;
             var host = new GameObject("Care Direction Hint Host");
-            host.transform.SetParent(camera.transform, false);
+            host.transform.SetParent(head, false);
             var hint = host.AddComponent<CareDirectionHint>();
             hint.session = owner;
-            hint.view = camera;
+            hint.head = head;
             hint.target = stand;
             hint.Build();
             return hint;
@@ -99,7 +99,7 @@ namespace ADayAtTheZoo.Monkeys.Care
 
         void Update()
         {
-            if (!session || !view) return;
+            if (!session || !head) return;
             var round = session.Round;
             bool live = session.Begun && round != null && !round.Frozen && MonkeyCareSession.Playing;
             if (!live || !target) { SetVisible(false); return; }
@@ -108,9 +108,9 @@ namespace ADayAtTheZoo.Monkeys.Care
             // permanent compass.
             if (round.Bananas > LowStockBananas) { SetVisible(false); return; }
 
-            Vector3 toStand = target.position - view.transform.position;
+            Vector3 toStand = target.position - head.position;
             Vector3 flatTo = Vector3.ProjectOnPlane(toStand, Vector3.up);
-            Vector3 flatForward = Vector3.ProjectOnPlane(view.transform.forward, Vector3.up);
+            Vector3 flatForward = Vector3.ProjectOnPlane(head.forward, Vector3.up);
             if (flatTo.sqrMagnitude < .0001f || flatForward.sqrMagnitude < .0001f)
             { SetVisible(false); return; }
             float yaw = Vector3.SignedAngle(flatForward, flatTo, Vector3.up);

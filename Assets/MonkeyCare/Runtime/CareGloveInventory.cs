@@ -20,10 +20,10 @@ namespace ADayAtTheZoo.Monkeys.Care
         public bool AutoEquip => autoEquip;
         public RectTransform BagButtonRoot => bagButton;
 
-        public CareGloveInventory(MonkeyCareSession owner, Camera camera)
+        public CareGloveInventory(MonkeyCareSession owner, Transform head)
         {
             session = owner;
-            root = CareUi.Canvas("Care Backpack", camera.transform,
+            root = CareUi.Canvas("Care Backpack", head,
                 new Vector3(0, -.17f, 1.16f), .82f, new Vector2(760, 801), 70);
             var group = root.gameObject.AddComponent<CanvasGroup>();
             group.interactable = false;
@@ -73,7 +73,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             status = Text(string.Empty, root, new Vector2(650, 54), new Vector2(0, -388),
                 40, TextAnchor.MiddleCenter, new Color(.40f, .25f, .14f, 1f));
 
-            bagButton = CareUi.Canvas("Care Backpack HUD", camera.transform,
+            bagButton = CareUi.Canvas("Care Backpack HUD", head,
                 new Vector3(-.77f, -.46f, 1.18f), .48f, new Vector2(360, 210));
             CareUiSkin.Add(bagButton, "Bag icon", CareUiSkin.BackpackIcon,
                 new Vector2(128, 128), new Vector2(-70, 20), Color.white);

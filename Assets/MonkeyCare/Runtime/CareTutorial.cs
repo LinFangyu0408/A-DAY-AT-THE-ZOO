@@ -20,7 +20,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         bool finished, hungerStarted;
         string controllerLabels;
 
-        public void Begin(MonkeyCareSession owner, Camera camera, float visibleAt)
+        public void Begin(MonkeyCareSession owner, Transform head, float visibleAt)
         {
             session = owner;
             shownAt = visibleAt;
@@ -29,7 +29,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             // The tutorial must never block the player's view. Park it in the
             // upper-left corner as a compact hint panel, well clear of the
             // centred SCORE HUD.
-            root = CareUi.Canvas("Care Tutorial", camera.transform,
+            root = CareUi.Canvas("Care Tutorial", head,
                 new Vector3(-.82f, .24f, 1.34f), .56f, new Vector2(820, 470), 80);
             group = root.gameObject.AddComponent<CanvasGroup>();
             group.alpha = 0;

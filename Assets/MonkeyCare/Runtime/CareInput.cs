@@ -62,8 +62,12 @@ namespace ADayAtTheZoo.Monkeys.Care
             CareXboxSnapshot xbox = CareXboxInput.Read();
             XRInputDevice right = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
             XRInputDevice left = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
-            bool rightXr = right.isValid;
-            bool leftXr = left.isValid;
+            // Hand-tracking devices occupy the same XR nodes as controllers but
+            // carry no A/B buttons. Treating them as controllers used to switch
+            // the keyboard fallback off completely, so a headset running on hand
+            // tracking alone could not even start the round.
+            bool rightXr = right.isValid && !IsHandTrackingDevice(right);
+            bool leftXr = left.isValid && !IsHandTrackingDevice(left);
             bool rightOvr = OVRInput.IsControllerConnected(OVRInput.Controller.RTouch);
             bool leftOvr = OVRInput.IsControllerConnected(OVRInput.Controller.LTouch);
 
@@ -145,6 +149,16 @@ namespace ADayAtTheZoo.Monkeys.Care
         public static void ForgetEdges()
         {
             previousA = previousB = previousTrigger = false;
+        }
+
+        // OpenXR reports tracked hands on the same nodes as Touch controllers.
+        // Their device name always carries "Hand" ("Oculus Hand (R)", "Hands
+        // (Right)"), while controllers are named "Oculus Touch Controller".
+        static bool IsHandTrackingDevice(XRInputDevice device)
+        {
+            if (!device.isValid) return false;
+            string name = device.name ?? string.Empty;
+            return Contains(name, "Hand");
         }
 
         static bool LooksLikePlayStation(UnityEngine.InputSystem.InputDevice device)

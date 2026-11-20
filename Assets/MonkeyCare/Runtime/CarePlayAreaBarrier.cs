@@ -21,6 +21,11 @@ namespace ADayAtTheZoo.Monkeys.Care
         public const float WallThickness = .6f;
         // How far inside the wall the soft clamp keeps the player.
         public const float ClampInset = .55f;
+        // The yard is a flattened strip, so the root should never rise more than
+        // a step above where the round started. Any bigger climb means an input
+        // path is driving the rig upward (a stuck A button did exactly that) and
+        // the player ends up floating over the animals.
+        public const float MaxRise = 1.2f;
 
         public Vector3 Center { get; private set; }
         public float Radius { get; private set; }
@@ -29,6 +34,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         MonkeyCareSession session;
         Transform playerRoot;
         Camera view;
+        float startY;
 
         public static CarePlayAreaBarrier Create(MonkeyCareSession owner, Camera camera, Transform stand)
         {
@@ -38,6 +44,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             barrier.session = owner;
             barrier.view = camera;
             barrier.playerRoot = owner ? owner.PlayerRoot : null;
+            barrier.startY = barrier.playerRoot ? barrier.playerRoot.position.y : camera.transform.position.y;
             barrier.Build(stand);
             return barrier;
         }
@@ -89,19 +96,29 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             if (!view) view = MonkeyCareSession.PlayerCamera;
             if (!view) return;
-            Vector3 flat = new(view.transform.position.x - Center.x, 0f,
-                view.transform.position.z - Center.z);
-            float distance = flat.magnitude;
-            float limit = Radius - ClampInset;
-            if (distance <= limit || distance < .0001f) return;
-            Vector3 shift = -flat / distance * (distance - limit);
             // Stick movement translates the rig (VR) or the character controller
             // (desktop); both ignore collision, so the clamp is what actually
             // stops the player at the fence.
             Transform root = playerRoot;
             if (root && !view.transform.IsChildOf(root)) root = view.transform.root;
-            if (root) root.position += shift;
-            else view.transform.position += shift;
+            Transform target = root ? root : view.transform;
+
+            // Vertical guard runs before the horizontal early-out so a floating
+            // player is pulled back down even while standing inside the fence.
+            Vector3 guarded = target.position;
+            float ceiling = startY + MaxRise;
+            if (guarded.y > ceiling)
+            {
+                guarded.y = ceiling;
+                target.position = guarded;
+            }
+
+            Vector3 flat = new(view.transform.position.x - Center.x, 0f,
+                view.transform.position.z - Center.z);
+            float distance = flat.magnitude;
+            float limit = Radius - ClampInset;
+            if (distance <= limit || distance < .0001f) return;
+            target.position += -flat / distance * (distance - limit);
         }
 
         static float GroundAt(Vector3 near)

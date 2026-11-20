@@ -260,7 +260,7 @@ public sealed partial class CarePlayTestDriver : MonoBehaviour
             var round = new CareRound(); int completed = 0;
             for (int task = 0; task < 6; task++) for (int monkey = 0; monkey < 3 && completed < target; monkey++)
             { round.Complete(monkey, task, (task + (monkey == 1 ? 1 : 0)) % 2 == 0 ? CareNeed.Hunger : CareNeed.Itch, 200); completed++; }
-            round.Freeze(); var view = new CareRoundView(camera, session.roundArtwork); view.ShowResults(); view.Update(round, 240);
+            round.Freeze(); var view = new CareRoundView(camera.transform, session.roundArtwork); view.ShowResults(); view.Update(round, 240);
             yield return null; Capture("results-" + target);
         }
     }

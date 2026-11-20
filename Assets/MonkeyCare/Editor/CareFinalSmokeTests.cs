@@ -112,7 +112,7 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         Check(gameCamera, "game camera is active");
         var tutorialHost = new GameObject("Final Tutorial Visual");
         var tutorial = tutorialHost.AddComponent<CareTutorial>();
-        tutorial.Begin(session, gameCamera, Time.unscaledTime);
+        tutorial.Begin(session, gameCamera.transform, Time.unscaledTime);
         yield return new WaitForSecondsRealtime(.55f);
         var tutorialTitle = GameObject.Find("Tutorial title")?.GetComponent<Text>();
         var tutorialBody = GameObject.Find("Tutorial body")?.GetComponent<Text>();
@@ -484,6 +484,29 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         var roundView = viewField?.GetValue(session) as CareRoundView;
         Check(roundView != null, "round view is available");
 
+        // ---- the whole HUD rides a head anchor, not the camera VR may swap ----
+        var headAnchor = GameObject.Find("Care Head Anchor");
+        var scorePlate = GameObject.Find("Care SCORE HUD");
+        var bananaPlate = GameObject.Find("Care BANANA HUD");
+        Check(headAnchor && scorePlate && bananaPlate &&
+              scorePlate.transform.parent == headAnchor.transform &&
+              bananaPlate.transform.parent == headAnchor.transform,
+            "score and banana plates hang off the head anchor instead of the camera");
+        Check(headAnchor && session.Head == headAnchor.transform,
+            "the session exposes the head anchor as the UI parent");
+
+        // ---- the ballistic solve must land exactly on the aimed point ----
+        var aimStart = new Vector3(0f, 1.5f, 0f);
+        var aimEnd = new Vector3(0f, 1.2f, 4f);
+        Vector3 aimVelocity = CareItem.BallisticVelocity(aimStart, aimEnd, 9f);
+        float aimFlight = new Vector2(aimVelocity.x, aimVelocity.z).magnitude < .01f ? 0f
+            : 4f / new Vector2(aimVelocity.x, aimVelocity.z).magnitude;
+        Vector3 aimLanded = aimStart + aimVelocity * aimFlight +
+                            Physics.gravity * (.5f * aimFlight * aimFlight);
+        report.Add("AIM landed=" + aimLanded.ToString("F2"));
+        Check(Vector3.Distance(aimLanded, aimEnd) < .2f,
+            "the solved arc lands on the point the ray is aiming at");
+
         // ---- the star rides the progress bar ----
         Canvas.ForceUpdateCanvases();
         roundView.Update(FedRound(0), 40f);
@@ -577,6 +600,22 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             Check(escapedDistance <= barrier.Radius - CarePlayAreaBarrier.ClampInset + .35f,
                 "trying to walk past the fence pushes the player back inside");
             gameCamera.transform.position = before;
+            yield return null;
+
+            // ---- a stuck button must never fly the player over the animals ----
+            Transform riseRoot = session.PlayerRoot;
+            Vector3 riseBase = riseRoot ? riseRoot.position : gameCamera.transform.position;
+            Vector3 riseTarget = riseBase + Vector3.up * 6f;
+            if (riseRoot) riseRoot.position = riseTarget;
+            else gameCamera.transform.position = riseTarget;
+            yield return new WaitForSecondsRealtime(.1f);
+            float riseNow = riseRoot ? riseRoot.position.y : gameCamera.transform.position.y;
+            report.Add("RISE now=" + riseNow.ToString("F2") + " start=" + riseBase.y.ToString("F2") +
+                       " cap=" + (riseBase.y + CarePlayAreaBarrier.MaxRise).ToString("F2"));
+            Check(riseNow - riseBase.y <= CarePlayAreaBarrier.MaxRise + .4f,
+                "the vertical guard pulls a floating player back down to the yard");
+            if (riseRoot) riseRoot.position = riseBase;
+            else gameCamera.transform.position = riseBase;
             yield return null;
         }
 

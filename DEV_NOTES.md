@@ -164,3 +164,10 @@
 - 结算"Feeding Amount"改为按 3 星目标显示（9 / 9），不再显示 9 / 12。
 - 自检新增 `work/monkey-care/self-tests.request` 入口（`CareSelfTests` 加 `[InitializeOnLoad]` + Tick），纯逻辑 271 项；顺带修掉自检里写死的 `timestamp 200`（Cutoff 缩短后已超时）。
 - 冒烟测试 86 项全过（含"星星随进度移动且 6 根时压线"、"香蕉 ≤3 变红"、"提示无底板且箭头为红"、"围栏 27 段且能把越界玩家推回"、"任务 12 个 + 120s"、"12 根仍是 3 星"）。
+
+## 2026-11-20 第十一轮（VR 三连修：UI 消失 / 玩家上飘 / 香蕉打不中）
+- **VR 里整块 UI 消失**：所有世界空间画布原来 `SetParent(camera.transform)`，而 `Start()` 里 `Camera.allCameras.FirstOrDefault(...)` 抓到的常常还是**桌面替身相机**——头显 rig 晚几帧才激活，桌面相机随即被禁用，HUD 跟着一起消失。新增 `CareHeadAnchor`（每帧同步到 `rig.centerEyeAnchor`，桌面回退到 playerCamera），`MonkeyCareSession.Head` 暴露该锚点，`CareRoundView / CareGloveInventory / CareTutorial / CareDirectionHint / READY 画布 / bananaAnchor` 全部改挂锚点；结算时遍历 `Head` 而不是相机来隐藏其它 HUD。
+- **按住 A 往上飞**：`Locomotion` 的地面吸附会把 raycast 命中的物体顶面当成地面（踩到猴子/小摊/围栏就会被抬起来），加上摇杆位移直接平移 rig 绕过碰撞，玩家能一路飘到空中。`CarePlayAreaBarrier` 新增**垂直护栏**：记录回合开始时的 root 高度，每帧把 `root.position.y` 夹在 `startY + MaxRise(1.2m)` 以内，且这条夹紧放在水平提前返回之前，站在围栏内也会生效。
+- **香蕉弹不到猴子**：`ThrowAimPoint` 的 VR 分支原来是 `hand.position + hand.forward * max(3, rayDistance*.5)`（凭空猜一个点），出手速度又是 `hand.forward * throwSpeed` 的**纯直线**，重力一拉就落到猴子脚下。改为：瞄准点 = 手射线的真实命中点（命中猴子时取 `Care Contact` 触发器中心），出手速度统一走 `CareItem.BallisticVelocity`，使抛物线与射线终点一致。
+- 冒烟测试 86 → **90 断言**（新增：SCORE/BANANA 挂在 `Care Head Anchor` 下、`session.Head` 指向锚点、弹道解算落点误差 <0.2m、垂直护栏把抬高 6m 的玩家拉回）。
+- 顺带确认：`Oculus Mirror` 在 Quest Link V2 + OpenXR 下始终停在 "Waiting for VR session"（OVR 服务端 `hmd0Valid=false`，Mirror 只认 OVR 会话），VR 预览改用 Unity Game 视图的 **Left Eye**。
