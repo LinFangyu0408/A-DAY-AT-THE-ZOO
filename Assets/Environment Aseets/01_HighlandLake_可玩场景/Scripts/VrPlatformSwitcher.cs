@@ -28,6 +28,40 @@ public sealed class VrPlatformSwitcher : MonoBehaviour
         if (xrActive != wasXrActive)
         {
             Apply(xrActive);
+            return;
+        }
+
+        // OpenXR gives up once ("XR_ERROR_FORM_FACTOR_UNAVAILABLE") when Play
+        // starts before the headset is worn, and Unity never retries on its own,
+        // so the session stayed on the desktop preview forever even after the
+        // headset was put on. Retry the loader every few seconds while in
+        // desktop preview: as soon as it succeeds the rig takes over.
+#if UNITY_EDITOR
+        if (!editorDesktopPreview || xrActive) return;
+        if (Time.unscaledTime < nextXrRetry) return;
+        nextXrRetry = Time.unscaledTime + 5f;
+        TryRecoverXr();
+#endif
+    }
+
+    private float nextXrRetry;
+
+    private void TryRecoverXr()
+    {
+        try
+        {
+            var settings = UnityEngine.XR.Management.XRGeneralSettings.Instance;
+            if (settings == null || settings.Manager == null) return;
+            var manager = settings.Manager;
+            if (manager.isInitializationComplete) return;
+            manager.InitializeLoaderSync();
+            if (manager.activeLoader == null) return;
+            manager.StartSubsystems();
+            Debug.Log("[Zoo Platform] OpenXR 延迟初始化成功，切换到 VR");
+        }
+        catch (System.Exception exception)
+        {
+            Debug.LogWarning("[Zoo Platform] XR retry failed: " + exception.Message);
         }
     }
 

@@ -612,10 +612,10 @@ namespace ADayAtTheZoo.Monkeys.Care
                 if (arcAiming && (!Input.TriggerHeld || !Input.GripHeld) && arcValid && locomotion) locomotion.TryTeleport(landing);
                 arcAiming = false; arcValid = false; arc.enabled = false;
             }
-            // The care ray belongs to the banana in hand. Empty-hand targeting
-            // must stay invisible so it cannot obstruct the scene. PC play gets
-            // no hand ray at all: aiming is done with the reticle-free cursor.
-            pointer.enabled = !CarePlatform.FlatUi && !arcAiming && !menuOpen && held != null;
+            // The care ray belongs to the banana in hand: it shows while a banana
+            // is held, turns orange and vibrates on a hungry monkey (both VR and
+            // PC), and stops the moment the monkey starts eating.
+            pointer.enabled = !arcAiming && !menuOpen && held != null;
             if (hasThrowArc)
             {
                 pointer.positionCount = throwPointCount;

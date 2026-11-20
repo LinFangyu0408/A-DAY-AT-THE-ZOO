@@ -212,3 +212,9 @@
 - 修复：`CareUi.OverlayRoot`（单一根 Canvas + `CanvasScaler` 2400x1350 参考分辨率）+ `CareUi.Plate`（支持角锚点）；SCORE 略偏左、香蕉用**右上角锚点**（-40,-40）、结算居中，全部随屏幕等比缩放。
 - **平台中途切换**：头显戴上后 `VrPlatformSwitcher` 会激活 rig，但 HUD 是按当时的模式建的——新增 `RebuildHudOnPlatformFlip()`：`CareRoundView.BuiltForVr` 与 `CarePlatform.IsVr` 不一致时销毁旧板重建（日志 `HUD rebuilt for VR/PC layout`）。PC 下手部瞄准线也彻底关掉。
 - 冒烟 90 断言全过（ForceVr 走 VR 布局）。
+
+## 2026-11-21 00:58 第十六轮（VR 掉回桌面的真因 / 排版对齐参考视频 / 交互统一）
+- **"头显已连接但全按 PC 跑"的真因**：Play 开始那一刻头显未被佩戴/Link 未串流，OpenXR 抛 `XR_ERROR_FORM_FACTOR_UNAVAILABLE` 后 **Unity 不会重试**，整个 Play 会话钉死在桌面预览（日志 `[Zoo Platform] 桌面/Xbox 预览已启动`、无 `Eye height locked`）。修复：`VrPlatformSwitcher` 每 5 秒重试 `InitializeLoaderSync()+StartSubsystems()`，头显一就绪自动切 VR（日志 `OpenXR 延迟初始化成功`）。
+- **排版对齐参考视频**：SCORE 回到正中（0,300），香蕉计数用右上角锚点内缩 (-150,-70)，不再顶到屏幕边缘；`CanvasScaler` 2400x1350 保证任意窗口尺寸下比例一致。
+- **交互统一（VR=PC）**：持蕉显示射线（撤掉 PC 隐藏射线的门控）；射线指向饥饿猴子变橘色 (1,.63,.18) 并震动（Gamepad/OVR/haptic 三通道）；猴子开始吃（EatingNow）立即停震。这些逻辑本来就同源于 MonkeyCareSession，PC 之前只是被 UI 门控挡住。
+- 冒烟 90 断言全过。

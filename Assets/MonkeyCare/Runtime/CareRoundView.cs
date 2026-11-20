@@ -88,9 +88,10 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (CarePlatform.FlatUi)
             {
                 flatHud = CareUi.OverlayRoot("Care PC HUD", 50);
-                // Score a little left of centre so the counter fits at the corner.
+                // Reference layout: score bar centred on top, banana counter inset
+                // at the top-right corner (matches the original PC video).
                 scoreHud = CareUi.Plate("Care SCORE HUD", flatHud,
-                    new Vector2(-160, 300), new Vector2(1000, 480));
+                    new Vector2(0, 300), new Vector2(1000, 480));
             }
             else
                 scoreHud = CareUi.Canvas("Care SCORE HUD", head,
@@ -196,7 +197,7 @@ namespace ADayAtTheZoo.Monkeys.Care
 
             bananaHud = CarePlatform.FlatUi
                 ? CareUi.Plate("Care BANANA HUD", flatHud,
-                    new Vector2(-40, -40), new Vector2(560, 322),
+                    new Vector2(-150, -70), new Vector2(560, 322),
                     new Vector2(1f, 1f), new Vector2(1f, 1f))
                 : CareUi.Canvas("Care BANANA HUD",
                     art.bananaAnchor ? art.bananaAnchor : head,
