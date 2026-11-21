@@ -575,6 +575,14 @@ namespace ADayAtTheZoo.Monkeys.Care
                 return;
             }
             gameTime = Mathf.Min(CareRound.Duration, gameTime + Time.deltaTime);
+            // Results card shortcuts, matching the badges printed on the two
+            // pills: A (✕) = CONTINUE back home, B (○) = RESTART right away.
+            // Aiming the look ray at the card still works as a fallback.
+            if (Round.Frozen && !readyGateActive && !goSequenceActive)
+            {
+                if (Input.BWasPressed) { RestartRound(); return; }
+                if (Input.AWasPressed) { ReturnHome(); return; }
+            }
             GloveInventory?.Tick(Input, Round, !Round.Frozen && gameTime >= .1f);
             bool menuOpen = GloveInventory != null && GloveInventory.IsOpen;
             if (!menuOpen && Input.AWasPressed) TryPickupBananas();
@@ -745,9 +753,14 @@ namespace ADayAtTheZoo.Monkeys.Care
                 // it; hide it here or it floats over the results card.
                 GloveInventory?.HideHud();
                 // Results view only: hide every other HUD attached to the
-                // head anchor (score, banana, tutorial, glove, ready gate).
+                // head anchor (score, banana, tutorial, ready gate). The bag
+                // panel is owned by CareGloveInventory and closed right above,
+                // so it is deliberately left out of both loops — force-enabling
+                // it here used to park an open bag over the results and home
+                // screens.
                 foreach (Transform child in Head)
-                    if (child.name.StartsWith("Care ") && child.name != "Care RESULTS")
+                    if (child.name.StartsWith("Care ") && child.name != "Care RESULTS" &&
+                        child.name != "Care Backpack")
                         child.gameObject.SetActive(false);
                 if (bananaPickup) bananaPickup.gameObject.SetActive(false);
                 roundView.ShowResults(); SaveRoundRecord();
@@ -935,10 +948,17 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             if (roundView != null && Round != null && begun) roundView.Update(Round, gameTime);
         }
-        public void ContinueExploring() { if (Round.Frozen) roundView.Continue(); }
-        public void RestartRound()
+        /// <summary>
+        /// CONTINUE on the results card: leave the finished round and return to
+        /// the home/standby screen. The real home UI is not in the project yet,
+        /// so the READY gate stands in for it — when the home artwork arrives,
+        /// swap ShowReadyGate() for the home view here and nothing else changes.
+        /// </summary>
+        public void ReturnHome() => ResetFromResults(false);
+        public void RestartRound() => ResetFromResults(true);
+        void ResetFromResults(bool startImmediately)
         {
-            if (!Round.Frozen) return;
+            if (Round == null || !Round.Frozen) return;
             StopHaptics(); if (held) held.Release(); held = null;
             Round = new CareRound(MonkeyStartingNeeds(), feedingOnly);
             Round.DealFeedingTasks();
@@ -947,12 +967,17 @@ namespace ADayAtTheZoo.Monkeys.Care
             TutorialActive = false; RoundStarted = false;
             rig.transform.SetPositionAndRotation(rigStartPosition, rigStartRotation);
             // The results screen switched every "Care ..." overlay off; switch
-            // them back on so the second round has its full HUD again.
+            // them back on so the next round has its full HUD again. The bag is
+            // excluded: it must stay closed until the player opens it.
             foreach (Transform child in Head)
-                if (child.name.StartsWith("Care ") && child.name != "Care RESULTS")
+                if (child.name.StartsWith("Care ") && child.name != "Care RESULTS" &&
+                    child.name != "Care Backpack")
                     child.gameObject.SetActive(true);
             roundView.Reset();
             if (bananaPickup) bananaPickup.gameObject.SetActive(true);
+            // The bag panel is a world-space plate that happily stays open over
+            // the home/results screen; close it before showing either.
+            GloveInventory?.Close();
             GloveInventory?.Reset(Round);
             GloveInventory?.HideHud();
             nextBananaEquipAt = 0;
@@ -962,6 +987,15 @@ namespace ADayAtTheZoo.Monkeys.Care
             ShowReadyGate();
             suppressUntilRelease = true; arcAiming = false;
             CareInput.ForgetEdges();
+            if (startImmediately)
+            {
+                // RESTART is an explicit "again, now": skip the arming delay and
+                // roll straight into the GO beat.
+                readyArmedAt = 0;
+                AcceptReadyGate();
+            }
+            Debug.Log("[Monkey Care] " + (CarePlatform.FlatUi ? "PC " : "VR ") +
+                      (startImmediately ? "RESTART：立即重开一局" : "CONTINUE：返回主页（占位 READY 待机门）"));
         }
         [System.Serializable]
         sealed class RoundReport

@@ -103,6 +103,9 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (CarePlatform.FlatUi)
             {
                 flatHud = CareUi.OverlayRoot("Care PC HUD", 50);
+                // The style chip is a UI Button; without an EventSystem a mouse
+                // click never reaches it (only the pad's Select worked).
+                CareUi.EnsureEventSystem();
                 // Reference-video layout, slightly smaller per user request so
                 // the plates never crowd the play area. The score plate is
                 // top-anchored and pushed up 15px past the canvas top: only the
@@ -304,22 +307,18 @@ namespace ADayAtTheZoo.Monkeys.Care
                 new Vector2(500, 60), new Vector2(-130, -450), 48, TextAnchor.MiddleLeft,
                 new Color(.24f, .25f, .25f, 1f));
 
-            var continueArt = CareUiSkin.SvgContinue;
-            var restartArt = CareUiSkin.SvgRestart;
-            bool bakedContinue = continueArt != null;
-            bool bakedRestart = restartArt != null;
+            // Both round actions carry a live caption instead of baked art: the
+            // old restart chip was an unlabeled green circle and the baked
+            // CONTINUE word could not be re-lettered, so the two buttons did not
+            // read as a matched pair of actions.
             buttons = new[]
             {
-                ResultButton("Continue exploring", "CONTINUE", results,
-                    continueArt ? continueArt : CareUiSkin.BlueButton,
-                    bakedContinue ? new Vector2(430, 134) : new Vector2(400, 126),
-                    bakedContinue ? new Vector2(-155, -575) : new Vector2(-180, -575),
-                    false, Color.white, !bakedContinue),
-                ResultButton("Restart round", "RESTART", results,
-                    restartArt ? restartArt : CareUiSkin.GreenButton,
-                    bakedRestart ? new Vector2(140, 140) : new Vector2(320, 110),
-                    bakedRestart ? new Vector2(215, -575) : new Vector2(230, -575),
-                    true, Color.white, !bakedRestart)
+                ResultButton("Continue exploring", "CONTINUE", CareInput.ConfirmLabel, results,
+                    CareUiSkin.BlueButton, new Vector2(410, 128),
+                    new Vector2(-180, -575), false, Color.white),
+                ResultButton("Restart round", "RESTART", CareInput.BackLabel, results,
+                    CareUiSkin.GreenButton, new Vector2(330, 128),
+                    new Vector2(235, -575), true, Color.white)
             };
         }
 
@@ -333,21 +332,40 @@ namespace ADayAtTheZoo.Monkeys.Care
                 new Color(.16f, .16f, .18f, 1f));
         }
 
-        static CareResultButton ResultButton(string name, string caption, Transform parent,
-            Sprite sprite, Vector2 size, Vector2 pos, bool restart, Color tint,
-            bool showCaption = true)
+        static CareResultButton ResultButton(string name, string caption, string key,
+            Transform parent, Sprite sprite, Vector2 size, Vector2 pos, bool restart, Color tint)
         {
             var image = CareUi.Image(name, parent, sprite, size, pos);
             image.color = tint;
+            // A pill sprite has to be sliced or its rounded caps stretch into a
+            // blurry lozenge at this size.
+            if (sprite && sprite.border != Vector4.zero) image.type = Image.Type.Sliced;
             var collider = image.gameObject.AddComponent<BoxCollider>();
             collider.size = new Vector3(size.x, size.y, 14);
             collider.isTrigger = true;
-            if (showCaption)
-                Label(name + " caption", image.transform, caption, new Vector2(size.x - 45, 88),
-                    Vector2.zero, 38, TextAnchor.MiddleCenter, Color.white);
+            // Both actions show the button that triggers them (A/✕ = continue,
+            // B/○ = restart) so the pad player never has to aim at the card.
+            var badge = CareUiSkin.KeyBadge(image.transform, key, new Vector2(62, 62),
+                new Vector2(-size.x * .5f + 54, 0), out var badgeLabel, 40, name + " key");
+            badge.transform.SetAsLastSibling();
+            if (badgeLabel) badgeLabel.color = Color.white;
+            Label(name + " caption", image.transform, caption,
+                new Vector2(size.x - 118, size.y - 22), new Vector2(24, 0), 46,
+                TextAnchor.MiddleCenter, Color.white);
             var button = image.gameObject.AddComponent<CareResultButton>();
             button.restart = restart;
             button.image = image;
+            // The PC card is a screen-space overlay, so a plain mouse click must
+            // work as well as aiming the look ray at it.
+            if (CarePlatform.FlatUi)
+            {
+                CareUi.EnsureEventSystem();
+                image.raycastTarget = true;
+                var click = image.gameObject.AddComponent<Button>();
+                click.targetGraphic = image;
+                click.transition = Selectable.Transition.None;
+                click.onClick.AddListener(button.Activate);
+            }
             return button;
         }
 

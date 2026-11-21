@@ -107,8 +107,15 @@ namespace ADayAtTheZoo.Monkeys.Care
             float headTop = MeasureHeadTop();
             ui.barOffset.y = headTop + HeadPlateGap;
             panel = new CarePanel(transform, ui);
-            statusText = CareRoundView.Label("Care Status", panel.Root, "", new Vector2(900, 70), new Vector2(0, -170), 36);
-            statusText.color = Color.white; statusText.gameObject.AddComponent<Shadow>();
+            // The status line used to hang *below* the plate (900px wide on a
+            // 640px card) in plain white — white letters on grass, and best-fit
+            // re-sampled them into mush. It now sits inside the card under the
+            // bar, in the same dark ink as the title, at its authored size.
+            statusText = CareRoundView.Label("Care Status", panel.Root, string.Empty,
+                new Vector2(576, 56), new Vector2(0, -115), 34, TextAnchor.MiddleCenter, StatusInk);
+            statusText.resizeTextForBestFit = false;
+            statusText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            statusText.verticalOverflow = VerticalWrapMode.Overflow;
             emotion = CareUi.Canvas("Care Emotion", transform, Vector3.zero, ui.emotionSize, new Vector2(256, 256), 61);
             emotionImage = CareUi.Image("Emotion", emotion, ui.sad, new Vector2(256, 256), Vector2.zero);
             emotion.gameObject.SetActive(false); panel.Root.gameObject.SetActive(false);
@@ -422,8 +429,16 @@ namespace ADayAtTheZoo.Monkeys.Care
                 statusCache = nextStatus;
                 statusText.text = nextStatus;
             }
-            statusText.color = !Celebrating && remaining <= 10 ? Color.Lerp(Color.white, new Color(1, .65f, .2f), .5f + .5f * Mathf.Sin(MonkeyCareSession.GameTime * 6)) : Color.white;
+            statusText.color = Celebrating ? StatusGood
+                : remaining <= 10
+                    ? Color.Lerp(StatusInk, StatusHot, .5f + .5f * Mathf.Sin(MonkeyCareSession.GameTime * 6))
+                    : StatusInk;
         }
+        // The plate is cream, so the copy has to be dark; the old white-on-white
+        // status line was the "text is too blurry to read" report.
+        static readonly Color StatusInk = new(.30f, .17f, .14f, 1f);
+        static readonly Color StatusHot = new(.82f, .16f, .10f, 1f);
+        static readonly Color StatusGood = new(.09f, .46f, .23f, 1f);
         // Height of the empty air gap between the top of the monkey's head and
         // the bottom edge of the patience/satisfaction card.
         const float HeadPlateGap = .16f;

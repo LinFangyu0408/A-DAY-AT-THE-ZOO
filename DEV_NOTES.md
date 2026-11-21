@@ -259,3 +259,14 @@
 - **真实启动验证**：新增编辑器小工具 `CareLaunchShot`（丢 `work/monkey-care/shot.request` 即按玩家方式进 Play，1.2s/4s 各拍一张 Game View + 写 `launch-state.txt`）。实测：`flatUi=True padStyle=PlayStation confirm=✕ back=○ readyGateActive=True`，首帧 READY 门就是 "✕ PRESS ✕ TO START"，两帧之间无闪烁/错位。
 - **试玩排查记两条（未改，避免动了共享场景内容）**：①画面左下那簇洋红+黄尖刺不是错误着色器，是场景里的 `Flower_high_purple`（Synty 高饱和风格植被）；②`Wooden crate_Lowpoly_White` 的材质引用为空（prefab GUID 已不在工程里），渲染为空但可能仍带碰撞——属环境资产的历史问题，PC/VR 共用，留待用户确认后再动。
 - 本轮提交 GitHub。
+
+## 2026-11-21 14:55 第二十二轮（结算两键 A/B / CONTINUE 回主页 / 头顶文字清晰化）
+- **结算卡片两个按钮**：原来 CONTINUE 是**烧在图里的文字**、RESTART 是个**没有字的绿圆图标**，两者风格不成对，且"重来"没有可读标识。改为同款胶囊按钮（BlueButton / GreenButton，九宫格切片，否则圆角在放大时被拉成糊边）+ 实时文字 `CONTINUE` / `RESTART` + **左侧键帽**（`ConfirmLabel`/`BackLabel`，PS5 下自动变 ✕/○，样式切换时同步换字）。
+- **功能**：`A / ✕ = CONTINUE`，`B / ○ = RESTART`（结算态在 `MonkeyCareSession.Update` 里优先处理，射线瞄准点击仍保留）：
+  - `ReturnHome()`：清空结算、关闭背包、重置回合，回到**主页占位**= READY 待机门（真正的主页 UI 到位后，只需把 `ReturnHome()` 里的 `ShowReadyGate()` 换成主页视图，其它不动）。
+  - `RestartRound()`：同一套重置后 `AcceptReadyGate()` 直接进 GO 节拍，立刻重开一局（不再停在待机门）。
+- **顺带修掉两个真 bug**：
+  1. 场景里**没有 EventSystem**——平面 HUD 上的 `Button`（右下角样式芯片、结算按钮）鼠标点击全都没反应，只有手柄 Select 有效。新增 `CareUi.EnsureEventSystem()`（EventSystem + InputSystemUIInputModule，仅建一次）。
+  2. 结算/回主页时**背包面板必定弹出来盖住画面**：冻结与重置里的 `foreach (Transform child in Head) if (child.name.StartsWith("Care "))` 白名单把 `Care Backpack` 一起强制 `SetActive(true/false)`，绕过了 `CareGloveInventory` 的开关状态。两处循环都排除 `Care Backpack`，由背包自己管。
+- **猴子头顶卡片文字糊**：`Care Status` 原本 900px 宽、挂在卡片**下方**（y=-170，卡片只有 640 宽 290 高）且是**纯白字 + 阴影**，实际是白字压在草地上，再被 best-fit 缩放到更小 —— 这就是"根本看不清"。现在：移进卡片内（y=-115，576×56）、34px、深色墨（比赛中 HURRY 在墨色↔红之间闪，吃完变绿）、关闭 best-fit 改 Overflow；标题 `STAMINA/SATISFACTION` 字号 31→40、同样关闭 best-fit 并加深，米色遮罩下延到 y=-10（高 268）避免露底字。
+- 冒烟 **121 断言**（新增：键帽文案跟随手柄、B 真重开、A 回主页且背包已关闭、主页无背包残留、PC 两个按钮可鼠标点击）、自检 **273** 全过。

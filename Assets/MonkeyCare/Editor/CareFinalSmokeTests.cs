@@ -481,6 +481,20 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             var panelTitle = panelRoot ? panelRoot.Find("Panel title")?.GetComponent<Text>() : null;
             Check(panelTitle && panelTitle.text == "STAMINA",
                 "the overhead bar shows live hunger tolerance");
+            Check(panelTitle && !panelTitle.resizeTextForBestFit && panelTitle.fontSize >= 34,
+                "the overhead title renders at its authored size instead of best-fit shrinking");
+            // The status line used to sit below the card in white (white on
+            // grass) and was best-fit squeezed: unreadable. It now lives inside
+            // the plate in the same dark ink as the title.
+            var statusLine = panelRoot ? panelRoot.Find("Care Status")?.GetComponent<Text>() : null;
+            report.Add("overhead status pos=" +
+                       (statusLine ? ((RectTransform)statusLine.transform).anchoredPosition.ToString() : "none") +
+                       " color=" + (statusLine ? statusLine.color.ToString() : "none") +
+                       " bestFit=" + (statusLine ? statusLine.resizeTextForBestFit.ToString() : "none"));
+            Check(statusLine && !statusLine.resizeTextForBestFit &&
+                  statusLine.color.r < .6f && statusLine.color.a > .9f &&
+                  ((RectTransform)statusLine.transform).anchoredPosition.y > -145f,
+                "the overhead status line sits inside the plate in dark ink");
             Aim(hungry);
             yield return null;
             yield return null;
@@ -785,6 +799,89 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         // failed check would then leave the editor stuck in play mode.
         var pcPass = PcHudPass();
         while (pcPass.MoveNext()) yield return pcPass.Current;
+
+        var resultsPass = ResultsActionsPass();
+        while (resultsPass.MoveNext()) yield return resultsPass.Current;
+    }
+
+    // The results card must offer two working, clearly labelled actions:
+    // CONTINUE -> home/standby, RESTART -> a fresh round right away.
+    IEnumerator ResultsActionsPass()
+    {
+        session.Round.Freeze();
+        session.RoundView.ShowResults();
+        session.RoundView.Update(session.Round, 240);
+        yield return null;
+
+        var buttons = UnityEngine.Object.FindObjectsByType<CareResultButton>(
+            FindObjectsInactive.Include, FindObjectsSortMode.None);
+        var restart = buttons.FirstOrDefault(item => item.restart);
+        var home = buttons.FirstOrDefault(item => !item.restart);
+        report.Add("results actions=" + string.Join(", ", buttons.Select(item =>
+            item.name + ":" + (CaptionOf(item) ?? "-") + ":" + (KeyOf(item) ?? "-"))));
+        Check(restart != null && home != null, "the results card offers both round actions");
+        Check(CaptionOf(home) == "CONTINUE" && CaptionOf(restart) == "RESTART",
+            "both results actions carry a live CONTINUE / RESTART label");
+        Check(KeyOf(home) == CareInput.ConfirmLabel && KeyOf(restart) == CareInput.BackLabel,
+            "the pills print the live confirm/back badges (A·B or ✕·○)");
+
+        // The card is a screen-space overlay by now, so only ScreenCapture shows
+        // it; the camera Capture above would come back empty.
+        string resultsShot = Path.GetFullPath("work/monkey-care/final-pc-results.png");
+        if (File.Exists(resultsShot)) File.Delete(resultsShot);
+        ScreenCapture.CaptureScreenshot(resultsShot);
+        yield return null;
+        yield return null;
+
+        // RESTART — the B (○) badge is not decoration: pressing it deals a fresh
+        // round straight into play.
+        yield return Press("recordingB");
+        Check(session.Round != null && !session.Round.Frozen && session.Round.FeedingTotal == 0,
+            "B on the results card deals a fresh round with a clean score");
+        float deadline = Time.realtimeSinceStartup + 3f;
+        while (!session.RoundStarted && Time.realtimeSinceStartup < deadline) yield return null;
+        Check(session.RoundStarted, "B drops the player straight back into play");
+
+        // CONTINUE — the A (✕) badge returns to the home/standby screen.
+        session.Round.Freeze();
+        session.RoundView.ShowResults();
+        session.RoundView.Update(session.Round, 240);
+        yield return null;
+        yield return Press("recordingA");
+        yield return null;
+        Check(GameObject.Find("Care READY GO") != null && !session.RoundStarted,
+            "CONTINUE returns to the home/standby screen instead of resuming a dead round");
+        var gate = GameObject.Find("Care READY GO");
+        report.Add("home gate parent=" + (gate ? gate.transform.parent.name : "none") +
+                   " flatUi=" + CarePlatform.FlatUi +
+                   " bagOpen=" + (session.GloveInventory != null && session.GloveInventory.IsOpen));
+        foreach (var canvas in UnityEngine.Object.FindObjectsByType<Canvas>(
+                     FindObjectsInactive.Include, FindObjectsSortMode.None))
+            report.Add("canvas " + canvas.name + " mode=" + canvas.renderMode +
+                       " order=" + canvas.sortingOrder +
+                       " active=" + canvas.gameObject.activeInHierarchy);
+        Check(gate && gate.transform.parent &&
+              gate.transform.parent.name == "Care PC Ready Root" &&
+              (session.GloveInventory == null || !session.GloveInventory.IsOpen),
+            "A returns to the screen-space home gate with the bag already closed");
+        Check(!GameObject.Find("Care Backpack"),
+            "no bag panel is left parked over the home screen");
+        string homeShot = Path.GetFullPath("work/monkey-care/final-pc-home.png");
+        if (File.Exists(homeShot)) File.Delete(homeShot);
+        ScreenCapture.CaptureScreenshot(homeShot);
+        yield return null;
+        yield return null;
+        Check(File.Exists(homeShot), "the home/standby screenshot was written for review");
+    }
+
+    static string CaptionOf(CareResultButton button) =>
+        button ? button.transform.Find(button.name + " caption")?.GetComponent<Text>()?.text : null;
+
+    static string KeyOf(CareResultButton button)
+    {
+        var badge = button ? button.transform.Find(button.name + " key") : null;
+        var label = badge ? badge.GetComponentInChildren<Text>(true) : null;
+        return label ? label.text : null;
     }
 
     // The whole suite above runs with ForceVr, because a headless editor has no
@@ -880,6 +977,18 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
                    " expected='" + CareInput.BackLabel + "'");
         Check(bagKey && bagKey.text == CareInput.BackLabel,
             "the PC backpack badge already uses the detected pad glyph");
+
+        // The flat card is a screen-space overlay: results actions must accept a
+        // plain mouse click, not just the look ray.
+        var resultButtons = UnityEngine.Object.FindObjectsByType<CareResultButton>(
+            FindObjectsInactive.Include, FindObjectsSortMode.None);
+        report.Add("PC results buttons=" + string.Join(", ", resultButtons.Select(item =>
+            item.name + ":" + (CaptionOf(item) ?? "-") + (item.GetComponent<Button>() ? ":click" : ":ray"))));
+        Check(resultButtons.Length >= 2 && resultButtons.All(item => item.GetComponent<Button>()),
+            "both results actions are mouse-clickable on the PC card");
+        Check(resultButtons.Any(item => !item.restart && CaptionOf(item) == "CONTINUE") &&
+              resultButtons.Any(item => item.restart && CaptionOf(item) == "RESTART"),
+            "the PC results card names both actions CONTINUE and RESTART");
 
         // A single magenta object ruins the whole yard shot. Two causes: the
         // material fell back to the error shader, or its shader is simply not

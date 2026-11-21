@@ -136,6 +136,19 @@ namespace ADayAtTheZoo.Monkeys.Care
             r.offsetMin = Vector2.zero; r.offsetMax = Vector2.zero;
             return r;
         }
+
+        // Screen-space buttons (pad-style chip, results actions) are real UI
+        // Buttons; without an EventSystem nothing routes a mouse click to them.
+        // The scene ships without one because the VR layout never needed it.
+        public static void EnsureEventSystem()
+        {
+            if (UnityEngine.EventSystems.EventSystem.current) return;
+            var go = new GameObject("Care Event System",
+                typeof(UnityEngine.EventSystems.EventSystem),
+                typeof(UnityEngine.InputSystem.UI.InputSystemUIInputModule));
+            var module = go.GetComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+            if (module) module.AssignDefaultActions();
+        }
         // A plate inside the flat HUD root. Positions are in the reference space;
         // pass an anchor/pivot to pin a plate to a screen corner.
         public static RectTransform Plate(string name, Transform parent, Vector2 anchoredPos, Vector2 size,
@@ -174,11 +187,16 @@ namespace ADayAtTheZoo.Monkeys.Care
             // Cover the baked English title and the old white separator so the
             // gameplay caption can switch between patience and satisfaction in
             // Chinese while keeping the original card's outer frame.
-            CareUi.Image("Localized content", Root, null, new Vector2(594, 236),
-                new Vector2(0, 3)).color = new Color(1f, .972f, .91f, 1f);
+            CareUi.Image("Localized content", Root, null, new Vector2(594, 268),
+                new Vector2(0, -10)).color = new Color(1f, .972f, .91f, 1f);
+            // Bigger and never best-fit: a 31px caption shrunk to ~20px inside
+            // its 420px slot re-sampled into a fuzzy word over the cream plate.
             caption = CareRoundView.Label("Panel title", Root, "STAMINA",
-                new Vector2(420, 62), new Vector2(0, 77), 31,
-                TextAnchor.MiddleCenter, new Color(.38f, .22f, .26f, 1f));
+                new Vector2(470, 68), new Vector2(0, 77), 40,
+                TextAnchor.MiddleCenter, new Color(.36f, .20f, .24f, 1f));
+            caption.resizeTextForBestFit = false;
+            caption.horizontalOverflow = HorizontalWrapMode.Overflow;
+            caption.verticalOverflow = VerticalWrapMode.Overflow;
             track = CareUi.Image("Track", Root, value.track, new Vector2(490, 85), new Vector2(30, -43)).rectTransform;
             logo = CareUi.Image("Logo", Root, value.staminaLogo, new Vector2(122, 122), new Vector2(-210, -43));
             Show(false, 1, 0);
