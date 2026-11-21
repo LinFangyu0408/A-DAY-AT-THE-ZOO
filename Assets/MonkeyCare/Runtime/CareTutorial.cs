@@ -94,12 +94,16 @@ namespace ADayAtTheZoo.Monkeys.Care
                 controllerLabels = labels;
                 ShowStep(step);
             }
+            // Safety valve. The lesson must never be able to hard-lock the game
+            // again: if one step has been sitting there for 45 s, or the whole
+            // lesson has run twice its authored length, hand the round over
+            // anyway. The round is fully playable without the lesson.
+            if (StepElapsed >= 45f || TotalElapsed >= 120f) { Finish(); return; }
             switch (step)
             {
                 case 0:
                     if (StepElapsed >= 2.5f) ShowStep(1);
-                    break;
-                case 1:
+                    break;                case 1:
                     // Move around first; the fallback keeps the tutorial from
                     // stalling if the player only watches.
                     if ((input.LeftStick.sqrMagnitude > .08f && StepElapsed >= 2f) || TotalElapsed >= 8f)

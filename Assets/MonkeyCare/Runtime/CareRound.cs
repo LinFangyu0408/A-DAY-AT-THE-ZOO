@@ -23,15 +23,23 @@ namespace ADayAtTheZoo.Monkeys.Care
         public const int OneStarFeedings = 3;
         public const int TwoStarFeedings = 6;
         public const int ThreeStarFeedings = 9;
+        // The clock and the star ladder are tuned together. Nine bananas in
+        // 120 s is one feeding every 13.3 s including the 3.5 s bite and the
+        // walk back to the stall, which is what the hunger rotation is paced
+        // to. If Cutoff ever changes, re-derive ThreeStarFeedings or three
+        // stars quietly becomes impossible.
+        public const float SecondsPerStarFeeding = Cutoff / ThreeStarFeedings;
         // The top bar measures progress towards the third star, so a full bar and
         // three stars always happen together. The passing line sits on the
         // two-star threshold (six of nine bananas).
         public const int ScoreGoal = ThreeStarFeedings;
         public const float PassingRatio = (float)TwoStarFeedings / ScoreGoal;
-        // Shortened round: two minutes. Twelve queued episodes mean the hunger
-        // rotation is still handing out targets when the whistle blows.
+        // Two minutes, exactly the length of the round soundtrack. The clock,
+        // the music and the freeze all run off this one number: the old 130 s
+        // Duration was longer than the cue, so the track ran out and looped
+        // back to its quiet intro a few seconds before the whistle.
         public const float Cutoff = 120;
-        public const float Duration = 130;
+        public const float Duration = Cutoff;
         public bool FeedingOnly { get; }
         // Tasks are dealt by DealFeedingTasks(), never inside the constructor:
         // UnityEngine.Random throws when called from a MonoBehaviour field
@@ -84,9 +92,17 @@ namespace ADayAtTheZoo.Monkeys.Care
         public double ResolvedPercent => FeedingOnly
             ? Math.Min(100.0, 100.0 * FeedingTotal / ScoreGoal)
             : 100.0 * ScratchTotal / PlannedScratches;
-        public int Stars => Math.Min(MaxStars, FeedingTotal >= ThreeStarFeedings ? 3 :
-            FeedingTotal >= TwoStarFeedings ? 2 :
-            FeedingTotal >= OneStarFeedings ? 1 : 0);
+        public int Stars
+        {
+            get
+            {
+                int stars = 0;
+                if (FeedingTotal >= OneStarFeedings) stars = 1;
+                if (FeedingTotal >= TwoStarFeedings) stars = 2;
+                if (FeedingTotal >= ThreeStarFeedings) stars = 3;
+                return stars > MaxStars ? MaxStars : stars;
+            }
+        }
         public int NextStarFeedings => Stars >= MaxStars ? 0 :
             (Stars == 0 ? OneStarFeedings : Stars == 1 ? TwoStarFeedings : ThreeStarFeedings) - FeedingTotal;
         public int NextStarPoints => NextStarFeedings;

@@ -56,7 +56,10 @@ namespace ADayAtTheZoo.Monkeys.Care
         // touch the monkey during this window, but haptics must stay silent.
         public bool EatingNow { get; private set; }
         public MonkeyAction Phase { get; private set; }
-        public float NextIn => Mathf.Max(0, waitUntil - MonkeyCareSession.GameTime);
+        // Measured on the demand clock: waitUntil is scheduled in that domain, so
+        // comparing it against the continuous session clock made every timer look
+        // overdue by the length of the guided lesson.
+        public float NextIn => Mathf.Max(0, waitUntil - MonkeyCareSession.TaskTime);
         CarePanel panel;
         RectTransform emotion;
         Image emotionImage;

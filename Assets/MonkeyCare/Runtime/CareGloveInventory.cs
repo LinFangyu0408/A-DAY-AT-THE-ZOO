@@ -152,6 +152,9 @@ namespace ADayAtTheZoo.Monkeys.Care
 
         void Toggle(CareRound round, bool mayOpen)
         {
+            // Opening and closing the bag is a button press too: one click for
+            // each, so the corner chip never feels dead.
+            session.audioFeedback?.Click();
             if (IsOpen) Close();
             else if (mayOpen) Open(round);
         }

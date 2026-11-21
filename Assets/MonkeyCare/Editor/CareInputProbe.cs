@@ -136,15 +136,41 @@ public static class CareInputProbe
             var sources = session.GetComponentsInChildren<AudioSource>(false);
             foreach (var source in sources)
             {
-                if (source.name != "Care Music") continue;
-                sb.AppendLine("audio.musicSource=" + (source.clip ? source.clip.name : "noClip") +
+                if (source.name != "Care Music" && source.name != "Care Ambient Music") continue;
+                string tag = source.name == "Care Music" ? "audio.musicSource=" : "audio.ambientSource=";
+                sb.AppendLine(tag + (source.clip ? source.clip.name : "noClip") +
                     " playing=" + source.isPlaying +
                     " volume=" + source.volume.ToString("F2") +
+                    " pitch=" + source.pitch.ToString("F3") +
                     " time=" + source.time.ToString("F1") +
                     " loadState=" + (source.clip ? source.clip.loadState.ToString() : "none") +
+                    " len=" + (source.clip ? source.clip.length.ToString("F1") : "0") +
                     " spatial=" + source.spatialBlend.ToString("F2"));
             }
             sb.AppendLine("audio.effectSources=" + sources.Count(item => item.name == "Care Spatial Audio"));
+            var careSession = ADayAtTheZoo.Monkeys.Care.MonkeyCareSession.Instance;
+            if (careSession && careSession.audioFeedback != null)
+                sb.AppendLine("audio.countdown=" + careSession.audioFeedback.CountdownReady +
+                    " final=" + careSession.audioFeedback.FinalCountdownReady +
+                    " stage=" + careSession.audioFeedback.CountdownStage +
+                    " finalStep=" + careSession.audioFeedback.FinalCountdownStep +
+                    " round=" + careSession.audioFeedback.RoundMusicActive +
+                    " track=" + careSession.audioFeedback.MusicName +
+                    " pitch=" + careSession.audioFeedback.MusicPitch.ToString("F3"));
+            if (careSession && careSession.audioFeedback != null)
+                sb.AppendLine("audio.ui click=" + careSession.audioFeedback.ClickReady +
+                    " victory=" + careSession.audioFeedback.VictoryReady +
+                    " victoryOn=" + careSession.audioFeedback.VictoryPlaying +
+                    " victoryLoop=" + careSession.audioFeedback.VictoryLoops +
+                    " victoryLen=" + careSession.audioFeedback.VictoryClipLength.ToString("F2"));
+            if (careSession)
+                sb.AppendLine("pace gap=" +
+                    ADayAtTheZoo.Monkeys.Care.MonkeyCareSession.HungerGapMinAt(
+                        ADayAtTheZoo.Monkeys.Care.MonkeyCareSession.TaskTime).ToString("F1") +
+                    "-" + ADayAtTheZoo.Monkeys.Care.MonkeyCareSession.HungerGapMaxAt(
+                        ADayAtTheZoo.Monkeys.Care.MonkeyCareSession.TaskTime).ToString("F1") +
+                    " time=" + ADayAtTheZoo.Monkeys.Care.MonkeyCareSession.TaskTime.ToString("F1") +
+                    " cutoff=" + ADayAtTheZoo.Monkeys.Care.CareRound.Cutoff);
             var liveListeners = UnityEngine.Object.FindObjectsByType<AudioListener>(
                 FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             sb.AppendLine("audio.activeListeners=" + liveListeners.Count(item => item.enabled));

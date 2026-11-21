@@ -341,6 +341,21 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         monkey.feedingSeconds = .45f;
         monkey.lateFeedingSeconds = .55f;
         monkey.patienceSeconds = 60;
+        // Regression: the lesson used to park every clock, so the banana on the
+        // monkey's mouth never finished being eaten and the countdown sat at
+        // 02:00 forever. The lesson now keeps the continuous clock running and
+        // only parks the round clock (RoundElapsed).
+        SetAutoProperty(session, "TutorialActive", true);
+        yield return null;
+        float lessonClock = MonkeyCareSession.TaskTime;
+        report.Add("LESSON round=" + session.RoundElapsed.ToString("F2") +
+                   " task=" + lessonClock.ToString("F2") +
+                   " game=" + MonkeyCareSession.GameTime.ToString("F2"));
+        Check(session.RoundElapsed < .05f,
+            "the round clock stays at 0:00 while the guided lesson runs");
+        yield return new WaitForSecondsRealtime(.4f);
+        Check(MonkeyCareSession.TaskTime - lessonClock >= .3f,
+            "the lesson clock keeps counting while the round clock is parked");
         monkey.BeginGuidedTutorial(CareNeed.Hunger);
         Aim(monkey);
 
@@ -430,6 +445,8 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         Check(monkeyEmotion && monkeyEmotion.gameObject.activeInHierarchy &&
               monkeyEmotion.sprite == monkey.ui.happy,
             "a happy reaction replaces the old satisfaction bar");
+        // Back to a normal round: the rest of the suite is not a lesson.
+        SetAutoProperty(session, "TutorialActive", false);
         var actor = monkey.GetComponent<MonkeyNpcAnimator>();
         AnimatorStateInfo animationState = monkey.animator.IsInTransition(0)
             ? monkey.animator.GetNextAnimatorStateInfo(0)
@@ -731,6 +748,18 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             "the last twenty seconds spell out the remaining goal");
         Capture("final-sprint");
 
+        // ---- the lesson parks the round clock, and the HUD says so ----
+        var clockText = GameObject.Find("Round clock")?.GetComponent<Text>();
+        session.RoundView.Update(session.Round, 0f, true);
+        report.Add("HUD lesson clock=" + (clockText ? clockText.text : "none"));
+        Check(clockText && clockText.text == "LESSON",
+            "the HUD clock reads LESSON while the tutorial owns the clock");
+        session.RoundView.Update(session.Round, 0f, false);
+        Check(clockText && clockText.text == "02:00",
+            "the HUD clock shows a full 02:00 the moment the lesson hands over");
+        // Put the plate back where the sprint check left it.
+        session.RoundView.Update(session.Round, CareRound.Cutoff - 12f);
+
         // ---- star tiers are absolute banana counts ----
         var probe9 = FedRound(9);
         report.Add("TIERS 2=" + TierStars(2) + " 3=" + TierStars(3) + " 5=" + TierStars(5) +
@@ -755,6 +784,66 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             "the round queues more than nine hunger episodes for the rotation");
         Check(CareRound.Cutoff <= 130 && CareRound.Cutoff >= 90,
             "the countdown is shortened so the queue still has work when it ends");
+        report.Add("CLOCK cutoff=" + CareRound.Cutoff + " duration=" + CareRound.Duration);
+        Check(Mathf.Abs(CareRound.Duration - CareRound.Cutoff) < .01f,
+            "the round clock and the scoring window are the same two minutes");
+
+        // Hunger pace: the lesson and practice stretch keep the authored 3-6 s
+        // breathing room, the middle eases forward, and the last stretch settles
+        // at 1.6-3.2 s. That is what lets nine feedings fit inside the clock.
+        report.Add("PACE t=0 " + MonkeyCareSession.HungerGapMinAt(0).ToString("F1") + "-" +
+                   MonkeyCareSession.HungerGapMaxAt(0).ToString("F1") +
+                   "  t=60 " + MonkeyCareSession.HungerGapMinAt(60).ToString("F1") + "-" +
+                   MonkeyCareSession.HungerGapMaxAt(60).ToString("F1") +
+                   "  t=115 " + MonkeyCareSession.HungerGapMinAt(115).ToString("F1") + "-" +
+                   MonkeyCareSession.HungerGapMaxAt(115).ToString("F1"));
+        Check(Mathf.Abs(MonkeyCareSession.HungerGapMinAt(10) - 3f) < .01f &&
+              Mathf.Abs(MonkeyCareSession.HungerGapMaxAt(10) - 6f) < .01f,
+            "the tutorial and the opening requests keep the authored 3-6 s pace");
+        Check(Mathf.Abs(MonkeyCareSession.HungerGapMinAt(29.9f) - 3f) < .02f &&
+              Mathf.Abs(MonkeyCareSession.HungerGapMaxAt(29.9f) - 6f) < .02f,
+            "practice keeps the full 3-6 s pace right up to the ramp");
+        Check(Mathf.Abs(MonkeyCareSession.HungerGapMinAt(95f) - 1.6f) < .01f &&
+              Mathf.Abs(MonkeyCareSession.HungerGapMaxAt(95f) - 3.2f) < .01f,
+            "the queue settles at 1.6-3.2 s instead of accelerating forever");
+        Check(MonkeyCareSession.HungerGapMaxAt(115) <= 3.21f,
+            "the hunger queue tightens to at most 3.2 s between bananas late on");
+
+        // No gear change: a smoothstep moves by well under a tenth of a second
+        // per second of play, where a linear ramp corners abruptly at both ends.
+        float worstStep = 0f;
+        bool monotonic = true;
+        for (int s = 0; s < 120; s++)
+        {
+            float a = MonkeyCareSession.HungerGapMaxAt(s);
+            float b = MonkeyCareSession.HungerGapMaxAt(s + 1);
+            worstStep = Mathf.Max(worstStep, Mathf.Abs(b - a));
+            if (b > a + .0001f) monotonic = false;
+        }
+        report.Add("PACE worst 1 s step=" + worstStep.ToString("F3") +
+                   " monotonic=" + monotonic);
+        Check(worstStep < .10f && monotonic,
+            "the hunger ramp eases in and out with no sudden difficulty jump");
+
+        // Worst-case timeline: eight feedings after the tutorial banana, each
+        // costing a full 3.5 s bite plus a walk back to the stall, using the
+        // slowest allowed gap at that moment.
+        float clock = 2.5f;
+        for (int i = 0; i < 8; i++)
+            clock += MonkeyCareSession.HungerGapMaxAt(clock) + 3.5f + 2f;
+        report.Add("PACE eight feedings done at t=" + clock.ToString("F1") +
+                   " (cutoff " + CareRound.Cutoff + ")");
+        Check(clock < CareRound.Cutoff - 5f,
+            "nine feedings (tutorial banana plus eight) fit inside two minutes");
+        // The star ladder has to stay derived from the clock, otherwise a future
+        // change to Cutoff silently makes three stars unreachable.
+        report.Add("STARS " + CareRound.SecondsPerStarFeeding.ToString("F2") +
+                   " s per feeding, ladder " + CareRound.OneStarFeedings + "/" +
+                   CareRound.TwoStarFeedings + "/" + CareRound.ThreeStarFeedings);
+        Check(Mathf.Abs(CareRound.SecondsPerStarFeeding - CareRound.Cutoff / 9f) < .01f,
+            "the three-star ladder is derived from the two-minute clock");
+        Check(clock / 9f < CareRound.SecondsPerStarFeeding + 1.2f,
+            "a realistic feeding takes no longer than the star ladder allows");
         Check(Mathf.Abs(CareRound.PassingRatio - CareRound.TwoStarFeedings /
                   (float)CareRound.ThreeStarFeedings) < .0001f,
             "the passing line sits on the two-star threshold");
@@ -802,6 +891,113 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
 
         var resultsPass = ResultsActionsPass();
         while (resultsPass.MoveNext()) yield return resultsPass.Current;
+
+        AudioPass(session);
+    }
+
+    // The soundtrack and the final countdown: the cheerful track has to be the
+    // one actually loaded, the beeps have to exist, and the tempo has to wind
+    // up as the round runs out.
+    void AudioPass(MonkeyCareSession careSession)
+    {
+        var audio = careSession != null ? careSession.audioFeedback : null;
+        Check(audio != null, "the session owns an audio rig");
+        if (audio == null) return;
+
+        // READY gate: only the slow ambient bed, no round track.
+        audio.PauseToAmbient();
+        report.Add("audio.ambient=" + audio.AmbientName +
+                   " roundActive=" + audio.RoundMusicActive +
+                   " volume=" + audio.AmbientVolume.ToString("F2"));
+        Check(audio.AmbientName.ToLowerInvariant().Contains("music"),
+            "the slow ambient bed is loaded for the READY gate");
+        Check(!audio.RoundMusicActive, "the cheerful track is silent until the player confirms");
+
+        // Pressing confirm starts the round track from bar one.
+        audio.BeginRoundMusic();
+        report.Add("audio.track=" + audio.MusicName +
+                   " countdown=" + audio.CountdownReady +
+                   " time=" + audio.MusicTime.ToString("F2") +
+                   " len=" + audio.MusicLength.ToString("F1"));
+        Check(audio.MusicName.ToLowerInvariant().Contains("music_care"),
+            "the cheerful soundtrack is the clip actually loaded");
+        Check(audio.RoundMusicActive, "confirming the gate starts the round soundtrack");
+        Check(audio.MusicTime < .3f, "the round track restarts at bar one on confirm");
+        Check(audio.CountdownReady, "all three countdown beeps were synthesized");
+        Check(audio.FinalCountdownReady, "the five second countdown voice exists");
+        // The soundtrack must never swallow the hungry monkey's call: it is the
+        // only cue that tells the player who needs attention.
+        report.Add("audio.hungerCall=" + audio.HungerCallReady);
+        Check(audio.HungerCallReady, "the hungry monkey whistle is still wired");
+
+        // UI click + results sting. Both must exist without another imported
+        // asset getting in the way: the click has a synthesized fallback.
+        report.Add("audio.click=" + audio.ClickReady + " victory=" + audio.VictoryReady +
+                   " clip=" + audio.VictoryClipName + " source=" + audio.VictorySourceReady);
+        Check(audio.ClickReady, "confirming a button plays a click");
+        Check(audio.VictoryReady, "the results screen owns a victory sting");
+        audio.PlayVictory();
+        for (int i = 0; i < 60; i++) audio.UpdateMusic(true, 1f, 0f, 120f);
+        report.Add("audio.victory playing=" + audio.VictoryPlaying +
+                   " volume=" + audio.VictoryVolumeNow.ToString("F2") +
+                   " loops=" + audio.VictoryLoops +
+                   " len=" + audio.VictoryClipLength.ToString("F2"));
+        Check(audio.VictoryPlaying && audio.VictoryVolumeNow > .3f,
+            "the victory sting fires at full level over the results card");
+        Check(!audio.VictoryLoops, "the sting is one-shot, not a looping bed");
+        Check(audio.VictoryClipLength > 2f && audio.VictoryClipLength < 5f,
+            "the sting is a short hit, not a background track");
+        audio.StopVictory();
+        Check(!audio.VictoryPlaying, "leaving the results stops the sting");
+
+        // The cue is one full 120 s pass: the round clock is 120 s, so the music
+        // must not be a short loop that has to be re-cued mid-round (that jump
+        // is what made the track sound like it sped up in the middle).
+        report.Add("audio.cue length=" + audio.MusicLength.ToString("F1"));
+        Check(audio.MusicLength > 118f && audio.MusicLength < 122f,
+            "the cue is a full 120 s pass, matching the round clock");
+        audio.BeginRoundMusic();
+        audio.UpdateMusic(false, .62f, 50f, 120f);
+        report.Add("audio.align remaining=50 time=" + audio.MusicTime.ToString("F2"));
+        Check(audio.MusicTime < .5f,
+            "a full-length cue is never re-cued mid-round");
+
+        // Stage stepping: 0 inside 30 s, 1 inside 10 s, 2 inside 5 s.
+        audio.UpdateCountdown(25f, true);
+        int stage30 = audio.CountdownStage;
+        audio.UpdateCountdown(8f, true);
+        int stage10 = audio.CountdownStage;
+        audio.UpdateCountdown(3f, true);
+        int stage5 = audio.CountdownStage;
+        report.Add("countdown stages 25s=" + stage30 + " 8s=" + stage10 + " 3s=" + stage5);
+        Check(stage30 == 0 && stage10 == 1 && stage5 == 2,
+            "the countdown steps up 1 Hz -> 2 Hz -> 4 Hz as time runs out");
+
+        // The dedicated five second voice climbs one step per second.
+        audio.UpdateCountdown(4.9f, true);
+        int step5 = audio.FinalCountdownStep;
+        audio.UpdateCountdown(2.9f, true);
+        int step3 = audio.FinalCountdownStep;
+        audio.UpdateCountdown(.9f, true);
+        int step1 = audio.FinalCountdownStep;
+        report.Add("final countdown steps 5s=" + step5 + " 3s=" + step3 + " 1s=" + step1);
+        Check(step5 == 0 && step3 == 2 && step1 == 4,
+            "the five second voice steps up every second");
+
+        // Above the window and while frozen it must stay quiet.
+        audio.UpdateCountdown(90f, true);
+        Check(audio.CountdownStage == -1, "no beeping outside the last 30 seconds");
+        audio.UpdateCountdown(4f, false);
+        Check(audio.CountdownStage == -1, "the countdown is silent while the round is frozen");
+
+        // No playback-rate lift: the arrangement itself lifts from 132 to 156 BPM
+        // at 58 s. Ramping the transport as well would finish the cue before the
+        // clock and loop back into the intro in the middle of the round.
+        for (int i = 0; i < 400; i++) audio.UpdateMusic(false, 1f, 20f, 120f);
+        float fast = audio.MusicPitch;
+        report.Add("music pitch end=" + fast.ToString("F3"));
+        Check(Mathf.Abs(fast - 1f) < .01f,
+            "the transport stays at 1:1, the tempo lift lives in the arrangement");
     }
 
     // The results card must offer two working, clearly labelled actions:
@@ -1085,6 +1281,17 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
     void SetSessionField(string fieldName, object value)
     {
         SetObjectField(session, fieldName, value);
+    }
+
+    // Auto-properties with a private setter can only be written through their
+    // backing field (<Name>k__BackingField).
+    static void SetAutoProperty(object target, string property, object value)
+    {
+        var field = target.GetType().GetField("<" + property + ">k__BackingField",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        if (field == null)
+            throw new MissingFieldException(target.GetType().FullName, property);
+        field.SetValue(target, value);
     }
 
     static void SetObjectField(object target, string fieldName, object value)

@@ -379,7 +379,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             flatHud = null; results = null;
         }
 
-        public void Update(CareRound round, float elapsed)
+        public void Update(CareRound round, float elapsed, bool lesson = false)
         {
             // The banana plate only tracks the head/anchor in VR; the flat PC
             // overlay stays put at its screen corner.
@@ -444,6 +444,15 @@ namespace ADayAtTheZoo.Monkeys.Care
                     Set(clock, ref clockCache, "ROUND END");
                 }
             }
+            else if (lesson)
+            {
+                // The lesson runs before the clock starts. A frozen "02:00" read
+                // as a broken countdown, so the slot says what is happening and
+                // the digits are rebuilt the moment the whistle goes.
+                clockFrozenShown = false;
+                clockSecondCache = int.MinValue;
+                Set(clock, ref clockCache, "LESSON");
+            }
             else
             {
                 clockFrozenShown = false;
@@ -454,6 +463,8 @@ namespace ADayAtTheZoo.Monkeys.Care
                                                 (remaining % 60).ToString("00"));
                 }
             }
+            // The lesson keeps the same white as the digits: amber over bright
+            // sky read weaker than the countdown it replaces.
             clock.color = sprinting ? new Color(1f, .70f, .20f, 1f) : Color.white;
             if (!round.Frozen)
             {

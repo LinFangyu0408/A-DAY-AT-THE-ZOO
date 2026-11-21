@@ -270,3 +270,118 @@
   2. 结算/回主页时**背包面板必定弹出来盖住画面**：冻结与重置里的 `foreach (Transform child in Head) if (child.name.StartsWith("Care "))` 白名单把 `Care Backpack` 一起强制 `SetActive(true/false)`，绕过了 `CareGloveInventory` 的开关状态。两处循环都排除 `Care Backpack`，由背包自己管。
 - **猴子头顶卡片文字糊**：`Care Status` 原本 900px 宽、挂在卡片**下方**（y=-170，卡片只有 640 宽 290 高）且是**纯白字 + 阴影**，实际是白字压在草地上，再被 best-fit 缩放到更小 —— 这就是"根本看不清"。现在：移进卡片内（y=-115，576×56）、34px、深色墨（比赛中 HURRY 在墨色↔红之间闪，吃完变绿）、关闭 best-fit 改 Overflow；标题 `STAMINA/SATISFACTION` 字号 31→40、同样关闭 best-fit 并加深，米色遮罩下延到 y=-10（高 268）避免露底字。
 - 冒烟 **121 断言**（新增：键帽文案跟随手柄、B 真重开、A 回主页且背包已关闭、主页无背包残留、PC 两个按钮可鼠标点击）、自检 **273** 全过。
+
+## 2026-11-21 15:35 第二十三轮（欢快 BGM + 倒计时滴滴滴）
+- **旧 BGM 的问题**：`music.wav` 60s 单声道，频谱重心只有 **271 Hz**、8kHz 以上能量仅 **2%**——是低沉环境铺底，不是音乐。欢快度不够的根因在这里。
+- **新 BGM（原创，无版权）**：`work/music/synth.py` 用 numpy 从谐波合成鼓、贝斯、Rhodes、马林巴、铜管，导出 `Resources/HighlandLakeAudio/music_care.wav`（66.2s 立体声 32kHz，A 段→B 段→A'→B' 配器递增）。
+  - 候选 A `bgm_a_funk.wav`：116 BPM 放克/拉丁，F 大调，I-vi-IV-V 类进行，最接近《胡闹厨房》。
+  - 候选 B `bgm_b_cartoon.wav`：132 BPM 卡通/马戏团，G 大调，拨弦 comping + 木鱼。
+  - 指标：A 重心 3730Hz（低 36%/中 27%/高 13%），替代了原来的 271Hz。
+  - 循环接缝：尾部 2s 叠加回开头 + 两端 0.8ms 淡入淡出 → seam=0.0000，无咔哒。
+- **前稳后快（Overcooked 做法）**：`CareAudio.UpdateMusic(bool, float progress)`，`urgency = InverseLerp(.45,1,progress)`，`pitch = 1 + urgency²·0.18`（>92% 再 +0.02），用 `MoveTowards` 以 0.09/s 平滑 → 实测 1.000 → 1.200，约 +3 半音。曲体本身也是 A→B→A'→B' 逐段加配器，双保险。
+- **倒计时滴滴滴**：`CareAudio.UpdateCountdown(remaining, running)` + 运行时合成 `BuildTick()`（880/1046.5/1318.5Hz，三谐波 + 2ms click）和 `BuildPulse()`（70→48Hz 低频）。
+  - 30s 内 1Hz、10s 内 2Hz、5s 内 4Hz，每阶段进入时立刻响一声；最后 5 秒每拍加低频 pulse。
+  - 只在 `begun && RoundStarted && !Frozen && !readyGate && !goSequence` 时计时，待机门与结算页保持安静。
+- **加载优先级坑**：`Preload()` 先把旧的 `music` 塞进字段，`Default()` 见到非空就直接返回，导致新曲永远不生效（冒烟第一版 `audio.track=music` 抓到）。改为 Preload 先加载 `music_care`，`music` 仅作回退。
+- 探针新增 `audio.musicSource ... pitch=`、`audio.countdown=... stage=... track=...`。
+- 冒烟 **129 断言**（新增 6 条：加载的是 music_care、三个 beep 已合成、阶段 0/1/2 递进、窗口外静音、冻结静音、pitch 1.0→1.2 且能复位），自检 **273** 全过。
+- 真实启动实测：`musicSource=music_care playing=True volume=0.16 pitch=1.000 loadState=Loaded`。
+- 演示音频：`work/music/countdown_demo.wav`（最后 35 秒，50 声，pitch 1.049→1.196）。
+- **未提交**：BGM 有 A/B 两个候选，等用户选定后再一起提交。
+
+## 2026-11-21 16:00 第二十四轮（定稿卡通版 BGM：曲内真加速）
+- **用户选定**：候选 B（`bgm_b_cartoon`）可以，A 放克不行 → 以 B 的乐队（马林巴主奏 + 拨弦 comping + 木鱼 + 走步贝斯）为准，重写成正式曲。
+- **新曲 `work/music/make_zoo_theme.py`**：G 大调，36 小节，**分段真变速**（按小节独立排时间轴，不是固定网格）：
+  - `A` 8 小节 @132 BPM（节奏适中，轻 kit）→ `A2` 8 小节 @132（同旋律，16 分 hat + 切分 kick + 木鱼 + 高八度薄叠音）→ `B` 16 小节 **@156 BPM（+18% 真加速）**（四踩 + 16 分马林巴 + 铜管 stab + ghost kick）→ `T` 4 小节 @168（军鼓滚奏 + 上行音阶 + 铜管推进）回落接开头。
+  - 59.4s，尾部叠回开头 + 0.8ms 淡入淡出，seam 无咔哒；频谱重心 4551Hz（低 47%/中 50%/高 1.2%，比 A 版 3442Hz 更亮更"卡通"）。
+- **播放层加速收窄**：`CareAudio.UpdateMusic` 的 `pitch = 1 + urgency²·0.10`（原 .18），>92% 再 +.015。曲内已 +18%，叠加 1.18×1.18 会飘成"急救车"，现在峰值 1.115（冒烟实测 `music pitch end=1.115`）。
+- **资源替换**：`Resources/HighlandLakeAudio/music_care.wav` 换成本曲（meta/GUID 不动），旧 A 版留 `work/music/music_care_A_funk_old.wav`。
+- 探针加 `audio.musicSource ... len=`，真实启动实测 `music_care playing=True len=59.4 loadState=Loaded pitch=1.000`（证明 Unity 真导入了新文件，不是旧缓存）。
+- 冒烟 **129 断言**全过；真实启动截图 `launch-ready.png` 正常。**未提交**，等用户听过新曲再决定。
+
+## 2026-11-21 16:20 第二十五轮（双音轨 / 音乐对齐倒计时 / 5 秒倒数音效）
+- **双音轨**：`CareAudio` 现在两条 bed —— `Care Ambient Music`（`music.wav` 慢速环境，READY/GO 待机播）与 `Care Music`（`music_care` 卡通曲，回合播）。两条都 loop、spatialBlend 0、常驻播放，靠 `UpdateMusic` 里各自 `MoveTowards` 音量做**交叉淡入**，不切 clip，所以起跑不会在拍子中间硬切。
+  - `BeginRoundMusic()`：`AcceptReadyGate()`（按 A/✕）调用，回合曲 `time=0`、pitch 复位、从 0 淡入；`PauseToAmbient()`：`ShowReadyGate()`（启动 / CONTINUE 回主页 / RESTART 前）调用，回到慢速 bed。
+  - 实测（`launch-audio.txt`）：待机 `Care Ambient Music volume=0.14`、`Care Music volume=0.00` → 确认后 `round=True Care Music volume=0.160 / ambient 0.000`。
+- **音乐对齐倒计时**：曲长 59.4s、回合 120s，直接循环会让加速段漂走。`AlignLastMinute()` 在剩余时间首次 ≤ 曲长时把 `musicSource.time` 定位到 `len - remaining`，使**曲子的最后一拍正好落在回合最后一秒** → 156 BPM 段覆盖最后半分钟，T 段收尾。冒烟实测 `remaining=50 → time=9.42`。
+- **5 秒倒数音效**：新增 `BuildFinalTick()`（G4 木槌音 + 96Hz 闷击）与独立 `Care Final Countdown` source，最后 5 秒每秒一声，`pitch = 1 + step*0.1225` → G4/A4/B4/C5/D5 五级上行；叠在原有 4Hz beep + 低频 pulse 上。`FinalStep()` 同时驱动探针断言（5s=0 / 3s=2 / 1s=4）。
+- **修掉一个真 bug（倒计时基准错）**：HUD 时钟与回合冻结都用 `CareRound.Cutoff = 120`，而音频一直传 `CareRound.Duration = 130`。后果是最后 5 秒的滴滴/倒数音效**在实际结束前 10 秒才该响、而冻结时还剩 10s 不满足条件，等于永远不触发**。现在 `UpdateMusic/UpdateCountdown` 统一用 `Cutoff - gameTime`，`roundProgress` 也用 Cutoff 归一（pitch 末段正好 1.115）。
+- **饥饿哨声保留**：`Whistle()` 链路未动，新增 `HungerCallReady` 探针与断言 `the hungry monkey whistle is still wired`，防止以后被音乐改动误删。
+- 工具：`CareLaunchShot` 支持 request 文本含 `confirm` → 反射调 `AcceptReadyGate()` 走"玩家按下 A"的真实路径，并写 `launch-audio.txt`（两条 source 的 volume/time/playing）。**注意 static 字段会被 EnterPlaymode 的 domain reload 清掉，必须存 SessionState**（第一版就这么丢的）。
+- 冒烟 **137 断言**全过；真实启动待机/确认两种状态均实测通过。试听素材：`work/music/countdown5_demo.wav`（前 10s 音乐、后 5s 倒数）。
+
+## 2026-11-21 16:30 第二十六轮（120 秒完整版 BGM，取消播放层变速）
+- **用户反馈"到中期音乐就加速了，很奇怪"**：根因是 59.4 s 的曲子在 120 s 回合里循环 —— 29 s 处第一次进 B 段（156 BPM），60.6 s 处被 `AlignLastMinute` 重定位回 0（A 段），88 s 再次进 B 段。听感就是"中段忽然加速 + 回跳"。
+- **新曲 `work/music/make_zoo_full_120.py`**：**120.00 s 一遍覆盖整局**，段落直接钉在时钟上：
+  `A 16@132 (0-29.09) → A2 16@132 (29.09-58.18) → B 16@156 (58.18-82.80) → B2 16@156 (82.80-107.41) → T 9@171.6 (107.41-120.00)`，合计 32×1.818182 + 32×1.538462 + 9×1.398601 = 120.000。
+  - 新写素材：`A_LIFT`（第 9-16 小节上扬乐句）、B2 段加铜管对句 + 16 分沙锤 + ghost kick、T 段军鼓滚奏（16→32 分）+ 属和弦齐奏 + 主和弦重击 + 马林巴下行收尾，末尾 1.2 s 淡出（回合结束不是循环，避免硬切）。
+- **关掉播放层变速**：`UpdateMusic` 不再做 `pitch = 1 + urgency²·0.10`。120 s 的曲一旦被 rate 1.1 播就会在结束前 3 s 放完并 loop 回 A 段，等于又制造一次"中期加速"。加速感完全交给编曲（132→156 BPM）。pitch 恒为 1.000。
+- **对齐逻辑加长度判定**：`AlignLastMinute(results, remaining, roundLength)`，当 `length >= roundLength - 1.5`（曲已覆盖整局）时直接返回，不重定位。短曲（≤59 s）仍保留原行为。
+- 冒烟改成三条新断言：`cue length 118~122`、`full-length cue is never re-cued mid-round`（remaining=50 时 time 仍 0.00）、`transport stays at 1:1`(pitch 1.000)。**137 断言全过**。
+- 真实启动：`Care Music volume=0.160 time=3.20 pitch=1.000`，`len=120.0`。旧 59 s 版备份 `work/music/music_care_59s_backup.wav`。
+
+## 2026-11-21 17:00 第二十七轮（120 秒整 / 饥饿提速 / 按钮音效 / 结算胜利曲）
+- **时长统一 120 s**：`CareRound.Duration = Cutoff = 120`（原来 Duration=130 只当计分分母，导致曲长 120 而回合 130，末尾音乐先结束）。HUD 显示 2:00，冻结与音乐尾音同帧。
+- **饥饿节奏分段提速**（`MonkeyCareSession.HungerGapMinAt/MaxAt`）：`Pace = Clamp01((t-25)/(90-25))`
+  - t=0~25s：3.0–6.0 s（教程与开头原速，不动）
+  - t=60s：2.2–4.4 s
+  - t=115s：1.5–3.0 s
+  只改\"下一次饥饿等待\"，猴子耐心（30s / 首次 55s）与喂食 3.5s 全部不变，避免为了提速让人更容易超时。`NotifyFed` 用 `Random.Range(HungerGapMinAt(TaskTime), HungerGapMaxAt(TaskTime))`。
+- **9 个任务可完成验证**：教程香蕉算 1 个（`TutorialFeedings`），回合内还需 8 个。冒烟用最慢档位做最坏时间线：8×(当前最大间隔 + 3.5 s 进食 + 2 s 走位) = **86.9 s** 完成，剩 33 s 余量（`PACE eight feedings done at t=86.9`）。
+- **按钮音效**：`CareAudio.BuildClick()` 运行时合成（1180/2360 Hz 短 tick + 176 Hz 木体，110 ms），非空间 `Care Ui Click` 源。触发点：READY 按 A/✕、结算 CONTINUE/RESTART（`ResetFromResults`）、背包开关（`CareGloveInventory.Toggle`）。真实启动实测按下瞬间 `Care Ui Click playing=True`。
+- **结算胜利曲**：`work/music/make_victory.py` 生成 `jingle_victory.wav`（140 BPM，G 大调，8 小节 13.71 s，铜管号角 + 马林巴 + 拨弦 + 鼓组 + 钟琴，尾部小军鼓过门接回开头）。`CareAudio.PlayVictory()` 在回合冻结分支调用，`Care Victory Music` 源 loop、0.34/s 淡入到 0.70，同时回合曲/待机曲淡到 0；`PauseToAmbient()`/`BeginRoundMusic()` 都会 `StopVictory()`，所以 CONTINUE 回主页或 RESTART 不会把号角带过去。
+- **实测**（真实启动，`results` 请求跑真实冻结路径）：`victory=True victoryClip=jingle_victory`，`Care Victory Music volume=0.544 playing=True time=1.60`，回合曲与待机曲 volume=0.000；`launch-results.png` 结算卡完整。
+- 冒烟 **145 断言**全过（新增 CLOCK / PACE ×3 / click / victory ×3）。
+- 坑：新音效资源名必须与 `Resources.Load` 的字符串一致（字段名 `victoryMusic` ≠ 文件 `jingle_victory`，第一版就因此 VictoryReady=False）。另：`ScreenCapture` 前若编辑器弹出 \"Load Scene\" 模态框会卡住整个 update 循环，需 `WM_CLOSE` 关掉后重跑。
+
+## 2026-11-21 17:05 第二十八轮（结算改为一次性胜利音效，不再循环 BGM）
+- **用户指令**：\"胜利搞个胜利音效好了，不要 BGM\" → 结算界面不要循环背景乐，只要一记短促的胜利音效。
+- **新素材 `work/music/make_victory_sting.py` → `jingle_victory_sting.wav`**：3.25 s，152 BPM，G 大调。三记上行铜管 G4–B4–D5（\"哒-哒-DAAA\"），第三记落在展开的 G 大三和弦（G3 B3 D4 G4 B4 D5）上长鸣，叠钟琴六音上行 + 定音鼓滚奏 + 开放踩镲，混响 2.4 s 后自然收尾，末 0.4 s 余弦淡出到 0（末尾 50 ms 峰值 0.00000，不会咔哒）。
+- **`CareAudio` 改造**：
+  - 源改名 `Care Victory Music` → `Care Victory Sting`，`loop = false`。
+  - `PlayVictory()` 直接 `volume = victoryVolume`（不再从 0 淡入，短音效淡入会削掉冲击力），`Stop()` 后从头 `Play()` 一次。
+  - `UpdateMusic` 删掉\"结算时每帧把 fanfare 重新 Play\"的循环维持逻辑，只在离开结算时淡到 0。这是关键：旧代码会在 clip 播完后立刻重启，等于永久 BGM。
+  - 新增探针属性 `VictoryLoops` / `VictoryClipLength` / `VictoryAudible`；默认 `victoryVolume` 0.70 → 0.85（场景序列化值仍 0.70，实际生效 0.70）。
+- **资源**：删除 `Resources/HighlandLakeAudio/jingle_victory.wav`(+meta)，新增 `jingle_victory_sting.wav`。旧的 13.71 s 循环版备份在 `work/music/jingle_victory_loop_backup.wav`。
+- **验证**：冒烟 **147 断言**全过（新增 `sting is one-shot` / `short hit not background track`，原 `fades in` 改为 `fires at full level`）。真实启动 `results` 路径抓两次：
+  - 结算后 1.58 s：`Care Victory Sting volume=0.700 time=1.58 playing=True loop=False`
+  - 再 3.8 s：`Care Victory Sting time=0.00 playing=False loop=False`（播完即停，不再重启）
+  - 同期 `Care Music` / `Care Ambient Music` 均 `volume=0.000`，`launch-results.png` 卡片完整。
+
+## 2026-11-21 17:32 第二十九轮（120 秒 / 平滑饥饿曲线 / 星级绑定时钟 / 教程不占时）
+- **时长**：`CareRound.Cutoff = Duration = 120`（第二十七轮已统一，本轮复验 `CLOCK cutoff=120 duration=120`）。
+- **饥饿曲线改平滑**（`MonkeyCareSession`）：
+  - 旧：线性 `Clamp01((t-25)/65)`，间隔 3-6 → 1.5-3.0。线性在 25 s 与 90 s 两个拐点斜率突变，听感/手感上是"某一秒突然变快"。
+  - 新：`HungerPaceAt` 用 **smoothstep** `t²(3-2t)`，窗口 30→95 s，间隔 3-6 → **1.6-3.2**。两端斜率为 0，实测每秒最大漂移 **0.065 s**（断言 < 0.10），全程单调不增。
+  - 新增 `RollHungerGap()`：随机后 `Clamp(1.6, 6.0)`，两端都不会产生 0 间隔或长空档。
+- **星级与时钟绑定**：新增 `SecondsPerStarFeeding = Cutoff / ThreeStarFeedings = 13.33 s`，注释写明"改 Cutoff 必须重推星级门槛"；`Stars` 改为显式阶梯判断。门槛仍 3/6/9，与进度条 `/9`、及格线 6 一致。
+- **修掉两个真 bug**：
+  1. **教程白吃时间**：教程期间 `gameTime` 也在累加，而 `FinishTutorial()` 又把它清零 → 玩家实际可用时间 = 120 - 教程时长（且 HUD 会从 1:58 倒着走再跳回 2:00）。现在 `if (!TutorialActive) gameTime += dt`，HUD 在教程期间稳定显示 **02:00**（截图实测）。
+  2. **音乐与时钟错位**：`FinishTutorial()` 清零时钟但没重置音乐 → 120 s 的曲子提前"教程时长"结束。现在结束时调 `BeginRoundMusic()`，音乐从第一小节重起，与 120 s 时钟严格同起点。
+- **验证**：冒烟 **152 断言**全过（新增 smoothstep 平滑性/单调性、练习段原速、终局 1.6-3.2、星级门槛绑定时钟）。最坏时间线（每次都用最慢间隔 + 3.5 s 进食 + 2 s 走位）8 次喂食在 **88.4 s** 完成，余量 31.6 s → 3 星（含教程 1 单）稳可完成。
+- **真实启动**：`round=True track=music_care time=1.19 volume=0.160`、待机曲 0.000；HUD `02:00`；结算后 sting `playing=False time=0.00`（播完即停），结算卡不再被教程卡遮挡。
+- **工具修复**：`CareLaunchShot` 的确认意图改为落 `work/monkey-care/shot.active` 文件（domain reload 会清 SessionState 镜像，之前两次跑都卡在 READY）；确认/采样等 `MusicCued()`；截图延后到教程卡销毁之后。
+- **资源**：`music_care.wav` 改 `loadType: 2`（Streaming），冷启动不再一次性解压 15 MB PCM，开局音乐起得明显更早。
+
+## 2026-11-21 17:56 第三十轮（修“第一只猴子一直吃不完、倒计时不动”）
+- **用户反馈**：\"现在有些卡在第一个猴子一直没吃完，然后倒计时一直不动\"。两个症状是同一个根因。
+- **根因**：上一轮为了\"教程不占时间\"把 `gameTime` 在教程期间停掉了，但 **吃香蕉的进度也用这个时钟**：
+  - `MonkeyCareNpc.UpdateGuidedTutorial` 里 `delta = Mathf.Max(0, TaskTime - appearedAt - Progress.Waited)`，`TaskTime = min(GameTime, Cutoff)` → 教程期间恒为 0 → `Progress.Advance(0, true)` 永不完成 → 教程第 6 步（等 `TutorialHungerSatisfied`）永远不满足 → `TutorialActive` 永远 true → 时钟当然也不动。**死锁闭环**。
+  - 附带第二个死锁：`GloveInventory.Tick(..., !Round.Frozen && gameTime >= .1f)`，教程期间 `gameTime == 0` → 背包按钮不出现、B 也打不开 → 教程第 4 步（开背包）同样卡死。
+- **修法（拆成两个时钟，而不是停掉唯一那个）**：
+  - `gameTime` 恢复为**连续会话时钟**（动画、喂食进度、所有 `waitUntil` 都用它），永不冻结。
+  - 新增 `float lessonHold`：教程进行中每帧 `lessonHold = gameTime`，把差值吃掉；`RoundElapsed = Max(0, gameTime - lessonHold)` 才是**回合时钟**（倒计时 / 120 s 音乐 / 星级 / 冲刺提示 / 冻结判定全部改用它）。`FinishTutorial()` 只把 `lessonHold` 定格，不再清 `gameTime`。
+  - `TaskTime`：教程期间走连续时钟，回合内走 `RoundElapsed`（两个域不会混：引导需求在教程结束时被 `EndGuidedTutorial` 清掉）。
+  - `MonkeyCareNpc.NextIn` 改用 `TaskTime`（原来减 `GameTime`，教程结束后每个计时器都像\"早就该来了\"）。
+  - 背包许可改成 `!Round.Frozen`（教程即回合的一部分）。
+  - 教程加**防死锁阀门**：单步超过 45 s 或整段超过 120 s 直接 `Finish()` 交棒给回合，任何一步都不可能再锁死整局。
+- **附带一致性调整**：教程期间只放慢速 bed（`BeginAfterReadyGo` → `PauseToAmbient()`），确认 A 时若接下来是教程则**不**启动回合曲（`TutorialNext`）；`FinishTutorial()` 再 `BeginRoundMusic()`。这样"教程不占时钟"与"120 s 曲子 1:1 对应 120 s 时钟"两件事互不打架，也不会出现开头连听两遍前奏。
+- **HUD**：`CareRoundView.Update(round, elapsed, lesson)` 新增 `lesson` 参数，教程期间时钟位显示 **LESSON**（白色，同数字色，琥珀色在亮天空上太淡），教程结束立刻变回 `02:00` 并重新开始读秒。之前冻结的 `02:00` 看起来就像坏了。
+- **验证**：
+  - 冒烟 **156 断言**全过（新增 4 条：教程期间 `RoundElapsed` 恒 0、教程时钟持续推进、HUD 显示 LESSON、教程结束变 02:00）。关键是把原有的\"引导喂食\"整段用 `TutorialActive=true` 跑，旧代码下这一条会超时失败。
+  - 逻辑自检 **273 断言** PASS。
+  - 真实启动（PC 平面 HUD，PS5 手柄）：
+    - `confirm` 跑：`gate→confirmed→tutorial=True elapsed=0.00`，`Care Music volume=0.000 / Care Ambient 0.144`，截图里猴子头顶出现 STAMINA 板、教程卡走到 `OPEN THE BAG`、时钟位写 **LESSON**。
+    - `results` 跑：`elapsed=120.00` 后正常冻结出结算卡（0/9、Next Star 3 MORE、CONTINUE/RESTART）。
+  - 工具：`CareLaunchShot` 加 `trace`（每 0.4 s 落 `launch-trace.txt`：auto/confirmed/cued/gate/tutorial/round/elapsed）与 `long`（跑到教程喂食步并抓 `launch-lesson.png`）。
+- **坑**：改完编辑器脚本直接落 `shot.request` 会用到**旧程序集**（Unity 未自动刷新，`Assembly-CSharp-Editor.dll` 时间戳没变），表现为\"确认没生效、trace 文件不存在\"。必须先 `python work/send_keys.py ctrl r` 等 dll 时间戳更新再跑。

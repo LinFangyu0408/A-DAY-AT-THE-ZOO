@@ -72,8 +72,24 @@ namespace ADayAtTheZoo.Monkeys.Care
             playerCamera ? playerCamera.transform : null;
         // Below this many seconds left the HUD switches to "final sprint" mode.
         public const float FinalSprintSeconds = 20;
+        // The continuous session clock. Animations, bite progress and every
+        // "wait N seconds from now" timestamp run on it, so nothing can stall
+        // while another clock is deliberately parked.
         public static float GameTime => Instance ? Instance.gameTime : Time.time;
-        public static float TaskTime => Mathf.Min(GameTime, CareRound.Cutoff);
+        // The round clock: the two minute countdown, the 120 s music cue, the
+        // star goals and the sprint banner all count this one. It discounts the
+        // guided lesson, so a new player still gets the full two minutes even
+        // after spending forty seconds reading the tutorial.
+        public float RoundElapsed => Mathf.Max(0f, gameTime - lessonHold);
+        // Demand timing follows the continuous clock during the lesson (the
+        // round clock is parked at zero there) and the round clock afterwards.
+        // Parking this one as well was the bug where the first banana never
+        // finished being eaten and the countdown never moved.
+        public static float TaskTime => !Instance
+            ? Mathf.Min(Time.time, CareRound.Cutoff)
+            : Instance.TutorialActive
+                ? Instance.gameTime
+                : Mathf.Min(Instance.RoundElapsed, CareRound.Cutoff);
         public CareRound Round { get; private set; }
         public bool UsingVrHands =>
             rig && rig.gameObject.activeInHierarchy &&
@@ -149,6 +165,9 @@ namespace ADayAtTheZoo.Monkeys.Care
         bool hasThrowSolution;
         Vector3 landing;
         float gameTime;
+        // How much of gameTime was spent on the guided lesson. RoundElapsed
+        // subtracts it, which is what keeps the clock and the music in step.
+        float lessonHold;
         float nextBananaEquipAt;
         float nextCameraProbe;
         float nextHandRayCheck;
@@ -291,6 +310,10 @@ namespace ADayAtTheZoo.Monkeys.Care
         // The READY gate names the confirm button, so the copy has to follow
         // the live pad style (✕ on a DualSense, A on Xbox pads/keyboard).
         string ReadyGateCopy() => "PRESS " + CareInput.ConfirmLabel + " TO START";
+        // Would confirming the gate lead into the guided lesson? Both the gate
+        // (which track to start) and the GO hand-over (whether to park the
+        // clock) have to answer this the same way.
+        bool TutorialNext => showTutorial && !tutorialCompleted;
         void RefreshReadyPrompt()
         {
             if (readyGateActive && readyPrompt) readyPrompt.text = ReadyGateCopy();
@@ -299,6 +322,8 @@ namespace ADayAtTheZoo.Monkeys.Care
         void ShowReadyGate()
         {
             DestroyReadyGate();
+            // Home/standby means the slow bed, not the round track.
+            audioFeedback.PauseToAmbient();
             if (CarePlatform.FlatUi)
             {
                 pcHud = CareUi.OverlayRoot("Care PC Ready Root", 90);
@@ -345,7 +370,17 @@ namespace ADayAtTheZoo.Monkeys.Care
             readyGateActive = false;
             goSequenceActive = true;
             gameTime = 0;
+            lessonHold = 0;
             goUntil = .9f;
+            // Confirming the gate is what starts the round's soundtrack; the
+            // READY screen itself only ever plays the slow ambient bed. The
+            // click lands first so the press feels physical. When the guided
+            // lesson is about to run the cheerful track waits for it: the round
+            // clock only starts after the lesson, and the cue is mapped 1:1
+            // onto that clock, so starting it here would leave the two out of
+            // step and restart the intro twice.
+            audioFeedback.Click();
+            if (!TutorialNext) audioFeedback.BeginRoundMusic();
             readyPrompt.text = "";
             readyKeyLabel.text = "GO";
             readyKeyLabel.color = new Color(1f, .72f, .10f, 1f);
@@ -356,9 +391,14 @@ namespace ADayAtTheZoo.Monkeys.Care
             goSequenceActive = false;
             DestroyReadyGate();
             SetPlayerInputLocked(false);
-            TutorialActive = showTutorial && !tutorialCompleted;
+            TutorialActive = TutorialNext;
+            // The lesson is a warm-up, not part of the clock. It keeps the slow
+            // bed playing and lets RoundElapsed sit at zero, so the first thing
+            // the round clock does is start counting (and the first thing the
+            // cheerful track does is its bar one).
             if (TutorialActive)
             {
+                audioFeedback.PauseToAmbient();
                 gameObject.AddComponent<CareTutorial>().Begin(this, Head, Time.unscaledTime);
             }
             else
@@ -385,7 +425,14 @@ namespace ADayAtTheZoo.Monkeys.Care
             tutorialCompleted = true;
             TutorialActive = false;
             RoundStarted = true;
-            gameTime = 0;
+            // Freeze the discount here: from this frame on gameTime keeps
+            // running while lessonHold stays put, so RoundElapsed starts at
+            // exactly 0:00 and reaches 2:00 two minutes later.
+            lessonHold = gameTime;
+            // The clock restarts at zero when the lesson ends, so the cue has to
+            // restart with it. Without this the soundtrack kept playing through
+            // the lesson and finished that many seconds before the whistle.
+            audioFeedback.BeginRoundMusic();
             DestroyReadyGate();
             if (readyFx) Destroy(readyFx);
             GloveInventory?.Close();
@@ -428,9 +475,47 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             if (Round == null || Round.Frozen) return;
             if (Round.FeedingTotal >= Round.TaskTotal) { HungerOwner = null; return; }
-            // 3-6s pause after a successful feeding, then the next monkey asks.
-            ScheduleNextHunger(UnityEngine.Random.Range(3f, 6f));
+            // Breathing room after a successful feeding: 3-6 s during the
+            // lesson and practice stretch, easing to 1.6-3.2 s once the round
+            // is under way. See HungerPaceAt for the curve.
+            ScheduleNextHunger(RollHungerGap(TaskTime));
         }
+        // ---- hunger pace -----------------------------------------------------
+        // The lesson and the practice stretch keep the authored 3-6 s breathing
+        // room: a new player still has to learn to aim, throw and wait out the
+        // 3.5 s bite. From 30 s the queue eases forward and settles at 1.6-3.2 s
+        // by 95 s, so the last stretch is a steady stream of targets instead of
+        // dead air between bananas.
+        //
+        // The ramp is a smoothstep, not a linear lerp: its slope is zero at both
+        // ends, so the player never feels a gear change on a particular second.
+        // A linear ramp keeps the speed constant but starts and stops abruptly,
+        // which is exactly the "difficulty suddenly jumped" complaint.
+        const float HungerRampStart = 30f;
+        const float HungerRampEnd = 95f;
+        const float HungerGapMinStart = 3f;
+        const float HungerGapMinEnd = 1.6f;
+        const float HungerGapMaxStart = 6f;
+        const float HungerGapMaxEnd = 3.2f;
+        // Below this the queue stops being a queue and starts being a spam;
+        // also the floor that keeps a random roll from ever producing a
+        // near-zero gap.
+        public const float HungerGapFloor = 1.6f;
+        public float HungerPace => HungerPaceAt(TaskTime);
+        public static float HungerPaceAt(float time)
+        {
+            float t = Mathf.Clamp01((time - HungerRampStart) / (HungerRampEnd - HungerRampStart));
+            return t * t * (3f - 2f * t);      // smoothstep: ease in, ease out
+        }
+        public static float HungerGapMinAt(float time) =>
+            Mathf.Lerp(HungerGapMinStart, HungerGapMinEnd, HungerPaceAt(time));
+        public static float HungerGapMaxAt(float time) =>
+            Mathf.Lerp(HungerGapMaxStart, HungerGapMaxEnd, HungerPaceAt(time));
+        // One roll of the dial, clamped so neither end of the curve can produce
+        // an unfair gap (a zero-length queue or a long silent stretch).
+        public static float RollHungerGap(float time) =>
+            Mathf.Clamp(UnityEngine.Random.Range(HungerGapMinAt(time), HungerGapMaxAt(time)),
+                HungerGapFloor, HungerGapMaxStart);
         void ScheduleNextHunger(float delay)
         {
             if (monkeys == null || monkeys.Length == 0 || Round == null) { HungerOwner = null; return; }
@@ -574,7 +659,15 @@ namespace ADayAtTheZoo.Monkeys.Care
                 if (gameTime >= goUntil) BeginAfterReadyGo();
                 return;
             }
-            gameTime = Mathf.Min(CareRound.Duration, gameTime + Time.deltaTime);
+            // One clock always runs; the round clock is derived from it. The
+            // lesson advances gameTime (so the banana in the monkey's mouth
+            // keeps being eaten, animations play, timers fire) but pins
+            // lessonHold to it, which parks RoundElapsed at 0:00 until the
+            // lesson hands over. Freezing gameTime itself was the bug where the
+            // first monkey never finished its banana and the countdown sat
+            // still forever.
+            gameTime = Mathf.Min(lessonHold + CareRound.Duration, gameTime + Time.deltaTime);
+            if (TutorialActive) lessonHold = gameTime;
             // Results card shortcuts, matching the badges printed on the two
             // pills: A (✕) = CONTINUE back home, B (○) = RESTART right away.
             // Aiming the look ray at the card still works as a fallback.
@@ -583,7 +676,11 @@ namespace ADayAtTheZoo.Monkeys.Care
                 if (Input.BWasPressed) { RestartRound(); return; }
                 if (Input.AWasPressed) { ReturnHome(); return; }
             }
-            GloveInventory?.Tick(Input, Round, !Round.Frozen && gameTime >= .1f);
+            // The bag is available for the whole live round, the lesson
+            // included: gating it on the round clock (gameTime >= .1f) meant the
+            // tutorial's "open the bag" step could never be satisfied while the
+            // clock was parked at zero.
+            GloveInventory?.Tick(Input, Round, !Round.Frozen);
             bool menuOpen = GloveInventory != null && GloveInventory.IsOpen;
             if (!menuOpen && Input.AWasPressed) TryPickupBananas();
             Transform hand = RightHand; if (!hand) return;
@@ -741,7 +838,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             // Freeze at the time cutoff OR as soon as every banana is fed
             // (100% progress ends the round immediately).
             if (RoundStarted && begun && !Round.Frozen &&
-                (gameTime >= CareRound.Cutoff || Round.FeedingTotal >= Round.TaskTotal))
+                (RoundElapsed >= CareRound.Cutoff || Round.FeedingTotal >= Round.TaskTotal))
             {
                 Round.Freeze();
                 HungerOwner = null;
@@ -764,6 +861,9 @@ namespace ADayAtTheZoo.Monkeys.Care
                         child.gameObject.SetActive(false);
                 if (bananaPickup) bananaPickup.gameObject.SetActive(false);
                 roundView.ShowResults(); SaveRoundRecord();
+                // Overcooked hands the results screen its own victory loop;
+                // the round track fades out underneath it.
+                audioFeedback.PlayVictory();
             }
             if (begun && !readyGateActive && !goSequenceActive && roundView != null)
             {
@@ -771,13 +871,24 @@ namespace ADayAtTheZoo.Monkeys.Care
                 // If nobody owns the hunger slot, hand it out right away so the
                 // player always has a target and can still chase the last star.
                 if (RoundStarted && !Round.Frozen &&
-                    CareRound.Cutoff - gameTime <= FinalSprintSeconds &&
+                    CareRound.Cutoff - RoundElapsed <= FinalSprintSeconds &&
                     Round.FeedingTotal < Round.TaskTotal &&
                     (!HungerOwner || (!HungerOwner.HasDemand && HungerOwner.NextIn > 1.2f)))
                     ScheduleNextHunger(.4f);
-                roundView.Update(Round, gameTime);
+                roundView.Update(Round, RoundElapsed, TutorialActive);
             }
-            audioFeedback.UpdateMusic(Round.Frozen);
+            // The HUD clock counts down from Cutoff, and the round freezes there,
+            // not at Duration (that is only the scoring denominator). Audio has
+            // to use the same clock or the warning beeps and the music cue land
+            // ten seconds late - the five second countdown would never fire.
+            float roundProgress = Mathf.Clamp01(RoundElapsed / CareRound.Cutoff);
+            float roundRemaining = CareRound.Cutoff - RoundElapsed;
+            audioFeedback.UpdateMusic(Round.Frozen, roundProgress, roundRemaining, CareRound.Cutoff);
+            // The clock only starts beeping once the round is actually running:
+            // the ready gate, the guided lesson and the results card stay silent.
+            audioFeedback.UpdateCountdown(roundRemaining,
+                begun && RoundStarted && !Round.Frozen && !TutorialActive &&
+                !readyGateActive && !goSequenceActive);
             // Haptics mean "a hungry monkey is locked in your sights". While
             // that monkey is already eating the caught banana the buzz stops —
             // the request has been answered and the player needs no cue.
@@ -946,7 +1057,8 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
         public void SyncHud()
         {
-            if (roundView != null && Round != null && begun) roundView.Update(Round, gameTime);
+            if (roundView != null && Round != null && begun)
+                roundView.Update(Round, RoundElapsed, TutorialActive);
         }
         /// <summary>
         /// CONTINUE on the results card: leave the finished round and return to
@@ -959,10 +1071,15 @@ namespace ADayAtTheZoo.Monkeys.Care
         void ResetFromResults(bool startImmediately)
         {
             if (Round == null || !Round.Frozen) return;
+            // Both results pills are real buttons: click before the screen
+            // changes, and cut the fanfare here so CONTINUE doesn't leave it
+            // looping under the READY gate.
+            audioFeedback.Click();
+            audioFeedback.StopVictory();
             StopHaptics(); if (held) held.Release(); held = null;
             Round = new CareRound(MonkeyStartingNeeds(), feedingOnly);
             Round.DealFeedingTasks();
-            records.Clear(); gameTime = 0;
+            records.Clear(); gameTime = 0; lessonHold = 0;
             HungerOwner = null; hungerCursor = -1;
             TutorialActive = false; RoundStarted = false;
             rig.transform.SetPositionAndRotation(rigStartPosition, rigStartRotation);
