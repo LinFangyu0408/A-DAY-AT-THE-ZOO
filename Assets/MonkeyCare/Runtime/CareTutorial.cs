@@ -83,6 +83,14 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             if (!root || finished || !session || !session.Begun) return;
             if (!MonkeyCareSession.Playing) { group.alpha = 0; return; }
+            // The whistle can land in the middle of the lesson now that the
+            // lesson spends real round time. Never leave the card hovering
+            // over the results screen.
+            if (session.Round != null && session.Round.Frozen)
+            {
+                root.gameObject.SetActive(false);
+                return;
+            }
             if (Time.unscaledTime < shownAt) { root.gameObject.SetActive(false); return; }
 
             root.gameObject.SetActive(true);
@@ -103,7 +111,8 @@ namespace ADayAtTheZoo.Monkeys.Care
             {
                 case 0:
                     if (StepElapsed >= 2.5f) ShowStep(1);
-                    break;                case 1:
+                    break;
+                case 1:
                     // Move around first; the fallback keeps the tutorial from
                     // stalling if the player only watches.
                     if ((input.LeftStick.sqrMagnitude > .08f && StepElapsed >= 2f) || TotalElapsed >= 8f)

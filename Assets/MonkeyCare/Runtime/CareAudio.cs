@@ -43,12 +43,13 @@ namespace ADayAtTheZoo.Monkeys.Care
         readonly Dictionary<Transform, AudioSource> effects = new();
 
         // --- final countdown -------------------------------------------------
-        // Three rising beeps are synthesized at runtime (like the whistle) so
-        // the warning needs no extra asset and stays in tune with itself.
+        // The last five seconds only. A high tick and a wooden step note are
+        // synthesized at runtime (like the whistle) so the warning needs no
+        // extra asset and stays in tune with itself.
         AudioSource tickSource;
         AudioSource beatSource;
         AudioSource finalSource;
-        AudioClip tickLow, tickMid, tickHigh, pulseClip, finalClip;
+        AudioClip tickHigh, pulseClip, finalClip;
         float nextTickAt;
         int lastTickStage = -1;
         int tickCount;
@@ -203,8 +204,6 @@ namespace ADayAtTheZoo.Monkeys.Care
         /// </summary>
         void EnsureCountdown(Transform owner)
         {
-            if (!tickLow) tickLow = BuildTick(880f);
-            if (!tickMid) tickMid = BuildTick(1046.5f);
             if (!tickHigh) tickHigh = BuildTick(1318.5f, .13f);
             if (!tickSource)
             {
@@ -425,12 +424,14 @@ namespace ADayAtTheZoo.Monkeys.Care
 
             AlignLastMinute(results, remaining, roundLength);
 
-            // The lift lives in the arrangement (132 -> 156 BPM at 58 s), not in
-            // the playback rate. Speeding the transport up would also mean the
-            // 120 s cue finishes before the 120 s clock does, so the music would
-            // loop back to the quiet intro a few seconds before the end - which
-            // is exactly the "it speeds up in the middle" complaint. Keep the
-            // transport at 1:1 with the round clock.
+            // The lift lives in the arrangement (132 -> 156 BPM at 58.2 s and
+            // 171.6 in the outro, see CareTempo), not in the playback rate.
+            // Speeding the transport up would also mean the 120 s cue finishes
+            // before the 120 s clock does, so the music would loop back to the
+            // quiet intro a few seconds before the end - which is exactly the
+            // "it speeds up in the middle" complaint. Keep the transport at 1:1
+            // with the round clock; the hunger queue reads the same tempo map,
+            // so the game speeds up where the music does.
             musicSource.pitch = Mathf.MoveTowards(musicSource.pitch, 1f,
                 Time.unscaledDeltaTime * .5f);
         }
@@ -458,10 +459,12 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
 
         /// <summary>
-        /// Final-stretch countdown. Inside 30 s the beep comes once a second,
-        /// inside 10 s twice, inside 5 s four times and a low pulse lands on the
-        /// beat underneath, so the last seconds read as urgent rather than tense
-        /// and vague. Call it every frame with the round clock.
+        /// The last five seconds, and nothing before them. The cue used to start
+        /// its warnings inside 30 s (1 Hz, then 2 Hz), which meant a two minute
+        /// round spent a quarter of its life ticking at the player and the real
+        /// countdown was impossible to pick out of the noise. Inside the window
+        /// a wooden tick lands four times a second, a low pulse marks every beat,
+        /// and a five note G4-to-D5 run underlines each whole second.
         /// </summary>
         public void UpdateCountdown(float remaining, bool running)
         {
@@ -473,31 +476,28 @@ namespace ADayAtTheZoo.Monkeys.Care
                 return;
             }
 
-            int stage = remaining <= 5f ? 2 : remaining <= 10f ? 1 : 0;
-            if (stage == 2) lastFinalStep = FinalStep(remaining);
-            if (stage != lastTickStage)
+            // Probe value: which note of the five the clock is on right now.
+            // The audible step only changes once a second (below), but the
+            // reading has to follow the clock so the on-device probe can see it.
+            lastFinalStep = FinalStep(remaining);
+            if (lastTickStage != 2)
             {
-                lastTickStage = stage;
-                // The first beep of each new stage lands immediately, so the
-                // step up in urgency is audible the moment it happens.
+                lastTickStage = 2;
+                // The first note and the first tick land on the very frame the
+                // clock reads five, so the change is audible immediately.
                 nextTickAt = 0f;
-                tickSource.volume = .55f + stage * .09f;
-                // Restart the beat counter at the five second mark so the first
-                // descending "five" lands on the same frame as the beep.
-                if (stage == 2)
-                {
-                    tickCount = 0;
-                    PlayFinalTick(remaining);
-                }
+                tickCount = 0;
+                tickSource.volume = .73f;
+                PlayFinalTick(remaining);
             }
 
             float now = Time.unscaledTime;
             if (now < nextTickAt) return;
-            nextTickAt = now + (stage == 2 ? .25f : stage == 1 ? .5f : 1f);
-            tickSource.PlayOneShot(stage == 2 ? tickHigh : stage == 1 ? tickMid : tickLow, 1f);
+            nextTickAt = now + .25f;
+            tickSource.PlayOneShot(tickHigh, 1f);
 
             tickCount++;
-            if (stage == 2 && tickCount % 4 == 0)
+            if (tickCount % 4 == 0)
             {
                 if (beatSource) beatSource.PlayOneShot(pulseClip ? pulseClip : (pulseClip = BuildPulse()), .95f);
                 PlayFinalTick(remaining);
@@ -523,7 +523,9 @@ namespace ADayAtTheZoo.Monkeys.Care
         static int FinalStep(float remaining) =>
             Mathf.Clamp(5 - Mathf.CeilToInt(remaining), 0, 4);
 
-        const float CountdownWindow = 30f;
+        // Exactly the final five seconds. Changing this to 30 was the "it starts
+        // beeping at 25 s left" bug; the window and the melodic run must agree.
+        const float CountdownWindow = 5f;
 
         // Read-only probes: the smoke suite and the on-device probe both need to
         // prove which track is playing and that the warning voices exist,
@@ -535,7 +537,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         public float MusicLength => musicSource && musicSource.clip ? musicSource.clip.length : 0f;
         public float MusicTime => musicSource ? musicSource.time : 0f;
         public float AmbientVolume => ambientSource ? ambientSource.volume : 0f;
-        public bool CountdownReady => tickLow && tickMid && tickHigh;
+        public bool CountdownReady => tickHigh != null && finalClip != null;
         public bool HungerCallReady => whistle != null;
         public bool ClickReady => uiClick != null;
         public bool VictoryReady => victoryMusic != null && victorySource != null;

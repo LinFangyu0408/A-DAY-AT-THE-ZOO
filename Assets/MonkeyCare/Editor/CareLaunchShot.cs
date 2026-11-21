@@ -233,9 +233,8 @@ public static class CareLaunchShot
     {
         var session = Object.FindFirstObjectByType<ADayAtTheZoo.Monkeys.Care.MonkeyCareSession>();
         if (!session) return;
-        // Leave the guided lesson (the round clock only runs after it), then
-        // push the clock onto its final frame. LateUpdate sees the cutoff and
-        // runs the real freeze: HUD off, results card, victory score.
+        // Push the round clock onto its final frame. LateUpdate sees the cutoff
+        // and runs the real freeze: HUD off, results card, victory score.
         // Destroy the lesson component first: it owns the overlay card, and the
         // session method alone would leave that card floating over the results
         // (a real player closes the lesson through the component, which does
@@ -247,13 +246,6 @@ public static class CareLaunchShot
             .GetField("gameTime",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
             ?.SetValue(session, ADayAtTheZoo.Monkeys.Care.CareRound.Cutoff - .01f);
-        // RoundElapsed is gameTime minus the lesson discount, and FinishTutorial
-        // just froze that discount at the lesson's length. Zero it here or the
-        // jump lands short of the cutoff and the results card never appears.
-        typeof(ADayAtTheZoo.Monkeys.Care.MonkeyCareSession)
-            .GetField("lessonHold",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-            ?.SetValue(session, 0f);
     }
 
     static void WriteAudioState(string file = "launch-audio.txt")

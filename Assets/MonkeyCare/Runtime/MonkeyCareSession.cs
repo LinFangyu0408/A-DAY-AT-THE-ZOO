@@ -74,22 +74,21 @@ namespace ADayAtTheZoo.Monkeys.Care
         public const float FinalSprintSeconds = 20;
         // The continuous session clock. Animations, bite progress and every
         // "wait N seconds from now" timestamp run on it, so nothing can stall
-        // while another clock is deliberately parked.
+        // while a rule is being changed elsewhere.
         public static float GameTime => Instance ? Instance.gameTime : Time.time;
         // The round clock: the two minute countdown, the 120 s music cue, the
-        // star goals and the sprint banner all count this one. It discounts the
-        // guided lesson, so a new player still gets the full two minutes even
-        // after spending forty seconds reading the tutorial.
-        public float RoundElapsed => Mathf.Max(0f, gameTime - lessonHold);
-        // Demand timing follows the continuous clock during the lesson (the
-        // round clock is parked at zero there) and the round clock afterwards.
-        // Parking this one as well was the bug where the first banana never
-        // finished being eaten and the countdown never moved.
+        // star goals and the sprint banner all count this one. The guided
+        // lesson is part of the round, exactly like a real service counter - a
+        // player who spends half a minute learning still spent half a minute -
+        // so this is the session clock capped at the cutoff, nothing else.
+        public float RoundElapsed => Mathf.Min(gameTime, CareRound.Cutoff);
+        // Every "wait N seconds from now" timestamp reads the same clock the
+        // countdown does. The lesson used to get its own domain here; that is
+        // what let the round clock sit at zero while the lesson's banana was
+        // being eaten.
         public static float TaskTime => !Instance
             ? Mathf.Min(Time.time, CareRound.Cutoff)
-            : Instance.TutorialActive
-                ? Instance.gameTime
-                : Mathf.Min(Instance.RoundElapsed, CareRound.Cutoff);
+            : Instance.RoundElapsed;
         public CareRound Round { get; private set; }
         public bool UsingVrHands =>
             rig && rig.gameObject.activeInHierarchy &&
@@ -165,9 +164,6 @@ namespace ADayAtTheZoo.Monkeys.Care
         bool hasThrowSolution;
         Vector3 landing;
         float gameTime;
-        // How much of gameTime was spent on the guided lesson. RoundElapsed
-        // subtracts it, which is what keeps the clock and the music in step.
-        float lessonHold;
         float nextBananaEquipAt;
         float nextCameraProbe;
         float nextHandRayCheck;
@@ -370,17 +366,14 @@ namespace ADayAtTheZoo.Monkeys.Care
             readyGateActive = false;
             goSequenceActive = true;
             gameTime = 0;
-            lessonHold = 0;
             goUntil = .9f;
-            // Confirming the gate is what starts the round's soundtrack; the
-            // READY screen itself only ever plays the slow ambient bed. The
-            // click lands first so the press feels physical. When the guided
-            // lesson is about to run the cheerful track waits for it: the round
-            // clock only starts after the lesson, and the cue is mapped 1:1
-            // onto that clock, so starting it here would leave the two out of
-            // step and restart the intro twice.
+            // Confirming the gate starts the round's soundtrack, and it starts
+            // the round clock in the same frame - the lesson included. The cue
+            // is mapped 1:1 onto the clock, so every tempo lift in the music
+            // (58 s, 107 s) lands on the matching second of play. The click
+            // lands first so the press feels physical.
             audioFeedback.Click();
-            if (!TutorialNext) audioFeedback.BeginRoundMusic();
+            audioFeedback.BeginRoundMusic();
             readyPrompt.text = "";
             readyKeyLabel.text = "GO";
             readyKeyLabel.color = new Color(1f, .72f, .10f, 1f);
@@ -392,15 +385,13 @@ namespace ADayAtTheZoo.Monkeys.Care
             DestroyReadyGate();
             SetPlayerInputLocked(false);
             TutorialActive = TutorialNext;
-            // The lesson is a warm-up, not part of the clock. It keeps the slow
-            // bed playing and lets RoundElapsed sit at zero, so the first thing
-            // the round clock does is start counting (and the first thing the
-            // cheerful track does is its bar one).
+            // The lesson is the opening minute of the round, not a time-out:
+            // the clock and the cheerful track have been running since the A
+            // press, so the lesson simply inherits them. It used to swap back
+            // to the slow bed and restart the cue on hand-over, which now
+            // would knock the two out of step and cost a second intro.
             if (TutorialActive)
-            {
-                audioFeedback.PauseToAmbient();
                 gameObject.AddComponent<CareTutorial>().Begin(this, Head, Time.unscaledTime);
-            }
             else
             {
                 RoundStarted = true;
@@ -425,14 +416,11 @@ namespace ADayAtTheZoo.Monkeys.Care
             tutorialCompleted = true;
             TutorialActive = false;
             RoundStarted = true;
-            // Freeze the discount here: from this frame on gameTime keeps
-            // running while lessonHold stays put, so RoundElapsed starts at
-            // exactly 0:00 and reaches 2:00 two minutes later.
-            lessonHold = gameTime;
-            // The clock restarts at zero when the lesson ends, so the cue has to
-            // restart with it. Without this the soundtrack kept playing through
-            // the lesson and finished that many seconds before the whistle.
-            audioFeedback.BeginRoundMusic();
+            // No clock bookkeeping here: the lesson has been charging the round
+            // clock from the A press, and the soundtrack has been running with
+            // it. Handing over only opens the hunger rotation - restarting the
+            // cue or zeroing the clock would break the 1:1 mapping and give
+            // back time the player already spent.
             DestroyReadyGate();
             if (readyFx) Destroy(readyFx);
             GloveInventory?.Close();
@@ -475,42 +463,54 @@ namespace ADayAtTheZoo.Monkeys.Care
         {
             if (Round == null || Round.Frozen) return;
             if (Round.FeedingTotal >= Round.TaskTotal) { HungerOwner = null; return; }
-            // Breathing room after a successful feeding: 3-6 s during the
-            // lesson and practice stretch, easing to 1.6-3.2 s once the round
-            // is under way. See HungerPaceAt for the curve.
+            // Breathing room after a successful feeding: 3-6 s while the cue is
+            // still at 132 BPM, tightening with each musical lift after that.
+            // See the pace table below.
             ScheduleNextHunger(RollHungerGap(TaskTime));
         }
         // ---- hunger pace -----------------------------------------------------
-        // The lesson and the practice stretch keep the authored 3-6 s breathing
-        // room: a new player still has to learn to aim, throw and wait out the
-        // 3.5 s bite. From 30 s the queue eases forward and settles at 1.6-3.2 s
-        // by 95 s, so the last stretch is a steady stream of targets instead of
-        // dead air between bananas.
+        // The queue follows the soundtrack. The 120 s cue is written in four
+        // sections, and each one is a step tighter here:
         //
-        // The ramp is a smoothstep, not a linear lerp: its slope is zero at both
-        // ends, so the player never feels a gear change on a particular second.
-        // A linear ramp keeps the speed constant but starts and stops abruptly,
-        // which is exactly the "difficulty suddenly jumped" complaint.
-        const float HungerRampStart = 30f;
-        const float HungerRampEnd = 95f;
-        const float HungerGapMinStart = 3f;
-        const float HungerGapMinEnd = 1.6f;
+        //   0:00 - 0:58  A / A2  132 BPM  3.0-6.0 s  (the authored pace: the
+        //                                              lesson and practice keep
+        //                                              exactly what they always
+        //                                              had)
+        //   0:58 - 1:23  B       156 BPM  2.4-4.8 s
+        //   1:23 - 1:47  B2      156 BPM  2.0-4.0 s  (full kit, denser fills)
+        //   1:47 - 2:00  T     171.6 BPM  1.6-3.2 s  (the nine-banana pace)
+        //
+        // Timing, not just numbers: every step is a smoothstep that starts 3 s
+        // before the musical downbeat and lands 3 s after it, so the queue
+        // breathes up with the band instead of changing gear on its own second.
+        // A hard cut on the boundary is exactly the "the middle suddenly sped
+        // up" complaint, and a linear ramp corners at both ends.
+        //
+        // The end value is the old 1.6-3.2 s target, so the last minute is as
+        // busy as it ever was; it now just gets there in three musical steps.
+        static readonly float[] PaceStepAt = { 0f, CareTempo.LiftAt, CareTempo.SecondLiftAt, CareTempo.OutroAt };
+        static readonly float[] PaceStepMin = { 3f, 2.4f, 2f, 1.6f };
+        static readonly float[] PaceStepMax = { 6f, 4.8f, 4f, 3.2f };
         const float HungerGapMaxStart = 6f;
-        const float HungerGapMaxEnd = 3.2f;
         // Below this the queue stops being a queue and starts being a spam;
         // also the floor that keeps a random roll from ever producing a
         // near-zero gap.
         public const float HungerGapFloor = 1.6f;
         public float HungerPace => HungerPaceAt(TaskTime);
-        public static float HungerPaceAt(float time)
-        {
-            float t = Mathf.Clamp01((time - HungerRampStart) / (HungerRampEnd - HungerRampStart));
-            return t * t * (3f - 2f * t);      // smoothstep: ease in, ease out
-        }
-        public static float HungerGapMinAt(float time) =>
-            Mathf.Lerp(HungerGapMinStart, HungerGapMinEnd, HungerPaceAt(time));
+        // 0 at the authored pace, 1 at the final sprint pace - a single number
+        // the HUD/probe can report without caring about the staircase.
+        public static float HungerPaceAt(float time) =>
+            1f - HungerGapMaxAt(time) / HungerGapMaxStart;
+        public static float HungerGapMinAt(float time) => StepAt(time, PaceStepMin);
         public static float HungerGapMaxAt(float time) =>
-            Mathf.Lerp(HungerGapMaxStart, HungerGapMaxEnd, HungerPaceAt(time));
+            Mathf.Max(HungerGapFloor, StepAt(time, PaceStepMax));
+        static float StepAt(float time, float[] values)
+        {
+            float value = values[0];
+            for (int i = 1; i < PaceStepAt.Length; i++)
+                value = Mathf.Lerp(value, values[i], CareTempo.Bridge01(time, PaceStepAt[i]));
+            return value;
+        }
         // One roll of the dial, clamped so neither end of the curve can produce
         // an unfair gap (a zero-length queue or a long silent stretch).
         public static float RollHungerGap(float time) =>
@@ -659,15 +659,16 @@ namespace ADayAtTheZoo.Monkeys.Care
                 if (gameTime >= goUntil) BeginAfterReadyGo();
                 return;
             }
-            // One clock always runs; the round clock is derived from it. The
-            // lesson advances gameTime (so the banana in the monkey's mouth
-            // keeps being eaten, animations play, timers fire) but pins
-            // lessonHold to it, which parks RoundElapsed at 0:00 until the
-            // lesson hands over. Freezing gameTime itself was the bug where the
-            // first monkey never finished its banana and the countdown sat
-            // still forever.
-            gameTime = Mathf.Min(lessonHold + CareRound.Duration, gameTime + Time.deltaTime);
-            if (TutorialActive) lessonHold = gameTime;
+            // One clock, one soundtrack, one set of timestamps: the lesson
+            // burns round time just like the rest of the round, so bite progress
+            // ("task appeared 3.5 s ago") and the countdown never disagree.
+            // Parking this clock during the lesson was the bug where the first
+            // banana never finished being eaten and the countdown sat at 02:00.
+            gameTime = Mathf.Min(CareRound.Duration, gameTime + Time.deltaTime);
+            // A player who idles away the whole clock inside the lesson still
+            // gets a clean whistle: hand the round over at the cutoff instead
+            // of letting the tutorial card float over the results screen.
+            if (TutorialActive && gameTime >= CareRound.Cutoff) FinishTutorial();
             // Results card shortcuts, matching the badges printed on the two
             // pills: A (✕) = CONTINUE back home, B (○) = RESTART right away.
             // Aiming the look ray at the card still works as a fallback.
@@ -875,7 +876,7 @@ namespace ADayAtTheZoo.Monkeys.Care
                     Round.FeedingTotal < Round.TaskTotal &&
                     (!HungerOwner || (!HungerOwner.HasDemand && HungerOwner.NextIn > 1.2f)))
                     ScheduleNextHunger(.4f);
-                roundView.Update(Round, RoundElapsed, TutorialActive);
+                roundView.Update(Round, RoundElapsed);
             }
             // The HUD clock counts down from Cutoff, and the round freezes there,
             // not at Duration (that is only the scoring denominator). Audio has
@@ -884,11 +885,12 @@ namespace ADayAtTheZoo.Monkeys.Care
             float roundProgress = Mathf.Clamp01(RoundElapsed / CareRound.Cutoff);
             float roundRemaining = CareRound.Cutoff - RoundElapsed;
             audioFeedback.UpdateMusic(Round.Frozen, roundProgress, roundRemaining, CareRound.Cutoff);
-            // The clock only starts beeping once the round is actually running:
-            // the ready gate, the guided lesson and the results card stay silent.
+            // The clock beeps for the last five seconds only, and it does so
+            // from the moment play starts - the lesson spends real time too, so
+            // a player still reading the card must hear the same warning as
+            // everyone else. The ready gate and the results card stay silent.
             audioFeedback.UpdateCountdown(roundRemaining,
-                begun && RoundStarted && !Round.Frozen && !TutorialActive &&
-                !readyGateActive && !goSequenceActive);
+                begun && !Round.Frozen && !readyGateActive && !goSequenceActive);
             // Haptics mean "a hungry monkey is locked in your sights". While
             // that monkey is already eating the caught banana the buzz stops —
             // the request has been answered and the player needs no cue.
@@ -1058,7 +1060,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         public void SyncHud()
         {
             if (roundView != null && Round != null && begun)
-                roundView.Update(Round, RoundElapsed, TutorialActive);
+                roundView.Update(Round, RoundElapsed);
         }
         /// <summary>
         /// CONTINUE on the results card: leave the finished round and return to
@@ -1079,7 +1081,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             StopHaptics(); if (held) held.Release(); held = null;
             Round = new CareRound(MonkeyStartingNeeds(), feedingOnly);
             Round.DealFeedingTasks();
-            records.Clear(); gameTime = 0; lessonHold = 0;
+            records.Clear(); gameTime = 0;
             HungerOwner = null; hungerCursor = -1;
             TutorialActive = false; RoundStarted = false;
             rig.transform.SetPositionAndRotation(rigStartPosition, rigStartRotation);

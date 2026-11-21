@@ -341,21 +341,24 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         monkey.feedingSeconds = .45f;
         monkey.lateFeedingSeconds = .55f;
         monkey.patienceSeconds = 60;
-        // Regression: the lesson used to park every clock, so the banana on the
-        // monkey's mouth never finished being eaten and the countdown sat at
-        // 02:00 forever. The lesson now keeps the continuous clock running and
-        // only parks the round clock (RoundElapsed).
+        // The lesson spends round time like any other minute of play - it used
+        // to be parked at 0:00 and discounted from the clock, which both let the
+        // player bank a free warm-up and (worse) froze bite progress, because
+        // the banana timestamps read the same clock.
         SetAutoProperty(session, "TutorialActive", true);
         yield return null;
         float lessonClock = MonkeyCareSession.TaskTime;
-        report.Add("LESSON round=" + session.RoundElapsed.ToString("F2") +
+        float lessonRound = session.RoundElapsed;
+        report.Add("LESSON round=" + lessonRound.ToString("F2") +
                    " task=" + lessonClock.ToString("F2") +
                    " game=" + MonkeyCareSession.GameTime.ToString("F2"));
-        Check(session.RoundElapsed < .05f,
-            "the round clock stays at 0:00 while the guided lesson runs");
+        Check(Mathf.Abs(lessonRound - lessonClock) < .02f,
+            "the lesson and the countdown read one and the same clock");
+        Check(lessonRound > .05f,
+            "the countdown has already been running while the lesson is open");
         yield return new WaitForSecondsRealtime(.4f);
         Check(MonkeyCareSession.TaskTime - lessonClock >= .3f,
-            "the lesson clock keeps counting while the round clock is parked");
+            "the round clock keeps counting while the lesson card is up");
         monkey.BeginGuidedTutorial(CareNeed.Hunger);
         Aim(monkey);
 
@@ -748,15 +751,16 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             "the last twenty seconds spell out the remaining goal");
         Capture("final-sprint");
 
-        // ---- the lesson parks the round clock, and the HUD says so ----
+        // ---- the HUD clock counts the lesson too ----
         var clockText = GameObject.Find("Round clock")?.GetComponent<Text>();
-        session.RoundView.Update(session.Round, 0f, true);
-        report.Add("HUD lesson clock=" + (clockText ? clockText.text : "none"));
-        Check(clockText && clockText.text == "LESSON",
-            "the HUD clock reads LESSON while the tutorial owns the clock");
-        session.RoundView.Update(session.Round, 0f, false);
+        session.RoundView.Update(session.Round, 0f);
+        report.Add("HUD clock start=" + (clockText ? clockText.text : "none"));
         Check(clockText && clockText.text == "02:00",
-            "the HUD clock shows a full 02:00 the moment the lesson hands over");
+            "the HUD clock opens on a full 02:00 and starts counting immediately");
+        session.RoundView.Update(session.Round, 7f);
+        report.Add("HUD clock lesson=" + (clockText ? clockText.text : "none"));
+        Check(clockText && clockText.text == "01:53",
+            "seven seconds of lesson read as seven seconds off the clock");
         // Put the plate back where the sprint check left it.
         session.RoundView.Update(session.Round, CareRound.Cutoff - 12f);
 
@@ -788,9 +792,9 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         Check(Mathf.Abs(CareRound.Duration - CareRound.Cutoff) < .01f,
             "the round clock and the scoring window are the same two minutes");
 
-        // Hunger pace: the lesson and practice stretch keep the authored 3-6 s
-        // breathing room, the middle eases forward, and the last stretch settles
-        // at 1.6-3.2 s. That is what lets nine feedings fit inside the clock.
+        // Hunger pace follows the cue: 3-6 s through the 132 BPM opening (the
+        // authored pace, lesson included), then one step tighter on each of the
+        // three musical downbeats, landing on 1.6-3.2 s for the outro.
         report.Add("PACE t=0 " + MonkeyCareSession.HungerGapMinAt(0).ToString("F1") + "-" +
                    MonkeyCareSession.HungerGapMaxAt(0).ToString("F1") +
                    "  t=60 " + MonkeyCareSession.HungerGapMinAt(60).ToString("F1") + "-" +
@@ -802,15 +806,25 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             "the tutorial and the opening requests keep the authored 3-6 s pace");
         Check(Mathf.Abs(MonkeyCareSession.HungerGapMinAt(29.9f) - 3f) < .02f &&
               Mathf.Abs(MonkeyCareSession.HungerGapMaxAt(29.9f) - 6f) < .02f,
-            "practice keeps the full 3-6 s pace right up to the ramp");
-        Check(Mathf.Abs(MonkeyCareSession.HungerGapMinAt(95f) - 1.6f) < .01f &&
-              Mathf.Abs(MonkeyCareSession.HungerGapMaxAt(95f) - 3.2f) < .01f,
-            "the queue settles at 1.6-3.2 s instead of accelerating forever");
+            "practice keeps the full 3-6 s pace until the first musical lift");
+        // Each step lands on the section downbeat (its half-bridge point), not
+        // on some arbitrary second of the round: the queue and the band change
+        // gear together.
+        float liftGap = MonkeyCareSession.HungerGapMaxAt(
+            CareTempo.LiftAt + CareTempo.Bridge * .5f);
+        float outroGap = MonkeyCareSession.HungerGapMaxAt(
+            CareTempo.OutroAt + CareTempo.Bridge * .5f);
+        report.Add("PACE lift=" + liftGap.ToString("F2") + " outro=" + outroGap.ToString("F2") +
+                   " at " + CareTempo.LiftAt + "/" + CareTempo.OutroAt);
+        Check(Mathf.Abs(liftGap - 4.8f) < .01f && Mathf.Abs(outroGap - 3.2f) < .01f,
+            "the queue takes its faster pace on the 58.2 s and 107.4 s downbeats");
         Check(MonkeyCareSession.HungerGapMaxAt(115) <= 3.21f,
             "the hunger queue tightens to at most 3.2 s between bananas late on");
 
-        // No gear change: a smoothstep moves by well under a tenth of a second
-        // per second of play, where a linear ramp corners abruptly at both ends.
+        // No gear change inside a step: each of the three moves is a smoothstep
+        // spread over six seconds, so the gap shrinks by cents per frame instead
+        // of jumping on one frame. The threshold is the 0.3 s a six second
+        // bridge needs to move 1.2 s, with nothing anywhere near it.
         float worstStep = 0f;
         bool monotonic = true;
         for (int s = 0; s < 120; s++)
@@ -822,13 +836,15 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         }
         report.Add("PACE worst 1 s step=" + worstStep.ToString("F3") +
                    " monotonic=" + monotonic);
-        Check(worstStep < .10f && monotonic,
-            "the hunger ramp eases in and out with no sudden difficulty jump");
+        Check(worstStep < .31f && monotonic,
+            "every musical step eases in and out instead of jumping on one frame");
 
-        // Worst-case timeline: eight feedings after the tutorial banana, each
-        // costing a full 3.5 s bite plus a walk back to the stall, using the
-        // slowest allowed gap at that moment.
-        float clock = 2.5f;
+        // Worst-case timeline: the lesson costs real time now, so the model
+        // starts at a slow-but-realistic hand-over (30 s, tutorial banana
+        // included) and then eight more feedings, each costing a full 3.5 s
+        // bite plus a walk back to the stall, using the slowest allowed gap at
+        // that moment.
+        float clock = 30f;
         for (int i = 0; i < 8; i++)
             clock += MonkeyCareSession.HungerGapMaxAt(clock) + 3.5f + 2f;
         report.Add("PACE eight feedings done at t=" + clock.ToString("F1") +
@@ -923,7 +939,7 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             "the cheerful soundtrack is the clip actually loaded");
         Check(audio.RoundMusicActive, "confirming the gate starts the round soundtrack");
         Check(audio.MusicTime < .3f, "the round track restarts at bar one on confirm");
-        Check(audio.CountdownReady, "all three countdown beeps were synthesized");
+        Check(audio.CountdownReady, "the countdown tick and the five second voice were synthesized");
         Check(audio.FinalCountdownReady, "the five second countdown voice exists");
         // The soundtrack must never swallow the hungry monkey's call: it is the
         // only cue that tells the player who needs attention.
@@ -962,16 +978,17 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         Check(audio.MusicTime < .5f,
             "a full-length cue is never re-cued mid-round");
 
-        // Stage stepping: 0 inside 30 s, 1 inside 10 s, 2 inside 5 s.
+        // Nothing beeps before the last five seconds: 25 s and 8 s left are
+        // silent, 3 s left is running.
         audio.UpdateCountdown(25f, true);
-        int stage30 = audio.CountdownStage;
+        int stage25 = audio.CountdownStage;
         audio.UpdateCountdown(8f, true);
-        int stage10 = audio.CountdownStage;
+        int stage8 = audio.CountdownStage;
         audio.UpdateCountdown(3f, true);
         int stage5 = audio.CountdownStage;
-        report.Add("countdown stages 25s=" + stage30 + " 8s=" + stage10 + " 3s=" + stage5);
-        Check(stage30 == 0 && stage10 == 1 && stage5 == 2,
-            "the countdown steps up 1 Hz -> 2 Hz -> 4 Hz as time runs out");
+        report.Add("countdown stages 25s=" + stage25 + " 8s=" + stage8 + " 3s=" + stage5);
+        Check(stage25 == -1 && stage8 == -1 && stage5 == 2,
+            "the countdown is silent until the last five seconds and then runs");
 
         // The dedicated five second voice climbs one step per second.
         audio.UpdateCountdown(4.9f, true);
@@ -986,7 +1003,7 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
 
         // Above the window and while frozen it must stay quiet.
         audio.UpdateCountdown(90f, true);
-        Check(audio.CountdownStage == -1, "no beeping outside the last 30 seconds");
+        Check(audio.CountdownStage == -1, "no beeping outside the last five seconds");
         audio.UpdateCountdown(4f, false);
         Check(audio.CountdownStage == -1, "the countdown is silent while the round is frozen");
 

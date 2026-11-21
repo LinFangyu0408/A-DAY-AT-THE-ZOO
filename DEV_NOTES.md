@@ -385,3 +385,19 @@
     - `results` 跑：`elapsed=120.00` 后正常冻结出结算卡（0/9、Next Star 3 MORE、CONTINUE/RESTART）。
   - 工具：`CareLaunchShot` 加 `trace`（每 0.4 s 落 `launch-trace.txt`：auto/confirmed/cued/gate/tutorial/round/elapsed）与 `long`（跑到教程喂食步并抓 `launch-lesson.png`）。
 - **坑**：改完编辑器脚本直接落 `shot.request` 会用到**旧程序集**（Unity 未自动刷新，`Assembly-CSharp-Editor.dll` 时间戳没变），表现为\"确认没生效、trace 文件不存在\"。必须先 `python work/send_keys.py ctrl r` 等 dll 时间戳更新再跑。
+
+## 2026-11-21 18:40 第三十一轮（倒计时只在最后 5 秒、教程时间计入两分钟、节奏跟音乐分段提速）
+- **用户要求**：① 倒计时提示音第 5 秒才开始，不要 25 秒就响；② 新手教程耗时计入整体 2 分钟，不再单独排除；③ 后续音乐节奏加快时游戏节奏同步提速，且计时边界与节奏切换要平滑。
+- **倒计时音效**：`CareAudio.CountdownWindow` 30 → **5**。原来 30 s 内 1 Hz、10 s 内 2 Hz、5 s 内 4 Hz，一局有 1/4 时间在滴滴响，真正的倒数反而听不出来。现在只有最后 5 秒：0.25 s 一记高木鱼 + 每拍低频脉冲 + 每秒一记 G4→D5 五级木槌（`FinalStep`）。`tickLow/tickMid` 两个没用到的音色直接删掉，`CountdownReady` 改判 `tickHigh && finalClip`。`lastFinalStep` 仍每帧跟随 `FinalStep(remaining)`（探针/断言要看）。
+- **教程计入时钟**：删掉 `lessonHold` 与整个"折扣"概念。`RoundElapsed = min(gameTime, Cutoff)`，`TaskTime = RoundElapsed`（不再分教程/回合两个域）。`gameTime` 从按 A 那一帧开始连续走，教程、练习、正式回合共用。
+  - 按 A 立刻 `BeginRoundMusic()`（不再等教程结束），`FinishTutorial()` 不再重置时钟、也不再重启曲子 —— 曲子与时钟仍保持 1:1，58.2 s / 107.4 s 的段落变化落在对应秒数上。
+  - `BeginAfterReadyGo()` 教程期间不再 `PauseToAmbient()`（否则会把刚起的回合曲压掉）。
+  - HUD 时钟位去掉 `LESSON`，教程期间直接读秒（截图实测：教程 OPEN THE BAG 时显示 **01:42**）。
+  - 若玩家在教程里把 120 s 耗完：`Update` 里 `TutorialActive && gameTime >= Cutoff` 先 `FinishTutorial()`，再让 LateUpdate 正常冻结，教程卡不会浮在结算上；`CareTutorial.Update` 也加了 `Round.Frozen` 兜底。
+- **节奏跟音乐（`CareTempo`）**：`CareRound.cs` 新增 `CareTempo`，把 `make_zoo_full_120.py` 的分段（A/A2 132 BPM 0–58.2、B/B2 156 BPM 58.2–107.4、T 171.6 BPM 107.4–120）写成一个 map，外加 `Bridge=6s` 的 `Bridge01()` smoothstep 门（下拍前 3 s 起、后 3 s 落）。
+  - 饥饿间隔改成四级台阶（值取自 `PaceStepMin/Max`）：`3.0–6.0`（132 BPM，教程/练习原速不变）→ `2.4–4.8`（58.2 s）→ `2.0–4.0`（82.8 s，B2 满编）→ `1.6–3.2`（107.4 s 尾声）。终点还是老的 1.6–3.2，只是分三段走到。
+  - 每秒最大变化 0.294 s（旧曲线 0.10 以内、但需要 65 s 才走完）；现在是"跟着音乐换挡"，仍在 6 s 内平滑过渡，无跳变。
+  - 三星可达成性（含教程）：30 s 教程交接 + 8 次满间隔投喂（每次 3.5 s 咬 + 2 s 走回）= **113.6 s < 120 s**；平均是 100.4 s。
+- **验证**：冒烟 **157** 断言全过（改/加了：`LESSON` 时钟两条、`02:00`→`01:53` 读秒、25 s/8 s 必须静音、`PACE lift=4.80 outro=3.20`、最差 1 s 步进 0.294、八次喂食 113.6 s）；逻辑自检 **273** PASS。
+  - 真实启动 `confirm lesson trace long`：`tutorial=True round=False elapsed=23.71`，`Care Music time=18.01 / volume=0.160`（与同一时刻 elapsed≈18.4 对齐，说明教程里曲子就在跑），截图时钟 **01:42**；`results` 跑 `elapsed=120.00` 冻结、结算卡 0/9 + CONTINUE/RESTART 正常，胜利音效一次播完。
+- **坑**：编辑器一直卡在 play mode（`EditorApplication.isPlayingOrWillChangePlaymode`）时 `final-smoke.request` 不会被消费，表现是"请求文件躺在那里不动"。先 `send_keys.py ctrl p` 确认工具栏 Play 变回三角（截图核对物理坐标要按 2× DPI 换算），再落请求。另：改完脚本必须等 `Assembly-CSharp.dll` 时间戳晚于 `.cs` 再跑。

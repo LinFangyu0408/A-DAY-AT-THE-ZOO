@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace ADayAtTheZoo.Monkeys.Care
 {
@@ -153,6 +154,41 @@ namespace ADayAtTheZoo.Monkeys.Care
         public static float NextTime(float completedAt, int nextTaskIndex, bool rescued, float delay = 18, float recovery = 4)
         {
             return completedAt + delay + (rescued ? recovery : 0);
+        }
+    }
+
+    /// <summary>
+    /// The tempo map of <c>music_care.wav</c>, shared by the soundtrack and the
+    /// round pacing so the two can never drift apart. The cue is 120.00 s and
+    /// is arranged in four sections; a round is 120 s and starts its clock on
+    /// the same frame the cue starts. That means a section change at 58.2 s in
+    /// the music is a section change at 58.2 s of play - no conversion, no
+    /// offset to remember.
+    /// </summary>
+    public static class CareTempo
+    {
+        public const float BaseBpm = 132f;
+        public const float LiftBpm = 156f;
+        public const float OutroBpm = 171.6f;
+        // Section downbeats, straight out of make_zoo_full_120.py.
+        public const float DenserAt = 29.1f;     // A -> A2, same tempo, denser band
+        public const float LiftAt = 58.2f;       // A2 -> B, 132 -> 156 BPM
+        public const float SecondLiftAt = 82.8f; // B -> B2, full kit
+        public const float OutroAt = 107.4f;     // B2 -> T, 156 -> 171.6 BPM
+        // Width of the cross-fade used by anything that changes on a downbeat.
+        // Half of it sits before the beat, half after: a queue that snaps on
+        // the exact frame sounds like a bug, and one that waits a whole bar
+        // sounds late.
+        public const float Bridge = 6f;
+        /// <summary>
+        /// Smoothstep gate around a musical downbeat: 0 further than half a
+        /// bridge before it, 1 further than half a bridge after it. Zero slope
+        /// at both ends, so nothing ever changes gear on a single frame.
+        /// </summary>
+        public static float Bridge01(float time, float at)
+        {
+            float t = Mathf.Clamp01((time - at + Bridge * .5f) / Bridge);
+            return t * t * (3f - 2f * t);
         }
     }
 
