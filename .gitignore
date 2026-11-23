@@ -150,3 +150,10 @@ crashlytics-build.properties
 # Local agent backups & stray references
 /_backups/
 /playbtn3.png
+
+# UI 原始切图源文件（未被任何场景/预制体引用，不进仓库）
+/Assets/Interaction Assets/UI 20261121(1)/
+
+# 场景本地快照副本（只留一份工作主场景）
+/Assets/Environment Aseets/01_HighlandLake_可玩场景/Scenes/*副本*.unity
+/Assets/Environment Aseets/01_HighlandLake_可玩场景/Scenes/*副本*.unity.meta

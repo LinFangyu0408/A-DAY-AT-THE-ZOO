@@ -34,42 +34,37 @@ namespace ADayAtTheZoo.Monkeys.Care
             {
                 root = CareUi.OverlayRoot("Care PC Tutorial Root", 80);
                 root = CareUi.Plate("Care Tutorial", root,
-                    new Vector2(-640, -175), new Vector2(460, 264),
-                    new Vector2(.5f, .5f), new Vector2(.5f, .5f));
+                    new Vector2(35, -70), new Vector2(460, 330),
+                    new Vector2(0f, 1f), new Vector2(0f, 1f));
             }
             else
                 root = CareUi.Canvas("Care Tutorial", head,
-                    new Vector3(-.40f, .09f, 1.08f), .44f, new Vector2(820, 470), 80);
+                    new Vector3(-.40f, .09f, 1.08f), .44f, new Vector2(460, 330), 80);
             group = root.gameObject.AddComponent<CanvasGroup>();
             group.alpha = 0;
             group.interactable = false;
             group.blocksRaycasts = false;
 
-            var shadow = CareUiSkin.AddSliced(root, "Tutorial shadow", CareUiSkin.RoundedCard,
-                new Vector2(466, 268), new Vector2(0, -6), new Color(.03f, .09f, .16f, .30f));
-            shadow.transform.SetAsFirstSibling();
-            CareUiSkin.AddSliced(root, "Tutorial panel", CareUiSkin.RoundedCard,
-                new Vector2(460, 264), Vector2.zero, new Color(1f, .97f, .88f, .99f));
-            CareUiSkin.AddSliced(root, "Tutorial header", CareUiSkin.Header,
-                new Vector2(438, 72), new Vector2(0, 86), new Color(.90f, .98f, 1f, 1f));
-            var accent = CareUi.Image("Tutorial accent", root, null, new Vector2(438, 5), new Vector2(0, 51));
-            accent.color = new Color(1f, .78f, .20f, 1f);
-            var star = CareUiSkin.Add(root, "Tutorial star", CareUiSkin.Star,
-                new Vector2(48, 45), new Vector2(194, 122), new Color(1f, .82f, .20f, 1f));
+            CareUi.Image("Tutorial panel", root, CareUiSkin.Art("panel_tutorial"),
+                new Vector2(460, 330), Vector2.zero);
+            CareUi.Image("Tutorial header", root, CareUiSkin.Art("button_blue"),
+                new Vector2(430, 100), new Vector2(0, 120));
+            var star = CareUiSkin.Add(root, "Tutorial star", CareUiSkin.Art("star_gold"),
+                new Vector2(65, 65), new Vector2(207, -136), Color.white);
             star.preserveAspect = true;
 
             keyCap = CareUiSkin.KeyBadge(root, "GO", new Vector2(76, 76),
-                new Vector2(-184, 86), out keyLabel, 46);
+                new Vector2(-178, 120), out keyLabel, 46);
 
             stepLabel = Label("Tutorial step", root, "STEP 1 / 8", new Vector2(100, 24),
                 new Vector2(-122, 86), 18, TextAnchor.MiddleCenter, new Color(.95f, .98f, 1f, 1));
             stepLabel.gameObject.SetActive(false);
             title = Label("Tutorial title", root, string.Empty, new Vector2(325, 42),
-                new Vector2(56, 73), 33, TextAnchor.MiddleLeft, Color.white);
+                new Vector2(48, 120), 33, TextAnchor.MiddleLeft, Color.white);
             body = Label("Tutorial body", root, string.Empty, new Vector2(420, 100),
-                new Vector2(0, -10), 31, TextAnchor.MiddleCenter, new Color(.035f, .10f, .19f, 1));
-            CareUiSkin.AddSliced(root, "Tutorial action panel", CareUiSkin.Button,
-                new Vector2(426, 56), new Vector2(0, -99), new Color(.78f, .94f, 1f, 1f));
+                new Vector2(0, -10), 31, TextAnchor.MiddleCenter, new Color(.34f, .20f, .10f, 1));
+            CareUiSkin.AddSliced(root, "Tutorial action panel", CareUiSkin.Art("button_blue"),
+                new Vector2(414, 88), new Vector2(0, -100), Color.white);
             // One key cap only (in the header) keeps the card quiet; the action
             // bar repeats the instruction in words instead of a second badge.
             action = Label("Tutorial action", root, string.Empty, new Vector2(410, 46),
@@ -77,6 +72,7 @@ namespace ADayAtTheZoo.Monkeys.Care
 
             root.gameObject.SetActive(false);
             ShowStep(0);
+            CareUiCustomization.Bind("Tutorial", root);
         }
 
         void Update()
@@ -152,7 +148,9 @@ namespace ADayAtTheZoo.Monkeys.Care
         void SetKey(string key)
         {
             keyLabel.text = key;
-            keyCap.color = CareUiSkin.KeyColor(key);
+            keyLabel.fontSize = key.Length > 1 ? 28 : 46;
+            keyCap.sprite = CareUiSkin.KeySurface(key);
+            keyCap.color = Color.white;
         }
 
         void ShowStep(int value)
@@ -210,6 +208,7 @@ namespace ADayAtTheZoo.Monkeys.Care
                     SetKey("OK");
                     break;
             }
+            CareUiCustomization.TutorialText(step, title, body, action);
         }
 
         void Finish()
@@ -231,7 +230,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             var text = rect.gameObject.AddComponent<Text>();
             text.font = CareFont.LoadReadable();
             text.fontSize = fontSize;
-            text.fontStyle = FontStyle.Bold;
+            text.fontStyle = FontStyle.Normal;
             text.alignment = alignment;
             text.color = color;
             text.raycastTarget = false;
@@ -240,3 +239,5 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
     }
 }
+
+

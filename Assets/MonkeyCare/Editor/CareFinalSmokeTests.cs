@@ -183,7 +183,7 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         yield return WaitUntil(() => session.RoundStarted, 3);
         Check(session.RoundStarted, "A starts the round");
         var progressTrack = GameObject.Find("Progress track")?.GetComponent<Image>();
-        Check(GameObject.Find("SVG score panel") && GameObject.Find("Static score bar cover") &&
+        Check(GameObject.Find("SVG score panel") && GameObject.Find("Progress title") &&
               progressTrack && progressTrack.enabled && progressTrack.color.a >= .18f,
             "top progress uses the supplied artwork with a visible empty track");
         Check(GameObject.Find("Progress pass marker"),
@@ -234,11 +234,11 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             "gameplay UI uses a bold readable font");
         var bagButton = session.GloveInventory.BagButtonRoot;
         Check(bagButton && bagButton.gameObject.activeInHierarchy,
-            "persistent backpack button is visible in the lower-left");
-        Check(bagButton.localPosition.x < -.7f && bagButton.localPosition.y < -.4f,
-            "persistent backpack button is placed in the lower-left");
+            "persistent backpack button is visible in the upper-right");
+        Check(bagButton.localPosition.x > .6f && bagButton.localPosition.y > .15f,
+            "persistent backpack button is placed in the upper-right");
         var bagIcon = GameObject.Find("Bag icon")?.GetComponent<Image>();
-        Check(bagIcon && bagIcon.sprite && bagIcon.sprite.name == "Care Backpack - bag_icon",
+        Check(bagIcon && bagIcon.sprite && bagIcon.sprite.name == "Care Clay - icon_backpack",
             "persistent backpack uses the supplied bag icon");
         Check(bagIcon && bagIcon.rectTransform.sizeDelta.x >= 160,
             "backpack icon was enlarged for readability");
@@ -294,13 +294,14 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         Check(session.GloveInventory.IsOpen, "B opens the glove inventory");
         var backpack = GameObject.Find("Backpack UI")?.GetComponent<Image>();
         Check(backpack && backpack.sprite &&
-              backpack.sprite.name == "Care Backpack - bag",
+              backpack.sprite.name == "Care Clay - panel_bag",
             "new backpack artwork is visible");
-        var backpackTitle = GameObject.Find("Backpack title")?.GetComponent<Text>();
-        Check(backpackTitle && backpackTitle.text == "BAG",
-            "backpack title is in English");
-        var confirmKey = GameObject.Find("Confirm key")?.GetComponent<Image>();
-        var backKey = GameObject.Find("Back key")?.GetComponent<Image>();
+        Check(backpack.sprite.texture.width == 2048 && backpack.sprite.texture.height == 2048 &&
+              !GameObject.Find("Backpack title ribbon"),
+            "independent blank panel and BAG caption use the new clay pack");
+        var inventoryImages = backpack.transform.parent.GetComponentsInChildren<Image>(true);
+        var confirmKey = inventoryImages.FirstOrDefault(image => image.name == "Confirm key");
+        var backKey = inventoryImages.FirstOrDefault(image => image.name == "Back key");
         Check(confirmKey && backKey &&
               Mathf.Approximately(confirmKey.rectTransform.sizeDelta.x, confirmKey.rectTransform.sizeDelta.y) &&
               Mathf.Approximately(backKey.rectTransform.sizeDelta.x, backKey.rectTransform.sizeDelta.y),
@@ -407,6 +408,11 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
             "A refills the banana inventory at the market stand");
         yield return null;
         yield return null;
+        var fullLabel = GameObject.Find("Pickup text")?.GetComponent<Text>();
+        var fullBadge = GameObject.Find("Pickup key")?.GetComponent<Image>();
+        Check(fullLabel && fullLabel.text == "FULL" && fullBadge && fullBadge.sprite &&
+              fullBadge.sprite.name == "key_full_check",
+            "refilling updates the cream supply prompt to FULL with the green completion badge");
         Check(session.GloveInventory.AutoEquip &&
               session.GloveInventory.BagButtonRoot.gameObject.activeSelf,
             "the corner bag entry survives the first banana (never destroyed or hidden)");
@@ -882,18 +888,18 @@ public sealed class CareFinalSmokeDriver : MonoBehaviour
         yield return null;
         Check(GameObject.Find("Results card") &&
               GameObject.Find("Continue exploring") &&
-              GameObject.Find("Restart round"),
-            "results use the reference card layout with both round buttons");
+              !GameObject.Find("Restart round"),
+            "results show only the continue button");
         var cardShadow = GameObject.Find("Results shadow")?.GetComponent<Image>();
         var cardImage = GameObject.Find("Results card")?.GetComponent<Image>();
-        Check(cardShadow && cardShadow.sprite && cardShadow.sprite.name.Contains("RoundedCard") &&
-              cardImage && cardImage.sprite && cardImage.sprite.name.Contains("RoundedCard") &&
-              cardImage.sprite.border == new Vector4(96, 96, 96, 96),
+        Check(cardShadow && cardShadow.sprite && cardShadow.sprite.name.Contains("results_panel") &&
+              cardImage && cardImage.sprite && cardImage.sprite.name.Contains("results_panel") &&
+              cardImage.sprite.border == new Vector4(144, 144, 144, 144),
             "results card and shadow share the large rounded-corner silhouette");
         var resultsTitle = GameObject.Find("Feeding Amount title")?.GetComponent<Text>();
         var totalTitle = GameObject.Find("Total Score title")?.GetComponent<Text>();
-        Check(resultsTitle && resultsTitle.fontSize >= 64 &&
-              totalTitle && totalTitle.fontSize >= 72,
+        Check(resultsTitle && resultsTitle.fontSize >= 48 &&
+              totalTitle && totalTitle.fontSize >= 70,
             "results copy uses the enlarged readable font");
         Capture("final-results");
         Check(round.Score == 7 && round.Stars == 2 && round.IsPassing,

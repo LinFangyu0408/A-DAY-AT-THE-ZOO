@@ -56,7 +56,22 @@ namespace ADayAtTheZoo.Monkeys.Care
         public static Sprite BackpackBackScratcher => LoadBackpack("back_scratcher");
         public static Sprite BackpackCount => LoadBackpack("number");
         public static Sprite BackpackButton => LoadBackpack("button_a");
-        public static Sprite BackpackIcon => LoadBackpack("bag_icon");
+        public static Sprite BackpackIcon => Art("icon_backpack");
+        public static Sprite PickupPanel => LoadPickup("panel_cream");
+        public static Sprite PickupConfirm => LoadPickup("key_blue_A");
+        public static Sprite PickupKeyCap => LoadPickup("key_blue_blank");
+        public static Sprite PickupFull => LoadPickup("key_full_check");
+        public static Sprite PickupArrow => LoadPickup("arrow_down");
+        public static Sprite PickupLabel(string state) => LoadPickup("text_" + state);
+
+        static Sprite LoadPickup(string name)
+        {
+            string key = "UI/PickupReference/" + name;
+            if (!cache.TryGetValue(key, out var sprite) || !sprite)
+                cache[key] = sprite = Resources.Load<Sprite>(key);
+            return sprite;
+        }
+
         // The reference HUD uses the new game-UI slice set: a white SCORE plate
         // with a baked rainbow bar. The bar region is re-sliced at runtime so
         // the live progress fill reuses the exact gradient.
@@ -79,12 +94,40 @@ namespace ADayAtTheZoo.Monkeys.Care
         public static Sprite SvgNumberStar(int number) => LoadGameUi(number.ToString());
         public static Sprite SvgReadyGo => LoadSvg("readygo");
         public static Sprite SvgResultsPanel => LoadSvg("results_blank");
+        public static Sprite ResultsReferencePanel => LoadResults("results_panel", new Vector4(144, 144, 144, 144));
+        public static Sprite ResultsReferenceRibbon => LoadResults("results_ribbon");
+        public static Sprite ResultsReferenceStats => LoadResults("stats_inset");
+        public static Sprite ResultsReferenceScore => LoadResults("score_inset");
+        public static Sprite ResultsReferenceStar => LoadResults("star_earned");
+        public static Sprite ResultsReferenceEmptyStar => LoadResults("star_unearned");
+        public static Sprite ResultsReferenceContinue => LoadResults("button_continue_blank", new Vector4(112, 0, 112, 0));
+        public static Sprite ResultsReferenceRestart => LoadResults("button_restart_blank", new Vector4(112, 0, 112, 0));
         public static Sprite SvgContinue => LoadSvg("continue");
         public static Sprite SvgRestart => LoadSvg("restart");
         public static Sprite SvgStar => LoadSvg("star");
         public static Sprite SvgLevel1 => LoadSvg("level1");
         public static Sprite SvgLevel2 => LoadSvg("level2");
         public static Sprite SvgLevel3 => LoadSvg("level3");
+
+        public static Sprite Art(string name)
+        {
+            string key = "UI/ClayPack/" + name;
+            if (cache.TryGetValue(key, out var existing) && existing) return existing;
+            var texture = Resources.Load<Texture2D>(key);
+            if (!texture) { Debug.LogError("Missing clay UI texture: " + key); return null; }
+            var sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
+                new Vector2(.5f, .5f), 100f, 0, SpriteMeshType.FullRect);
+            sprite.name = "Care Clay - " + name;
+            cache[key] = sprite;
+            return sprite;
+        }
+
+        public static Sprite KeySurface(string key)
+        {
+            string cap = key == "A" || key == "✕" || key == "X" ? "key_green" :
+                key == "B" || key == "○" || key == "O" ? "key_red" : "key_blue";
+            return Art(cap);
+        }
 
         public static Image Add(Transform parent, string name, Sprite sprite,
             Vector2 size, Vector2 position, Color color)
@@ -127,7 +170,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             // A plain white cap keeps the tint exact; the casual art carries its
             // own colour and would multiply the key tint into a muddy tone.
             var badge = Add(parent, string.IsNullOrEmpty(objectName) ? "Key " + key : objectName,
-                KeyCapSprite, size, position, KeyColor(key));
+                KeySurface(key), size, position, Color.white);
             label = CareRoundView.Label("Key " + key + " label", badge.transform,
                 key, size * .94f, Vector2.zero, fontSize, TextAnchor.MiddleCenter, Color.white);
             // Best-fit re-samples the glyph at whatever size happens to fit, so
@@ -140,8 +183,8 @@ namespace ADayAtTheZoo.Monkeys.Care
             var glyphEdge = label.GetComponent<Outline>();
             if (glyphEdge)
             {
-                glyphEdge.effectColor = new Color(.10f, .02f, .05f, .62f);
-                glyphEdge.effectDistance = new Vector2(1.6f, -1.6f);
+                glyphEdge.effectColor = new Color(.10f, .02f, .05f, .30f);
+                glyphEdge.effectDistance = new Vector2(.65f, -.65f);
             }
             // The glyph set can be swapped at runtime (A/B ⇄ ✕/○); register so a
             // swap relabels every badge without touching layout or wiring.
@@ -160,6 +203,8 @@ namespace ADayAtTheZoo.Monkeys.Care
                         // key colour, so tinting the letter too turned the badge
                         // into a red-on-red blob (the "blurry B" report).
                         pair.label.color = Color.white;
+                        var cap = pair.label.transform.parent.GetComponent<Image>();
+                        if (cap) { cap.sprite = KeySurface(pair.label.text); cap.color = Color.white; }
                     }
                 };
             }
@@ -249,6 +294,21 @@ namespace ADayAtTheZoo.Monkeys.Care
                 new Rect(0, 0, texture.width, texture.height),
                 new Vector2(.5f, .5f), 100f, 0, SpriteMeshType.FullRect);
             sprite.name = "Care Backpack - " + fileName;
+            cache[key] = sprite;
+            return sprite;
+        }
+
+        static Sprite LoadResults(string fileName, Vector4 border = default)
+        {
+            string key = "UI/ResultsReference/" + fileName;
+            if (cache.TryGetValue(key, out var existing) && existing) return existing;
+            var texture = Resources.Load<Texture2D>(key);
+            if (!texture) { Debug.LogWarning("[Monkey Care] Missing results texture: " + key); return null; }
+            texture.filterMode = FilterMode.Bilinear;
+            texture.wrapMode = TextureWrapMode.Clamp;
+            var sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
+                new Vector2(.5f, .5f), 100f, 0, SpriteMeshType.FullRect, border);
+            sprite.name = "Care Results Reference - " + fileName;
             cache[key] = sprite;
             return sprite;
         }
@@ -347,3 +407,4 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
     }
 }
+

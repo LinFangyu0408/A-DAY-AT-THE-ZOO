@@ -1,0 +1,32 @@
+﻿A-DAY-AT-THE-ZOO 工程包说明
+================================
+
+版本：Unity 6000.3.28f1（Unity 6.3 LTS）
+提交：192b4d4（2026-11-21，含 120 秒回合 / 教程计时 / 节奏跟随 BGM 的改动）
+
+包里有什么
+----------
+本包是完整的 Unity 工程源码，已排除 Library 缓存、Temp、Logs 和 .git，
+所以体积是 1.5GB 而不是 4GB+。解压后约 2.6GB。
+
+打开步骤
+--------
+1) 用 Unity Hub 安装 Unity 版号 6000.3.28f1（其他 6000.3.x 也行，但建议一致，
+   避免升级提示）。
+2) Unity Hub -> Add project from disk -> 选择解压出来的 A-DAY-AT-THE-ZOO 文件夹。
+3) 首次打开会导入资源，5~15 分钟，进度条走完前别关。
+4) 打开场景：
+   Assets/Environment Aseets/01_HighlandLake_可玩场景/Scenes/HighlandLake_Backup_2026-11-03.unity
+5) 点 Play。PC 键鼠或手柄都能玩，确认键是 A（PS 手柄为 Cross）。
+
+注意事项
+--------
+- 首次导入需要联网：Unity 要从官方源下载 OpenXR、Input System 等包。
+  如果对方网络受限，告诉我，我改用离线方案（把 PackageCache 一起带过去）。
+- 不要删 Packages/manifest.json；Library 文件夹会自动重建，不需要拷贝。
+- 目录名里 "Environment Aseets" 少了一个 s，是素材包原名，不要改名，
+  否则场景引用会断。
+
+出问题怎么查
+------------
+工程根目录有 DEV_NOTES.md，记录了每一轮改动的原因和踩过的坑。

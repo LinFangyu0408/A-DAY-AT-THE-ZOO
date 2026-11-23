@@ -40,6 +40,7 @@ MonoBehaviour:
   focusAware: 1
   requiresSystemKeyboard: 0
   experimentalFeaturesEnabled: 0
+  useForwardHeadPose: 1
   insightPassthroughEnabled: 0
   _insightPassthroughSupport: 0
   isPassthroughCameraAccessEnabled: 0

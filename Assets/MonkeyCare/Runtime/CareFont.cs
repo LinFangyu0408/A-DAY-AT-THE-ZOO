@@ -42,7 +42,8 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (readable) return readable;
             // Shipped static bold face first: real bold glyphs that Unity's
             // legacy Text renders heavy (unlike the variable Fredoka font).
-            readable = Resources.Load<Font>("Fonts/Arial-Bold");
+            readable = Resources.Load<Font>("Fonts/Fredoka-SemiBold");
+            if (!readable) readable = Resources.Load<Font>("Fonts/Arial-Bold");
             if (readable) return readable;
             // Otherwise try a genuine bold OS family by exact name.
             string[] installed = Font.GetOSInstalledFontNames();

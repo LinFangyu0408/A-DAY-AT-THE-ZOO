@@ -533,7 +533,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         [SerializeField] float phase;
         [SerializeField] bool anchorReady;
         Camera playerCamera;
-        Image arrow, keyBadge;
+        Image arrow, keyBadge, wording, alternateGlyph;
         Text label, keyLabel;
         public bool PlayerInRange { get; private set; }
 
@@ -569,51 +569,76 @@ namespace ADayAtTheZoo.Monkeys.Care
                 arrow = existingCanvas.Find("Pickup down arrow")?.GetComponent<Image>();
                 label = existingCanvas.Find("Pickup text")?.GetComponent<Text>();
                 keyBadge = existingCanvas.Find("Pickup key")?.GetComponent<Image>();
-                keyLabel = existingCanvas.Find("Pickup key label")?.GetComponent<Text>();
-                if (arrow && label && keyBadge && keyLabel)
-                {
-                    label.font = CareFont.LoadReadable();
-                    label.fontSize = 44;
-                    label.rectTransform.sizeDelta = new Vector2(220, 74);
-                    keyLabel.font = CareFont.LoadReadable();
-                    keyLabel.fontSize = 48;
-                    keyBadge.rectTransform.sizeDelta = new Vector2(88, 88);
-                    keyBadge.rectTransform.anchoredPosition = new Vector2(-122, -36);
-                    keyLabel.rectTransform.sizeDelta = new Vector2(84, 84);
-                    return;
-                }
+                keyLabel = keyBadge ? keyBadge.GetComponentInChildren<Text>(true) : null;
+                wording = existingCanvas.Find("Pickup lettering")?.GetComponent<Image>();
+                alternateGlyph = keyBadge ? keyBadge.transform.Find("Pickup alternate glyph")?.GetComponent<Image>() : null;
+                if (arrow && label && keyBadge && keyLabel && wording && alternateGlyph) return;
                 if (Application.isPlaying) Destroy(existingCanvas.gameObject);
                 else DestroyImmediate(existingCanvas.gameObject);
             }
             var canvas = CareUi.Canvas("Pickup Marker Canvas", transform,
                 Vector3.zero, 1.10f, new Vector2(560, 220));
-            var shadow = CareUiSkin.AddSliced(canvas, "Pickup label shadow", CareUiSkin.Panel,
-                new Vector2(348, 94), new Vector2(4, -40), new Color(.02f, .08f, .15f, .36f));
-            shadow.transform.SetAsFirstSibling();
-            CareUiSkin.AddSliced(canvas, "Pickup label", CareUiSkin.Panel,
-                new Vector2(340, 88), new Vector2(0, -36), new Color(1f, .96f, .82f, 1f));
-
-            arrow = CareUiSkin.Add(canvas, "Pickup down arrow", CareUiSkin.DownArrow,
-                new Vector2(112, 112), new Vector2(0, 48), new Color(1f, .71f, .12f, 1f));
+            var plate = CareUiSkin.Add(canvas, "Pickup label", CareUiSkin.PickupPanel,
+                new Vector2(440, 100), new Vector2(0, -36), Color.white);
+            plate.preserveAspect = true;
+            arrow = CareUiSkin.Add(canvas, "Pickup down arrow", CareUiSkin.PickupArrow,
+                new Vector2(82, 82), new Vector2(0, 59), Color.white);
             arrow.preserveAspect = true;
 
-            var labelRect = CareUi.Rect("Pickup text", canvas, new Vector2(190, 70), new Vector2(38, -36));
+            keyBadge = CareUiSkin.Add(canvas, "Pickup key", CareUiSkin.PickupConfirm,
+                new Vector2(92, 92), new Vector2(-162, -36), Color.white);
+            keyBadge.preserveAspect = true;
+            keyLabel = CareRoundView.Label("Pickup key label", keyBadge.transform, "A",
+                new Vector2(84, 84), Vector2.zero, 54,
+                TextAnchor.MiddleCenter, Color.white);
+            alternateGlyph = CareUiSkin.Add(keyBadge.transform, "Pickup alternate glyph",
+                CareUiSkin.PickupLabel("glyph_cross"), new Vector2(54, 54), Vector2.zero, Color.white);
+            alternateGlyph.preserveAspect = true;
+            // Keep the live labels for state inspection; the visible glyphs use outlined art.
+            var labelRect = CareUi.Rect("Pickup text", canvas, new Vector2(280, 74), new Vector2(46, -36));
             label = labelRect.gameObject.AddComponent<Text>();
             label.font = CareFont.LoadReadable();
             label.fontSize = 44;
-            label.fontStyle = FontStyle.Bold;
+            label.fontStyle = FontStyle.Normal;
             label.alignment = TextAnchor.MiddleCenter;
-            label.color = new Color(.04f, .13f, .25f, 1f);
+            label.color = new Color(.48f, .28f, .15f, 1f);
             label.raycastTarget = false;
-            label.text = "BANANA SUPPLY";
+            label.resizeTextForBestFit = true;
+            label.resizeTextMinSize = 30;
+            label.resizeTextMaxSize = 44;
+            wording = CareUiSkin.Add(canvas, "Pickup lettering", CareUiSkin.PickupLabel("supply"),
+                new Vector2(280, 54), new Vector2(46, -36), Color.white);
+            wording.preserveAspect = true;
+            UpdatePrompt(CareRound.StartingBananas, false);
+        }
 
-            keyBadge = CareUiSkin.Add(canvas, "Pickup key", CareUiSkin.RoundButton,
-                new Vector2(88, 88), new Vector2(-122, -36),
-                new Color(.25f, .68f, .98f, 1f));
-            keyLabel = CareRoundView.Label("Pickup key label", keyBadge.transform, "A",
-                new Vector2(84, 84), Vector2.zero, 48,
-                TextAnchor.MiddleCenter, Color.white);
-            keyBadge.gameObject.SetActive(true);
+        void UpdatePrompt(int bananas, bool inRange)
+        {
+            bool needsBananas = bananas < CareRound.StartingBananas;
+            string state = needsBananas
+                ? inRange ? bananas <= 0 ? "pick_up" : "restock" : "press_a"
+                : inRange ? "full" : "supply";
+            string text = state switch
+            {
+                "pick_up" => "PICK UP",
+                "restock" => "RESTOCK",
+                "press_a" => "PRESS " + CareInput.ConfirmLabel,
+                "full" => "FULL",
+                _ => "BANANA SUPPLY"
+            };
+            if (label.text != text) label.text = text;
+            if (keyLabel.text != CareInput.ConfirmLabel) keyLabel.text = CareInput.ConfirmLabel;
+            bool alternateKey = CareInput.ConfirmLabel != "A";
+            bool full = state == "full";
+            keyBadge.sprite = full ? CareUiSkin.PickupFull
+                : alternateKey ? CareUiSkin.PickupKeyCap : CareUiSkin.PickupConfirm;
+            keyBadge.color = Color.white;
+            keyLabel.enabled = false;
+            alternateGlyph.enabled = alternateKey && !full;
+            wording.sprite = CareUiSkin.PickupLabel(state == "press_a" && alternateKey ? "press_cross" : state);
+            label.enabled = false;
+            wording.enabled = true;
+            arrow.color = Color.white;
         }
 
         void LateUpdate()
@@ -632,40 +657,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             PlayerInRange = pickupBounds.SqrDistance(playerCamera.transform.position) <= PickupRange * PickupRange;
             int bananas = round != null ? round.Bananas : CareRound.StartingBananas;
             bool needsBananas = bananas < CareRound.StartingBananas;
-            // Compare first: a blind .text write dirties the whole canvas every
-            // frame (same class of stutter the HUD caches fixed).
-            if (keyLabel.text != CareInput.ConfirmLabel)
-                keyLabel.text = CareInput.ConfirmLabel;
-            // Keep the A badge visible so the crate reads as an interactable
-            // supply point even before the first banana is thrown.
-            keyBadge.gameObject.SetActive(true);
-            keyBadge.color = needsBananas
-                ? new Color(.25f, .68f, .98f, 1f)
-                : new Color(.42f, .51f, .57f, .92f);
-            if (needsBananas && PlayerInRange)
-            {
-                label.text = bananas <= 0 ? "PICK UP" : "RESTOCK";
-                label.rectTransform.sizeDelta = new Vector2(220, 74);
-                label.rectTransform.anchoredPosition = new Vector2(46, -36);
-                label.color = new Color(.06f, .34f, .18f, 1f);
-                arrow.color = new Color(.40f, .94f, .53f, 1f);
-            }
-            else if (needsBananas)
-            {
-                label.text = "PRESS " + CareInput.ConfirmLabel;
-                label.rectTransform.sizeDelta = new Vector2(220, 74);
-                label.rectTransform.anchoredPosition = new Vector2(46, -36);
-                label.color = new Color(.20f, .25f, .30f, 1f);
-                arrow.color = new Color(1f, .71f, .12f, 1f);
-            }
-            else
-            {
-                label.text = PlayerInRange ? "FULL" : "BANANA SUPPLY";
-                label.rectTransform.sizeDelta = new Vector2(220, 74);
-                label.rectTransform.anchoredPosition = new Vector2(46, -36);
-                label.color = new Color(.04f, .13f, .25f, 1f);
-                arrow.color = new Color(1f, .71f, .12f, 1f);
-            }
+            UpdatePrompt(bananas, PlayerInRange);
             float bob = Mathf.Sin(Time.unscaledTime * 2.5f + phase) * .07f;
             transform.position = anchor + Vector3.up * bob;
             transform.rotation = playerCamera.transform.rotation;

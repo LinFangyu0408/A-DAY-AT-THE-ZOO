@@ -41,13 +41,12 @@ namespace ADayAtTheZoo.Monkeys.Care
         bool clockFrozenShown;
         readonly Image progressFill;
         readonly Image[] stars = new Image[3];
-        Sprite resultStarSprite;
+        Sprite resultStarSprite, resultEmptyStarSprite;
         readonly Text score, clock, bananas;
         Text sprint;
         Text feedingValue, penaltyValue, finalValue, passValue, starHint;
         CareResultButton[] buttons;
-        RectTransform starBadge;
-        float trackLeft, trackRight, trackCenterY;
+        CareProgressStarFollower starFollower;
 
         public static Text Label(string name, Transform parent, string value, Vector2 size,
             Vector2 pos, int fontSize, TextAnchor align = TextAnchor.MiddleCenter,
@@ -57,7 +56,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             var text = rect.gameObject.AddComponent<Text>();
             text.font = CareFont.LoadReadable();
             text.fontSize = fontSize;
-            text.fontStyle = FontStyle.Bold;
+            text.fontStyle = FontStyle.Normal;
             text.color = color ?? new Color(.25f, .16f, .22f);
             text.alignment = align;
             text.raycastTarget = false;
@@ -82,9 +81,9 @@ namespace ADayAtTheZoo.Monkeys.Care
                 float lum = c.r * .299f + c.g * .587f + c.b * .114f;
                 var outline = text.gameObject.AddComponent<Outline>();
                 outline.effectColor = lum < .55f
-                    ? new Color(1f, 1f, 1f, .95f)      // dark text -> light edge
-                    : new Color(.04f, .10f, .18f, .95f); // light text -> dark edge
-                outline.effectDistance = new Vector2(2.5f, -2.5f);
+                    ? new Color(1f, 1f, 1f, .32f)      // dark text -> light edge
+                    : new Color(.04f, .10f, .18f, .38f); // light text -> dark edge
+                outline.effectDistance = new Vector2(.65f, -.65f);
                 outline.useGraphicAlpha = true;
             }
             return text;
@@ -114,7 +113,7 @@ namespace ADayAtTheZoo.Monkeys.Care
                 // banana counter plate on the top-right (both plates read as
                 // one top row).
                 scoreHud = CareUi.Plate("Care SCORE HUD", flatHud,
-                    new Vector2(60, 15), new Vector2(1000, 480),
+                    new Vector2(0, -40), new Vector2(1000, 480),
                     new Vector2(.5f, 1f), new Vector2(.5f, 1f));
                 scoreHud.localScale = Vector3.one * .72f;
                 // One pad-glyph toggle for the whole flat HUD (created once per
@@ -125,46 +124,11 @@ namespace ADayAtTheZoo.Monkeys.Care
             else
                 scoreHud = CareUi.Canvas("Care SCORE HUD", head,
                     new Vector3(0, .34f, 1.12f), .70f, new Vector2(1000, 480), 10);
-            var svgScore = CareUiSkin.SvgScorePanel;
-            if (svgScore)
-            {
-                var scoreArt = CareUi.Image("SVG score panel", scoreHud, svgScore,
-                    new Vector2(1000, 323), Vector2.zero);
-                scoreArt.preserveAspect = true;
-            }
-            else if (art.scorePanel)
-            {
-                var originalScore = CareUi.Image("Original GitHub score panel", scoreHud,
-                    art.scorePanel, new Vector2(1000, 323), Vector2.zero);
-                originalScore.color = Color.white;
-                originalScore.preserveAspect = true;
-            }
-            else
-            {
-                CareUiSkin.AddSliced(scoreHud, "Progress shadow", CareUiSkin.Panel,
-                    new Vector2(1000, 300), new Vector2(5, -9), new Color(.02f, .08f, .14f, .32f));
-                CareUiSkin.AddSliced(scoreHud, "Progress panel", CareUiSkin.LightPanel,
-                    new Vector2(990, 290), Vector2.zero, Color.white);
-            }
-            if (svgScore)
-            {
-                // The game-UI SCORE plate bakes the rainbow gradient. Cover it
-                // with the panel's own cream tone so the live value can animate.
-                CareUi.Image("Static score bar cover", scoreHud, null,
-                    new Vector2(900, 102), new Vector2(2, -31)).color =
-                    new Color(.922f, .925f, .902f, 1f);
-            }
-            else
-            {
-                // Fallback for projects that have not imported the game-UI pack.
-                CareUi.Image("Localized progress cover", scoreHud, null,
-                    new Vector2(900, 170), new Vector2(0, -24)).color =
-                    new Color(.975f, .965f, .945f, 1f);
-                CareUiSkin.AddSliced(scoreHud, "Progress title ribbon", CareUiSkin.Header,
-                    new Vector2(420, 66), new Vector2(0, 72), Color.white);
-                Label("Progress title", scoreHud, "SCORE", new Vector2(400, 58),
-                    new Vector2(0, 72), 36, TextAnchor.MiddleCenter, Color.white);
-            }
+            var scoreArt = CareUi.Image("SVG score panel", scoreHud, CareUiSkin.Art("panel_score"),
+                new Vector2(1000, 347), Vector2.zero);
+            scoreArt.preserveAspect = true;
+            Label("Progress title", scoreHud, "SCORE", new Vector2(270, 70), new Vector2(0, 91),
+                58, TextAnchor.MiddleCenter, new Color(.47f, .25f, .12f));
 
             // The baked rainbow bar occupies canvas rect x[-441,444] y[-77,14]
             // (measured from UI SCORE.png). Align the live track exactly to it
@@ -175,11 +139,11 @@ namespace ADayAtTheZoo.Monkeys.Care
             var trackBackground = track.gameObject.AddComponent<Image>();
             // Rounded cream empty track: matches the reference layout where the
             // unfilled bar reads as a soft rounded slot on the white plate.
-            trackBackground.sprite = CareUiSkin.RoundedCard;
-            trackBackground.type = Image.Type.Sliced;
-            trackBackground.color = new Color(.84f, .82f, .78f, 1f);
+            trackBackground.sprite = CareUiSkin.Art("progress_track");
+            trackBackground.type = Image.Type.Simple;
+            trackBackground.color = Color.white;
             trackBackground.raycastTarget = false;
-            var scoreFill = CareUiSkin.SvgScoreFill;
+            var scoreFill = CareUiSkin.Art("progress_rainbow");
             progressFill = CareUi.Image("Progress fill", track,
                 scoreFill ? scoreFill : CareUiSkin.ProgressFill,
                 scoreFill ? new Vector2(872, 80) : new Vector2(682, 32), Vector2.zero);
@@ -203,21 +167,21 @@ namespace ADayAtTheZoo.Monkeys.Care
             // passing line at exactly six bananas. It starts pinned to the left
             // end of the track instead of floating in the middle.
             float passX = trackPosition.x - trackSize.x * .5f + trackSize.x * CareRound.PassingRatio;
-            var scoreBadge = CareUiSkin.Add(scoreHud, "Score star badge", CareUiSkin.SvgStar,
+            var scoreBadge = CareUiSkin.Add(scoreHud, "Score star badge", CareUiSkin.Art("star_score"),
                 new Vector2(126, 123), new Vector2(passX, trackPosition.y), Color.white);
             scoreBadge.preserveAspect = true;
             scoreBadge.transform.SetAsLastSibling();
-            starBadge = scoreBadge.rectTransform;
-            trackLeft = trackPosition.x - trackSize.x * .5f;
-            trackRight = trackPosition.x + trackSize.x * .5f;
-            trackCenterY = trackPosition.y;
-            MoveStar(0f);
+            starFollower = scoreBadge.gameObject.AddComponent<CareProgressStarFollower>();
+            starFollower.progressFill = progressFill;
+            MoveStar();
 
             score = Label("Current score", scoreHud, "0%", new Vector2(300, 60),
-                new Vector2(330, 60), 52, TextAnchor.MiddleRight,
+                new Vector2(320, 84), 48, TextAnchor.MiddleRight,
                 new Color(.33f, .20f, .30f, 1f));
+            CareUi.Image("Round clock plate", scoreHud, CareUiSkin.Art("panel_counter"),
+                new Vector2(240, 76), new Vector2(0, -198));
             clock = Label("Round clock", scoreHud, "03:50", new Vector2(220, 50),
-                new Vector2(0, -198), 44, TextAnchor.MiddleCenter, Color.white);
+                new Vector2(0, -198), 40, TextAnchor.MiddleCenter, new Color(.34f, .20f, .10f));
             // Final-sprint banner: names the exact goal instead of leaving the
             // player standing around for the last seconds.
             sprint = Label("Final sprint", scoreHud, string.Empty, new Vector2(720, 50),
@@ -226,27 +190,19 @@ namespace ADayAtTheZoo.Monkeys.Care
 
             bananaHud = CarePlatform.FlatUi
                 ? CareUi.Plate("Care BANANA HUD", flatHud,
-                    new Vector2(-70, -50), new Vector2(560, 322),
+                    new Vector2(-230, -50), new Vector2(560, 322),
                     new Vector2(1f, 1f), new Vector2(1f, 1f))
                 : CareUi.Canvas("Care BANANA HUD",
                     art.bananaAnchor ? art.bananaAnchor : head,
-                    art.bananaAnchor ? art.bananaOffset : new Vector3(.50f, .26f, 1.12f),
+                    art.bananaAnchor ? art.bananaOffset : new Vector3(.43f, .26f, 1.12f),
                     art.bananaWidth, new Vector2(560, 322), 10);
             if (CarePlatform.FlatUi) bananaHud.localScale = Vector3.one * .72f;
-            var bananaArt = CareUiSkin.SvgBananaPanel ? CareUiSkin.SvgBananaPanel : art.bananaPanel;
-            if (bananaArt)
-            {
-                var originalBanana = CareUi.Image("Original GitHub banana panel", bananaHud,
-                    bananaArt, new Vector2(545, 313), Vector2.zero);
-                originalBanana.color = Color.white;
-                originalBanana.preserveAspect = true;
-            }
-            else
-                CareUiSkin.AddSliced(bananaHud, "Banana HUD panel", CareUiSkin.LightPanel,
-                    new Vector2(545, 313), Vector2.zero, Color.white);
-            // The banana slice bakes the fruit on the left; only the counter is live.
+            CareUi.Image("Banana HUD panel", bananaHud, CareUiSkin.Art("panel_counter"),
+                new Vector2(545, 284), Vector2.zero).preserveAspect = true;
+            CareUi.Image("Banana HUD icon", bananaHud, CareUiSkin.Art("icon_banana"),
+                new Vector2(255, 255), new Vector2(-123, 24)).preserveAspect = true;
             bananas = Label("Banana count", bananaHud, "×10", new Vector2(250, 110),
-                new Vector2(150, -20), 78, TextAnchor.MiddleCenter,
+                new Vector2(125, 0), 78, TextAnchor.MiddleCenter,
                 new Color(.14f, .14f, .18f, 1f));
 
             // STAMINA lives above the hungry monkey's head (see MonkeyCareNpc /
@@ -259,77 +215,83 @@ namespace ADayAtTheZoo.Monkeys.Care
 
         void BuildResults()
         {
-            // Reference card: big-corner white rounded plate, blue LEVEL
-            // COMPLETE ribbon, three airy stat rows, big total score, three
-            // stars, next-star hint, CONTINUE pill plus a round green button.
+            // Rebuild the reference from blank layers so all results stay live.
             results = CarePlatform.FlatUi
-                ? CareUi.Plate("Care RESULTS", flatHud, new Vector2(0, -10), new Vector2(900, 1300))
+                ? CareUi.Plate("Care RESULTS", flatHud, new Vector2(0, -10), new Vector2(960, 1100))
                 : CareUi.Canvas("Care RESULTS", head,
-                    new Vector3(0, -.02f, 1.30f), .50f, new Vector2(900, 1300), 100);
-            if (CarePlatform.FlatUi) results.localScale = Vector3.one * .78f;
-            // The shadow must share the card's rounded silhouette, otherwise a
-            // square dark rim shows around the rounded card corners.
-            var shadow = CareUiSkin.AddSliced(results, "Results shadow", CareUiSkin.RoundedCard,
-                new Vector2(896, 1296), new Vector2(8, -14),
-                new Color(.02f, .06f, .12f, .35f));
+                    new Vector3(0, -.02f, 1.30f), .50f, new Vector2(960, 1100), 100);
+            if (CarePlatform.FlatUi) results.localScale = Vector3.one * 1.10f;
+            var shadow = CareUiSkin.AddSliced(results, "Results shadow", CareUiSkin.ResultsReferencePanel,
+                new Vector2(900, 900), new Vector2(6, -10), new Color(.08f, .12f, .18f, .20f));
+            shadow.pixelsPerUnitMultiplier = 2f;
             shadow.transform.SetAsFirstSibling();
-            var card = CareUiSkin.AddSliced(results, "Results card", CareUiSkin.RoundedCard,
-                new Vector2(880, 1290), Vector2.zero, new Color(.985f, .99f, .99f, 1f));
-            CareUiSkin.AddSliced(results, "Results ribbon", CareUiSkin.Header,
-                new Vector2(780, 150), new Vector2(0, 505), Color.white);
-            Label("Results title", results, "LEVEL COMPLETE", new Vector2(720, 100),
-                new Vector2(0, 505), 56, TextAnchor.MiddleCenter, Color.white);
+            var card = CareUiSkin.AddSliced(results, "Results card", CareUiSkin.ResultsReferencePanel,
+                new Vector2(900, 900), Vector2.zero, Color.white);
+            card.pixelsPerUnitMultiplier = 2f;
+            CareUiSkin.Add(results, "Results ribbon", CareUiSkin.ResultsReferenceRibbon,
+                new Vector2(780, 160), new Vector2(0, 440), Color.white);
+            ResultsLabel("Results title", results, "LEVEL COMPLETE", new Vector2(650, 90),
+                new Vector2(-20, 440), 56, TextAnchor.MiddleCenter, Color.white, true);
 
-            feedingValue = StatRow("Feeding Amount", 345);
+            CareUiSkin.Add(results, "Results title star", CareUiSkin.ResultsReferenceStar,
+                new Vector2(125, 125), new Vector2(360, 430), Color.white);
+            CareUiSkin.Add(results, "Results statistics inset", CareUiSkin.ResultsReferenceStats,
+                new Vector2(740, 250), new Vector2(0, 230), Color.white);
+            CareUiSkin.Add(results, "Results score inset", CareUiSkin.ResultsReferenceScore,
+                new Vector2(740, 100), new Vector2(0, 10), Color.white);
+            feedingValue = StatRow("Feeding Amount", 295);
             passValue = StatRow("Resolved Status", 225);
-            penaltyValue = StatRow("Facilities Added", 105);
-
-            CareUi.Image("Results divider", results, null,
-                new Vector2(780, 6), new Vector2(0, -25)).color =
-                new Color(.72f, .74f, .75f, 1f);
-            Label("Total Score title", results, "Total Score:", new Vector2(500, 110),
-                new Vector2(-160, -130), 80, TextAnchor.MiddleLeft,
-                new Color(.12f, .12f, .14f, 1f));
-            finalValue = Label("Total Score value", results, "0", new Vector2(260, 110),
-                new Vector2(255, -130), 80, TextAnchor.MiddleRight,
-                new Color(.12f, .12f, .14f, 1f));
-
-            resultStarSprite = CareUiSkin.SvgStar ? CareUiSkin.SvgStar :
-                art.star ? art.star : CareUiSkin.Star;
+            penaltyValue = StatRow("Facilities Added", 155);
+            ResultsLabel("Total Score title", results, "Total Score:", new Vector2(470, 95),
+                new Vector2(-105, 10), 70, TextAnchor.MiddleLeft, new Color(.43f, .24f, .12f), true);
+            finalValue = ResultsLabel("Total Score value", results, "0", new Vector2(210, 95),
+                new Vector2(255, 10), 70, TextAnchor.MiddleRight, new Color(.43f, .24f, .12f), true);
+            resultStarSprite = CareUiSkin.ResultsReferenceStar;
+            resultEmptyStarSprite = CareUiSkin.ResultsReferenceEmptyStar;
             for (int i = 0; i < 3; i++)
             {
-                stars[i] = CareUi.Image("Result star " + (i + 1), results,
-                    resultStarSprite,
-                    new Vector2(200, 196), new Vector2((i - 1) * 235, -310));
+                stars[i] = CareUi.Image("Result star " + (i + 1), results, resultStarSprite,
+                    new Vector2(220, 220), new Vector2((i - 1) * 240, -155));
                 stars[i].preserveAspect = true;
             }
-            starHint = Label("Star thresholds", results, "Next Star: 1",
-                new Vector2(500, 60), new Vector2(-130, -450), 48, TextAnchor.MiddleLeft,
-                new Color(.24f, .25f, .25f, 1f));
+            starHint = ResultsLabel("Star thresholds", results, "Next Star: 1",
+                new Vector2(750, 60), new Vector2(0, -290), 40, TextAnchor.MiddleLeft,
+                new Color(.43f, .24f, .12f));
 
-            // Both round actions carry a live caption instead of baked art: the
-            // old restart chip was an unlabeled green circle and the baked
-            // CONTINUE word could not be re-lettered, so the two buttons did not
-            // read as a matched pair of actions.
+            // Keep both existing actions, including mouse and VR ray activation.
             buttons = new[]
             {
                 ResultButton("Continue exploring", "CONTINUE", CareInput.ConfirmLabel, results,
-                    CareUiSkin.BlueButton, new Vector2(410, 128),
-                    new Vector2(-180, -575), false, Color.white),
+                    CareUiSkin.ResultsReferenceContinue, new Vector2(420, 112),
+                    new Vector2(0, -380), false, Color.white),
                 ResultButton("Restart round", "RESTART", CareInput.BackLabel, results,
-                    CareUiSkin.GreenButton, new Vector2(330, 128),
-                    new Vector2(235, -575), true, Color.white)
+                    CareUiSkin.ResultsReferenceRestart, new Vector2(210, 76),
+                    new Vector2(0, -510), true, Color.white)
             };
+            buttons[1].gameObject.SetActive(false);
+            CareUiCustomization.Bind("Score", scoreHud);
+            CareUiCustomization.Bind("Banana counter", bananaHud);
+            CareUiCustomization.Bind("Results", results);
+        }
+
+        // UI text uses scalable font glyphs, with no lettering baked into textures.
+        static Text ResultsLabel(string name, Transform parent, string value, Vector2 size,
+            Vector2 pos, int fontSize, TextAnchor align, Color color, bool bold = false)
+        {
+            var label = Label(name, parent, value, size, pos, fontSize, align, color);
+            label.font = CareFont.LoadReadable();
+            label.fontStyle = FontStyle.Normal;
+            var outline = label.GetComponent<Outline>();
+            if (outline) outline.enabled = false;
+            return label;
         }
 
         Text StatRow(string title, float y)
         {
-            Label(title + " title", results, title, new Vector2(480, 88),
-                new Vector2(-190, y), 64, TextAnchor.MiddleLeft,
-                new Color(.16f, .16f, .18f, 1f));
-            return Label(title + " value", results, "0", new Vector2(340, 88),
-                new Vector2(215, y), 64, TextAnchor.MiddleRight,
-                new Color(.16f, .16f, .18f, 1f));
+            ResultsLabel(title + " title", results, title, new Vector2(480, 70),
+                new Vector2(-80, y), 48, TextAnchor.MiddleLeft, new Color(.43f, .24f, .12f));
+            return ResultsLabel(title + " value", results, "0", new Vector2(200, 70),
+                new Vector2(260, y), 52, TextAnchor.MiddleRight, new Color(.43f, .24f, .12f), true);
         }
 
         static CareResultButton ResultButton(string name, string caption, string key,
@@ -339,19 +301,23 @@ namespace ADayAtTheZoo.Monkeys.Care
             image.color = tint;
             // A pill sprite has to be sliced or its rounded caps stretch into a
             // blurry lozenge at this size.
-            if (sprite && sprite.border != Vector4.zero) image.type = Image.Type.Sliced;
+            if (sprite && sprite.border != Vector4.zero)
+            {
+                image.type = Image.Type.Sliced;
+                image.pixelsPerUnitMultiplier = 2f;
+            }
             var collider = image.gameObject.AddComponent<BoxCollider>();
             collider.size = new Vector3(size.x, size.y, 14);
             collider.isTrigger = true;
             // Both actions show the button that triggers them (A/✕ = continue,
             // B/○ = restart) so the pad player never has to aim at the card.
-            var badge = CareUiSkin.KeyBadge(image.transform, key, new Vector2(62, 62),
-                new Vector2(-size.x * .5f + 54, 0), out var badgeLabel, 40, name + " key");
+            var badge = CareUiSkin.KeyBadge(image.transform, key, new Vector2(restart ? 42 : 62, restart ? 42 : 62),
+                new Vector2(-size.x * .5f + (restart ? 32 : 54), 0), out var badgeLabel, restart ? 29 : 40, name + " key");
             badge.transform.SetAsLastSibling();
             if (badgeLabel) badgeLabel.color = Color.white;
-            Label(name + " caption", image.transform, caption,
-                new Vector2(size.x - 118, size.y - 22), new Vector2(24, 0), 46,
-                TextAnchor.MiddleCenter, Color.white);
+            ResultsLabel(name + " caption", image.transform, caption,
+                new Vector2(size.x - (restart ? 72 : 118), size.y - 22), new Vector2(restart ? 20 : 24, 0), restart ? 31 : 46,
+                TextAnchor.MiddleCenter, Color.white, true);
             var button = image.gameObject.AddComponent<CareResultButton>();
             button.restart = restart;
             button.image = image;
@@ -412,7 +378,7 @@ namespace ADayAtTheZoo.Monkeys.Care
                 scoreCache = percent + "%";
                 score.text = scoreCache;
             }
-            MoveStar(ratio);
+            MoveStar();
             if (round.Bananas != bananaCountCache)
             {
                 bananaCountCache = round.Bananas;
@@ -456,7 +422,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             }
             // Amber only for the final sprint; the rest of the round is white
             // like the digits themselves.
-            clock.color = sprinting ? new Color(1f, .70f, .20f, 1f) : Color.white;
+            clock.color = sprinting ? new Color(.88f, .25f, .08f, 1f) : new Color(.34f, .20f, .10f);
             if (!round.Frozen)
             {
                 // The sprint banner is rebuilt only when its second tick changes.
@@ -489,7 +455,8 @@ namespace ADayAtTheZoo.Monkeys.Care
             for (int i = 0; i < stars.Length; i++)
             {
                 bool earned = i < round.Stars;
-                stars[i].color = earned ? Color.white : new Color(.84f, .87f, .87f, .55f);
+                stars[i].sprite = earned ? resultStarSprite : resultEmptyStarSprite;
+                stars[i].color = Color.white;
             }
             starHint.text = round.Stars >= CareRound.MaxStars
                 ? "PERFECT! ALL STARS EARNED"
@@ -513,13 +480,9 @@ namespace ADayAtTheZoo.Monkeys.Care
             label.text = value;
         }
 
-        void MoveStar(float ratio)
+        void MoveStar()
         {
-            if (!starBadge) return;
-            const float margin = 60f;
-            float x = Mathf.Lerp(trackLeft, trackRight, Mathf.Clamp01(ratio));
-            x = Mathf.Clamp(x, trackLeft + margin, trackRight - margin);
-            starBadge.anchoredPosition = new Vector2(x, trackCenterY);
+            if (starFollower) starFollower.Follow();
         }
 
         // Last-twenty-seconds copy: state the exact remaining goal so the player
@@ -560,3 +523,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
     }
 }
+
+
+
+

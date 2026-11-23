@@ -8,7 +8,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         readonly MonkeyCareSession session;
         readonly RectTransform root;
         readonly RectTransform bagButton;
-        readonly Image selector, bananaIcon;
+        readonly Image selector, bananaIcon, confirmKey, backKey, bagKeyBackdrop;
         readonly Text count, status, confirmButtonLabel, backButtonLabel, actionLabel, bagButtonLabel;
         // Once the player has picked a banana the first time, the glove keeps
         // feeding itself: every throw is followed by a fresh banana and a
@@ -30,49 +30,37 @@ namespace ADayAtTheZoo.Monkeys.Care
             group.interactable = false;
             group.blocksRaycasts = false;
 
-            var background = CareUi.Image("Backpack UI", root, CareUiSkin.BackpackPanel,
-                new Vector2(760, 801), Vector2.zero);
+            var background = CareUi.Image("Backpack UI", root, CareUiSkin.Art("panel_bag"),
+                new Vector2(760, 760), new Vector2(0, -20));
             background.preserveAspect = true;
-            background.raycastTarget = false;
-
-            // The supplied BAG artwork contains baked lettering. The ribbon keeps
-            // the title sharp and consistent with the rest of the English HUD.
-            CareUiSkin.AddSliced(root, "Backpack title ribbon", CareUiSkin.Header,
-                new Vector2(320, 78), new Vector2(0, 174), Color.white);
-            CareRoundView.Label("Backpack title", root, "BAG",
-                new Vector2(300, 72), new Vector2(0, 174), 54,
-                TextAnchor.MiddleCenter, Color.white);
-
-            selector = CareUiSkin.AddSliced(root, "Selected slot glow", CareUiSkin.YellowButton,
-                new Vector2(146, 146), new Vector2(-241, 109),
-                new Color(1f, .82f, .24f, .48f));
+            CareUiSkin.Add(root, "Backpack hero icon", CareUiSkin.Art("icon_backpack"),
+                new Vector2(180, 180), new Vector2(0, 310), Color.white).preserveAspect = true;
+            CareRoundView.Label("Backpack title", root, "BAG", new Vector2(225, 72),
+                new Vector2(0, 205), 66, TextAnchor.MiddleCenter, new Color(.47f, .25f, .12f));
+            for (int row = 0; row < 3; row++)
+                for (int column = 0; column < 5; column++)
+                    CareUiSkin.Add(root, "Backpack slot " + (row * 5 + column), CareUiSkin.Art("slot_empty"),
+                        new Vector2(114, 114), new Vector2(-248 + column * 124, 75 - row * 124), Color.white);
+            selector = CareUiSkin.Add(root, "Selected slot glow", CareUiSkin.Art("slot_selected"),
+                new Vector2(114, 114), new Vector2(-248, 75), Color.white);
             selector.gameObject.SetActive(false);
-
-            bananaIcon = CareUi.Image("Banana item", root, CareUiSkin.BackpackBanana,
-                new Vector2(112, 112), new Vector2(-241, 109));
+            bananaIcon = CareUi.Image("Banana item", root, CareUiSkin.Art("icon_banana"),
+                new Vector2(99, 99), new Vector2(-248, 75));
             bananaIcon.preserveAspect = true;
-            bananaIcon.raycastTarget = false;
-
-            var countBadge = CareUi.Image("Banana count badge", root, CareUiSkin.BackpackCount,
-                new Vector2(60, 60), new Vector2(-203, 70));
-            countBadge.preserveAspect = true;
-            countBadge.raycastTarget = false;
-            count = Text("10", countBadge.transform, new Vector2(54, 54), Vector2.zero,
-                31, TextAnchor.MiddleCenter, new Color(.30f, .18f, .08f, 1f));
-
-            CareUiSkin.KeyBadge(root, CareInput.ConfirmLabel, new Vector2(78, 78),
-                new Vector2(-222, -335), out confirmButtonLabel, 46, "Confirm key");
-            actionLabel = Text("SELECT", root, new Vector2(190, 54),
-                new Vector2(-103, -335), 42, TextAnchor.MiddleLeft,
-                new Color(.34f, .20f, .10f, 1f));
-
-            CareUiSkin.KeyBadge(root, CareInput.BackLabel, new Vector2(78, 78),
-                new Vector2(56, -335), out backButtonLabel, 46, "Back key");
-            Text("CLOSE BAG", root, new Vector2(230, 50), new Vector2(220, -335),
-                42, TextAnchor.MiddleLeft, new Color(.34f, .20f, .10f, 1f));
-
-            status = Text(string.Empty, root, new Vector2(650, 54), new Vector2(0, -388),
-                40, TextAnchor.MiddleCenter, new Color(.40f, .25f, .14f, 1f));
+            var countBadge = CareUi.Image("Banana count badge", root, CareUiSkin.Art("star_gold"),
+                new Vector2(48, 48), new Vector2(-215, 42));
+            count = Text("10", countBadge.transform, new Vector2(42, 42), Vector2.zero,
+                27, TextAnchor.MiddleCenter, new Color(.30f, .18f, .08f, 1f));
+            confirmKey = CareUiSkin.KeyBadge(root, CareInput.ConfirmLabel, new Vector2(72, 72),
+                new Vector2(-254, -290), out confirmButtonLabel, 43, "Confirm key");
+            actionLabel = CareRoundView.Label("Backpack action", root, "SELECT", new Vector2(165, 50),
+                new Vector2(-133, -290), 38, TextAnchor.MiddleCenter, new Color(.47f, .25f, .12f));
+            backKey = CareUiSkin.KeyBadge(root, CareInput.BackLabel, new Vector2(72, 72),
+                new Vector2(13, -290), out backButtonLabel, 43, "Back key");
+            CareRoundView.Label("Backpack close caption", root, "CLOSE BAG", new Vector2(234, 50),
+                new Vector2(173, -290), 38, TextAnchor.MiddleCenter, new Color(.47f, .25f, .12f));
+            status = Text(string.Empty, root, new Vector2(650, 42), new Vector2(0, -350),
+                25, TextAnchor.MiddleCenter, new Color(.40f, .25f, .14f, 1f));
 
             // The bag entry button never disappears once the round allows it:
             // the old "gone for good after the first selection" behaviour read
@@ -85,8 +73,8 @@ namespace ADayAtTheZoo.Monkeys.Care
                 // it reads as part of the flat HUD chrome.
                 var flatRoot = CareUi.OverlayRoot("Care PC Bag Root", 55);
                 bagButton = CareUi.Plate("Care Backpack HUD", flatRoot,
-                    new Vector2(92, 44), new Vector2(400, 240),
-                    new Vector2(0f, 0f), new Vector2(0f, 0f));
+                    new Vector2(-35, -45), new Vector2(190, 220),
+                    new Vector2(1f, 1f), new Vector2(1f, 1f));
                 // The corner entry used to be scaled to .72 of an already small
                 // plate, which left the bag icon at roughly 3.5% of the screen
                 // width. .9 with the larger plate keeps it a comfortable,
@@ -96,20 +84,27 @@ namespace ADayAtTheZoo.Monkeys.Care
             else
             {
                 bagButton = CareUi.Canvas("Care Backpack HUD", head,
-                    new Vector3(-.77f, -.46f, 1.18f), .48f, new Vector2(400, 240));
+                    new Vector3(.73f, .26f, 1.18f), .20f, new Vector2(400, 240));
             }
-            CareUiSkin.Add(bagButton, "Bag icon", CareUiSkin.BackpackIcon,
-                new Vector2(180, 180), new Vector2(-64, 24), Color.white);
+            CareUiSkin.Add(bagButton, "Bag icon", CareUiSkin.Art("icon_backpack"),
+                new Vector2(180, 180), new Vector2(0, 10), Color.white);
             // A thin white ring under the key cap separates it from the brown
             // bag artwork and the grass behind it (the badge used to sit on a
             // dark translucent plate that read as a muddy halo).
             CareUiSkin.Add(bagButton, "Bag key ring", CareUiSkin.KeyCapSprite,
-                new Vector2(88, 88), new Vector2(30, -58), new Color(1f, 1f, 1f, .96f));
-            var bagBadge = CareUiSkin.KeyBadge(bagButton, CareInput.BackLabel, new Vector2(74, 74),
-                new Vector2(30, -58), out bagButtonLabel, 52, "Bag key");
+                new Vector2(88, 88), new Vector2(0, -82), Color.clear);
+            var bagBadge = bagKeyBackdrop = CareUiSkin.KeyBadge(bagButton, CareInput.BackLabel, new Vector2(74, 74),
+                new Vector2(0, -82), out bagButtonLabel, 52, "Bag key");
             // Draw the cap above the icon so the badge never looks clipped.
+            bagBadge.sprite = CareUiSkin.Art("bag_key_red");
+            bagButtonLabel.font = Resources.Load<Font>("Fonts/Arial-Bold");
+            bagButtonLabel.fontStyle = FontStyle.Normal;
             bagBadge.transform.SetAsLastSibling();
 
+            count.name = "Backpack quantity";
+            status.name = "Backpack status";
+            CareUiCustomization.Bind("Backpack", root);
+            CareUiCustomization.Bind("Bag entry", bagButton);
             root.gameObject.SetActive(false);
             bagButton.gameObject.SetActive(false);
             Refresh(owner.Round);
@@ -123,13 +118,14 @@ namespace ADayAtTheZoo.Monkeys.Care
             if (bagButton.gameObject.activeSelf != showBagButton)
                 bagButton.gameObject.SetActive(showBagButton);
             bagButtonLabel.text = CareInput.BackLabel;
+            bagKeyBackdrop.sprite = CareUiSkin.Art("bag_key_red");
             bool canOpen = mayOpen;
             if (input.BWasPressed && (IsOpen || canOpen)) Toggle(round, canOpen);
             if (!IsOpen) return;
             Refresh(round);
             selector.gameObject.SetActive(BananaSelected);
             float pulse = .38f + .18f * (.5f + .5f * Mathf.Sin(Time.unscaledTime * 4f));
-            selector.color = new Color(1f, .78f, .18f, pulse);
+            selector.color = new Color(1f, 1f, 1f, .75f + pulse * .25f);
 
             if (!input.AWasPressed) return;
             if (BananaSelected)
@@ -171,6 +167,7 @@ namespace ADayAtTheZoo.Monkeys.Care
         public void ShowHud()
         {
             bagButtonLabel.text = CareInput.BackLabel;
+            bagKeyBackdrop.sprite = CareUiSkin.Art("bag_key_red");
             bagButton.gameObject.SetActive(true);
         }
 
@@ -226,6 +223,8 @@ namespace ADayAtTheZoo.Monkeys.Care
             count.text = bananas.ToString();
             confirmButtonLabel.text = CareInput.ConfirmLabel;
             backButtonLabel.text = CareInput.BackLabel;
+            confirmKey.gameObject.SetActive(true);
+            backKey.gameObject.SetActive(true);
             actionLabel.text = BananaSelected ? "CANCEL" : "SELECT";
             selector.gameObject.SetActive(BananaSelected);
             status.text = BananaSelected
@@ -247,7 +246,7 @@ namespace ADayAtTheZoo.Monkeys.Care
             var label = rect.gameObject.AddComponent<Text>();
             label.font = CareFont.LoadReadable();
             label.fontSize = fontSize;
-            label.fontStyle = FontStyle.Bold;
+            label.fontStyle = FontStyle.Normal;
             label.alignment = alignment;
             label.color = color;
             label.raycastTarget = false;
@@ -256,3 +255,5 @@ namespace ADayAtTheZoo.Monkeys.Care
         }
     }
 }
+
+

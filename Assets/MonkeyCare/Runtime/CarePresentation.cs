@@ -184,19 +184,14 @@ namespace ADayAtTheZoo.Monkeys.Care
             // monkey's head whenever the anchor hugged the skull.
             Root.pivot = new Vector2(.5f, 0f);
             panel = CareUi.Image("Panel", Root, value.stamina, new Vector2(640, 290), Vector2.zero);
-            // Cover the baked English title and the old white separator so the
-            // gameplay caption can switch between patience and satisfaction in
-            // Chinese while keeping the original card's outer frame.
-            CareUi.Image("Localized content", Root, null, new Vector2(594, 268),
-                new Vector2(0, -10)).color = new Color(1f, .972f, .91f, 1f);
-            // Bigger and never best-fit: a 31px caption shrunk to ~20px inside
-            // its 420px slot re-sampled into a fuzzy word over the cream plate.
+            // The panel artwork already contains its title; keep the live label hidden.
             caption = CareRoundView.Label("Panel title", Root, "STAMINA",
                 new Vector2(470, 68), new Vector2(0, 77), 40,
                 TextAnchor.MiddleCenter, new Color(.36f, .20f, .24f, 1f));
             caption.resizeTextForBestFit = false;
             caption.horizontalOverflow = HorizontalWrapMode.Overflow;
             caption.verticalOverflow = VerticalWrapMode.Overflow;
+            caption.enabled = false;
             track = CareUi.Image("Track", Root, value.track, new Vector2(490, 85), new Vector2(30, -43)).rectTransform;
             logo = CareUi.Image("Logo", Root, value.staminaLogo, new Vector2(122, 122), new Vector2(-210, -43));
             Show(false, 1, 0);
