@@ -7,7 +7,7 @@
 - Unity Editor：`6000.3.23f1`
 - Asset Serialization：Force Text
 - 版本控制：只提交 `Assets/`、`Packages/` 和 `ProjectSettings/` 等源文件
-- 主入口场景：`Assets/Environment Aseets/01_HighlandLake_可玩场景/Scenes/HighlandLake_Backup_2026-11-03.unity`
+- 主入口场景：`Assets/Environment Aseets/01_HighlandLake_可玩场景/Scenes/HighlandLake_Backup_2026-11-23.unity`（2026-11-03 那份保留为上一版存档）
 - 辅助场景：`Assets/Scenes/Monekey Mountain.unity`
 
 ## 首次打开
@@ -16,7 +16,7 @@
 2. 克隆本仓库。
 3. 在 Unity Hub 中添加仓库根目录。
 4. 使用 Unity `6000.3.23f1` 打开项目，等待 Package Manager 和资源导入完成。
-5. 打开主入口场景 `Assets/Environment Aseets/01_HighlandLake_可玩场景/Scenes/HighlandLake_Backup_2026-11-03.unity` 并运行游戏。
+5. 打开主入口场景 `Assets/Environment Aseets/01_HighlandLake_可玩场景/Scenes/HighlandLake_Backup_2026-11-23.unity` 并运行游戏。
 6. 如需检查 Monekey Mountain 场景，可打开 `Assets/Scenes/Monekey Mountain.unity`。
 
 如果 Package Manager 提示缺少包，请在 Unity 中执行 **Window > Package Manager**，等待自动恢复；仍缺少时请把错误信息发到协作群。
