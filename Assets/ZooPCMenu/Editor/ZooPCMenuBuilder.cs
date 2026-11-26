@@ -12,6 +12,7 @@ namespace ADayAtTheZoo.PC.Editor
     public static class ZooPCMenuBuilder
     {
         const string Root="Assets/ZooPCMenu/";
+        const string PreviewDirectory="Builds/PCMenuPolished";
         const string SourceScene="Assets/Environment Aseets/01_HighlandLake_可玩场景/Scenes/HighlandLake_Backup_2026-11-23.unity";
         [MenuItem("Zoo/PC Menu/Rebuild dedicated PC scenes")]
         public static void Setup()
@@ -21,8 +22,9 @@ namespace ADayAtTheZoo.PC.Editor
             assets.cover=Texture("MenuCover");assets.paper=Texture("JournalPaper");assets.journalTitle=Texture("JournalTitle");assets.journalCard=Texture("JournalCard");
             assets.wood=AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/MonkeyCare/Resources/Farm/MarketWood.png");
             assets.bookPrefab=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/EndlessBook/Book/Prefabs/Book.prefab");
-            assets.headingFont=AssetDatabase.LoadAssetAtPath<Font>("Assets/MonkeyCare/Resources/Fonts/Fredoka-SemiBold.ttf");
-            assets.bodyFont=AssetDatabase.LoadAssetAtPath<Font>("Assets/MonkeyCare/Resources/Fonts/Arial-Bold.ttf");
+            assets.headingFont=AssetDatabase.LoadAssetAtPath<Font>(Root+"Art/Fonts/LilitaOne-Regular.ttf");
+            assets.bodyFont=AssetDatabase.LoadAssetAtPath<Font>("Assets/MonkeyCare/Resources/Fonts/Fredoka-SemiBold.ttf");
+            assets.noteFont=AssetDatabase.LoadAssetAtPath<Font>(Root+"Art/Fonts/Caveat-Variable.ttf");
             assets.pageTurn=AssetDatabase.LoadAssetAtPath<AudioClip>(Root+"Art/PageTurn.wav");
             foreach(var name in new[]{"MenuCover","JournalPaper","JournalTitle","JournalCard"})
             {
@@ -77,7 +79,7 @@ namespace ADayAtTheZoo.PC.Editor
         public static void Build()
         {
             var assets=Resources.Load<ZooMenuAssets>("ZooPCMenu/MenuAssets");
-            Directory.CreateDirectory("Builds/PCMenu");
+            Directory.CreateDirectory(PreviewDirectory);
             var xr=XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.Standalone);
             bool xrAuto=xr&&xr.InitManagerOnStart;bool native=PlayerSettings.defaultIsNativeResolution;
             var mode=PlayerSettings.fullScreenMode;int width=PlayerSettings.defaultScreenWidth,height=PlayerSettings.defaultScreenHeight;
@@ -88,7 +90,7 @@ namespace ADayAtTheZoo.PC.Editor
                 PlayerSettings.defaultIsNativeResolution=false;PlayerSettings.fullScreenMode=FullScreenMode.Windowed;PlayerSettings.defaultScreenWidth=1600;PlayerSettings.defaultScreenHeight=900;
                 using(var shaders=new ZooPCShaderBuildScope())
                 {
-                    var report=BuildPipeline.BuildPlayer(new BuildPlayerOptions{scenes=new[]{assets.menuScene,assets.tutorialScene},locationPathName="Builds/PCMenu/A-Day-At-The-Zoo.exe",target=BuildTarget.StandaloneWindows64,options=BuildOptions.None});
+                    var report=BuildPipeline.BuildPlayer(new BuildPlayerOptions{scenes=new[]{assets.menuScene,assets.tutorialScene},locationPathName=PreviewDirectory+"/A-Day-At-The-Zoo.exe",target=BuildTarget.StandaloneWindows64,options=BuildOptions.None});
                     if(report.summary.result!=BuildResult.Succeeded)throw new Exception("PC build failed: "+report.summary.result);
                 }
             }

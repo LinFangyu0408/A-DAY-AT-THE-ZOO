@@ -1,0 +1,61 @@
+PASS: Menu booted
+PASS: Craft logo and fabric UI art are bound
+PASS: Reference-menu display font is used
+PASS: Fabric button responds to hover
+PASS: Button available: Start Game
+PASS: Mouse ray reaches: Start Game
+PASS: Start opens Day 01
+PASS: Button available: Next day
+PASS: Mouse ray reaches: Next day
+PASS: Forward page turn finished on Day 02
+PASS: Day 02 cannot load a level
+PASS: Button available: Previous day
+PASS: Mouse ray reaches: Previous day
+PASS: Backward page turn restores Day 01
+PASS: Button available: Animals tab
+PASS: Mouse ray reaches: Animals tab
+PASS: Animals: exactly one discovered type
+PASS: Animals: first-level model portrait is available
+PASS: Animals: unknown entries hide names and appearances
+PASS: Button available: Facilities tab
+PASS: Mouse ray reaches: Facilities tab
+PASS: Facilities: exactly one discovered type
+PASS: Facilities: first-level model portrait is available
+PASS: Facilities: unknown entries hide names and appearances
+PASS: Button available: Back to menu
+PASS: Mouse ray reaches: Back to menu
+PASS: Button available: Continue
+PASS: Mouse ray reaches: Continue
+PASS: Continue opens the first log entry
+PASS: Button available: Journal settings
+PASS: Mouse ray reaches: Journal settings
+PASS: Volume applies immediately
+PASS: Button available: Done
+PASS: Mouse ray reaches: Done
+PASS: Button available: Journal settings
+PASS: Mouse ray reaches: Journal settings
+PASS: Settings survive closing and reopening
+PASS: Button available: Reduced motion
+PASS: Mouse ray reaches: Reduced motion
+PASS: Reduced motion preference enabled
+PASS: Button available: Done
+PASS: Mouse ray reaches: Done
+PASS: Reduced motion turns pages immediately
+PASS: Button available: Journal settings
+PASS: Mouse ray reaches: Journal settings
+PASS: Button available: Reduced motion
+PASS: Mouse ray reaches: Reduced motion
+PASS: Animated motion restored
+PASS: Button available: Done
+PASS: Mouse ray reaches: Done
+PASS: Button available: Play Day 1
+PASS: Mouse ray reaches: Play Day 1
+PASS: Playable PC tutorial loaded
+PASS: Pause stops the round clock
+PASS: Round remains paused
+PASS: Resume restores the round
+PASS: Retry loads a fresh Day 01
+PASS: Real results screen reached at cutoff
+PASS: Button available: Continue exploring
+PASS: Mouse ray reaches: Continue exploring
+PASS: Results continue returns to Day 01 journal

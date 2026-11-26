@@ -59,11 +59,17 @@ namespace ADayAtTheZoo.PC.Editor
             Time.captureFramerate=30;
             var go=new GameObject("Offscreen validation camera",typeof(Camera));go.transform.SetParent(transform);uiCamera=go.GetComponent<Camera>();uiCamera.enabled=false;uiCamera.transform.position=new Vector3(0,0,-10);uiCamera.cullingMask=1<<29;uiCamera.clearFlags=CameraClearFlags.SolidColor;uiCamera.backgroundColor=ZooMenuUI.Ink;uiCamera.nearClipPlane=.01f;uiCamera.farClipPlane=100;
             target=new RenderTexture(1600,900,24,RenderTextureFormat.ARGB32){antiAliasing=2};target.Create();pixels=new Texture2D(1600,900,TextureFormat.RGB24,false);
-            for(int i=0;i<15;i++)yield return null;
+            for(int i=0;i<45;i++)yield return null;
             var flow=ZooPCFlow.Instance;Require(flow!=null,"Menu booted");
+            Require(flow.assets.titleLogo&&flow.assets.leafButton&&flow.assets.linenButton,"Craft logo and fabric UI art are bound");
+            Require(flow.assets.headingFont.name.Contains("Lilita"),"Reference-menu display font is used");
             Snapshot("01-main-menu");
             if(SessionState.GetBool("ZooMenu.Full",false)){Directory.CreateDirectory(Output+"/frames");record=true;}
-            yield return Frames(65);
+            if(record){var home=flow.UiRoot.Find("Main Menu").gameObject;home.SetActive(false);home.SetActive(true);}
+            yield return Frames(40);
+            EventSystem.current.SetSelectedGameObject(null);Hover("Continue",true);yield return Frames(35);
+            Require(FindButton("Continue").transform.localScale.x>1.02f,"Fabric button responds to hover");Snapshot("12-hover-effect");Hover("Continue",false);
+            yield return Frames(25);Hover("Start Game",true);yield return Frames(30);
             Click("Start Game");yield return Frames(60);Require(flow.VisibleScreen=="Journal"&&flow.Journal.Day==0,"Start opens Day 01");Snapshot("02-journal-day1");
             var page=(RenderTexture)flow.Journal.Book.GetPageData(2).material.mainTexture;var previousRt=RenderTexture.active;RenderTexture.active=page;
             var pagePixels=new Texture2D(page.width,page.height,TextureFormat.RGB24,false);pagePixels.ReadPixels(new Rect(0,0,page.width,page.height),0,0);pagePixels.Apply();File.WriteAllBytes(Output+"/printed-day1.png",pagePixels.EncodeToPNG());Destroy(pagePixels);RenderTexture.active=previousRt;
@@ -71,13 +77,16 @@ namespace ADayAtTheZoo.PC.Editor
             Require(flow.Journal.Day==1&&flow.Journal.Book.CurrentRightPageNumber==4,"Forward page turn finished on Day 02");
             string before=SceneManager.GetActiveScene().path;flow.EnterDay();Require(SceneManager.GetActiveScene().path==before&&!flow.IsLoading,"Day 02 cannot load a level");Snapshot("04-journal-day2");
             yield return Frames(65);Click("Previous day");yield return Frames(50);Require(flow.Journal.Day==0,"Backward page turn restores Day 01");
-            Click("Animals tab");yield return Frames(55);Snapshot("05-animal-guide");yield return Frames(60);
-            Click("Facilities tab");yield return Frames(55);Snapshot("06-facility-guide");yield return Frames(60);
+            Click("Animals tab");yield return Frames(55);ValidateCollection(flow,true);Snapshot("05-animal-collection");yield return Frames(60);
+            Click("Facilities tab");yield return Frames(55);ValidateCollection(flow,false);Snapshot("06-facility-collection");yield return Frames(60);
             Click("Back to menu");yield return Frames(2);Click("Continue");yield return Frames(45);Require(flow.Journal.Day==0&&flow.Journal.Section==0,"Continue opens the first log entry");
             Click("Journal settings");yield return Frames(20);Snapshot("07-settings");
             var slider=FindObjectsByType<Slider>(FindObjectsSortMode.None).First(s=>s.name=="Master volume");slider.value=.47f;
             Require(Mathf.Abs(AudioListener.volume-.47f)<.01f,"Volume applies immediately");Click("Done");yield return Frames(2);Click("Journal settings");yield return Frames(10);
-            Require(Mathf.Abs(FindObjectsByType<Slider>(FindObjectsSortMode.None).First().value-.47f)<.01f,"Settings survive closing and reopening");Click("Done");
+            Require(Mathf.Abs(FindObjectsByType<Slider>(FindObjectsSortMode.None).First().value-.47f)<.01f,"Settings survive closing and reopening");
+            Click("Reduced motion");Require(ZooPCFlow.ReducedMotion,"Reduced motion preference enabled");Click("Done");yield return Frames(2);
+            flow.TurnDay(1);Require(flow.Journal.Book.CurrentRightPageNumber==4&&!flow.Journal.Busy,"Reduced motion turns pages immediately");flow.TurnDay(-1);
+            Click("Journal settings");yield return Frames(2);Click("Reduced motion");Require(!ZooPCFlow.ReducedMotion,"Animated motion restored");Click("Done");
             if(!SessionState.GetBool("ZooMenu.Full",false)){Finish();yield break;}
             yield return Frames(40);Click("Play Day 1");yield return WaitLoad();yield return Frames(100);
             Require(flow.InGameplay&&MonkeyCareSession.Instance!=null,"Playable PC tutorial loaded");Snapshot("08-pc-tutorial");
@@ -97,6 +106,15 @@ namespace ADayAtTheZoo.PC.Editor
             Finish();
         }
         IEnumerator Frames(int n){for(int i=0;i<n;i++)yield return null;}
+        Button FindButton(string name)=>FindObjectsByType<Button>(FindObjectsSortMode.None).FirstOrDefault(b=>b.name==name&&b.isActiveAndEnabled);
+        void Hover(string name,bool inside){var b=FindButton(name);var p=new PointerEventData(EventSystem.current);if(inside)ExecuteEvents.Execute(b.gameObject,p,ExecuteEvents.pointerEnterHandler);else ExecuteEvents.Execute(b.gameObject,p,ExecuteEvents.pointerExitHandler);}
+        void ValidateCollection(ZooPCFlow flow,bool animals)
+        {
+            var entries=flow.Journal.Collection(animals);string label=animals?"Animals":"Facilities";
+            Require(entries!=null&&entries.Length>1&&flow.Journal.DiscoveredCount(animals)==1,label+": exactly one discovered type");
+            Require(entries[0].unlocked&&entries[0].portrait!=null&&entries[0].discoveredDay==1,label+": first-level model portrait is available");
+            Require(entries.Skip(1).All(e=>!e.unlocked&&e.portrait==null&&string.IsNullOrEmpty(e.displayName)),label+": unknown entries hide names and appearances");
+        }
         IEnumerator WaitLoad(){int count=0;do{yield return null;if(++count>18000)throw new Exception("Scene load timeout");}while(ZooPCFlow.Instance.IsLoading);}
         void Require(bool value,string message){if(!value)throw new Exception("VALIDATION FAILED: "+message);checks.Add("PASS: "+message);Debug.Log("[Zoo Menu Validation] PASS: "+message);}
         void Click(string name)

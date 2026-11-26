@@ -8,7 +8,8 @@ namespace ADayAtTheZoo.PC
     public static class ZooMenuUI
     {
         public static readonly Color Ink = Hex("35472B"), Cream = Hex("FFF5D9"), Leaf = Hex("526E3C"), Orange = Hex("D17A42"), Brown = Hex("67452D");
-        public static Font Heading, Body;
+        public static Font Heading, Body, Notes;
+        public static Texture LeafTexture, LinenTexture;
         public static Color Hex(string value) { ColorUtility.TryParseHtmlString("#"+value,out var c); return c; }
         public static RectTransform Rect(string name, Transform parent, float x, float y, float w, float h)
         {
@@ -36,13 +37,41 @@ namespace ADayAtTheZoo.PC
         public static Button Button(string name,Transform parent,string value,float x,float y,float w,float h,Action action,Color? fill=null,int size=32)
         {
             var root=Rect(name,parent,x,y,w,h);
-            Panel("Shadow",root,0,6,w,h,Hex("62452D"),20);
-            var bg=Panel("Face",root,0,0,w,h,fill??Cream,20); bg.raycastTarget=true;
+            root.pivot=Vector2.one*.5f;root.anchoredPosition=new Vector2(x+w*.5f,-y-h*.5f);
+            Graphic bg;
+            if(LeafTexture&&LinenTexture)
+            {
+                bool green=fill.HasValue&&fill.Value.g>=fill.Value.r;
+                var face=Picture("Fabric face",root,green?LeafTexture:LinenTexture,-w*.05f,-h*.25f,w*1.1f,h*1.5f);
+                if(fill.HasValue&&!green)face.color=Color.Lerp(Color.white,fill.Value,.48f);
+                face.raycastTarget=true;bg=face;
+            }
+            else
+            {
+                Panel("Shadow",root,0,6,w,h,Hex("62452D"),20);
+                bg=Panel("Face",root,0,0,w,h,fill??Cream,20);bg.raycastTarget=true;
+            }
             var b=root.gameObject.AddComponent<Button>(); b.targetGraphic=bg;
-            var colors=b.colors; colors.normalColor=Color.white; colors.highlightedColor=Hex("FFE3A6"); colors.selectedColor=Hex("FFE3A6"); colors.pressedColor=Hex("D7B878"); colors.disabledColor=new Color(.65f,.65f,.65f,.75f); colors.fadeDuration=.12f;b.colors=colors;
-            Label("Label",root,value,18,0,w-36,h,size,fill.HasValue?Cream:Ink,TextAnchor.MiddleCenter,true);
+            var colors=b.colors; colors.normalColor=Color.white; colors.highlightedColor=Hex("FFF3CF"); colors.selectedColor=Color.white; colors.pressedColor=Hex("D7B878"); colors.disabledColor=new Color(.65f,.65f,.65f,.7f); colors.fadeDuration=.12f;b.colors=colors;
+            bool dark=fill.HasValue&&fill.Value.g>=fill.Value.r;
+            var label=Label("Label",root,value,35,0,w-70,h,size,dark?Cream:Ink,TextAnchor.MiddleCenter,true);
+            label.gameObject.AddComponent<Shadow>().effectColor=dark?new Color(.13f,.22f,.09f,.5f):new Color(1,1,.85f,.5f);
+            label.GetComponent<Shadow>().effectDistance=new Vector2(0,-1.5f);
             b.onClick.AddListener(()=>{ZooPCFlow.Instance?.Click();action?.Invoke();});
             root.gameObject.AddComponent<ZooButtonMotion>(); return b;
+        }
+        public static Text Handwriting(string name,Transform parent,string value,float x,float y,float w,float h,int size,Color? color=null,TextAnchor align=TextAnchor.MiddleCenter)
+        {
+            var label=Label(name,parent,value,x,y,w,h,size,color??Brown,align);if(Notes)label.font=Notes;return label;
+        }
+        public static ZooGlyphGraphic Glyph(string name,Transform parent,ZooGlyphGraphic.Kind kind,float x,float y,float w,float h,Color color)
+        {
+            var icon=Rect(name,parent,x,y,w,h).gameObject.AddComponent<ZooGlyphGraphic>();icon.kind=kind;icon.color=color;icon.raycastTarget=false;return icon;
+        }
+        public static void Stitches(Transform parent,float x,float y,float w,float h,Color color)
+        {
+            for(float px=x+18;px<x+w-18;px+=17){Panel("Stitch",parent,px,y,8,2,color,1);Panel("Stitch",parent,px,y+h,8,2,color,1);}
+            for(float py=y+15;py<y+h-10;py+=17){Panel("Stitch",parent,x,py,2,8,color,1);Panel("Stitch",parent,x+w,py,2,8,color,1);}
         }
         public static Canvas Canvas(string name,int order=100)
         {
@@ -75,13 +104,25 @@ namespace ADayAtTheZoo.PC
             for(int i=1;i<=count;i++)vh.AddTriangle(0,i,i==count?1:i+1);
         }
     }
-    public sealed class ZooButtonMotion : MonoBehaviour, IPointerEnterHandler,IPointerExitHandler,ISelectHandler,IDeselectHandler
+    public sealed class ZooButtonMotion : MonoBehaviour, IPointerEnterHandler,IPointerExitHandler,ISelectHandler,IDeselectHandler,IPointerDownHandler,IPointerUpHandler
     {
-        bool focus;
-        public void OnPointerEnter(PointerEventData e){focus=true;}
-        public void OnPointerExit(PointerEventData e){focus=false;}
-        public void OnSelect(BaseEventData e){focus=true;}
-        public void OnDeselect(BaseEventData e){focus=false;}
-        void Update(){float scale=focus&&!ZooPCFlow.ReducedMotion?1.025f:1; transform.localScale=Vector3.Lerp(transform.localScale,Vector3.one*scale,1-Mathf.Exp(-20*Time.unscaledDeltaTime));}
+        bool hover,selected,pressed;float pulse;Button button;RectTransform rect;ZooGlyphGraphic[] glints;
+        void Awake(){button=GetComponent<Button>();rect=(RectTransform)transform;glints=new ZooGlyphGraphic[3];for(int i=0;i<3;i++)glints[i]=ZooMenuUI.Glyph("Focus glint",transform,ZooGlyphGraphic.Kind.Sparkle,rect.rect.width*(.13f+i*.34f),i==1?-12:rect.rect.height-10,16,22,new Color(1,.85f,.34f,0));}
+        public void OnPointerEnter(PointerEventData e){hover=true;pulse=1;}
+        public void OnPointerExit(PointerEventData e){hover=false;pressed=false;}
+        public void OnSelect(BaseEventData e){selected=true;pulse=1;}
+        public void OnDeselect(BaseEventData e){selected=false;}
+        public void OnPointerDown(PointerEventData e){pressed=true;}
+        public void OnPointerUp(PointerEventData e){pressed=false;pulse=1;}
+        void OnDisable(){transform.localScale=Vector3.one;transform.localRotation=Quaternion.identity;hover=pressed=selected=false;}
+        void Update()
+        {
+            bool focus=button&&button.interactable&&(hover||selected);float t=Time.unscaledTime;
+            float scale=ZooPCFlow.ReducedMotion?1:pressed?.96f:focus?1.045f:1;
+            transform.localScale=Vector3.Lerp(transform.localScale,Vector3.one*scale,1-Mathf.Exp(-16*Time.unscaledDeltaTime));
+            float tilt=focus&&!ZooPCFlow.ReducedMotion?Mathf.Sin(t*3)*.6f:0;transform.localRotation=Quaternion.Euler(0,0,tilt);
+            pulse=Mathf.Max(0,pulse-Time.unscaledDeltaTime*.8f);
+            for(int i=0;i<glints.Length;i++){float a=focus?(ZooPCFlow.ReducedMotion?.6f:(.25f+.6f*Mathf.Pow(Mathf.Max(0,Mathf.Sin(t*3+i*1.7f)),3))):pulse*.35f;glints[i].color=new Color(1,.85f,.34f,a);}
+        }
     }
 }

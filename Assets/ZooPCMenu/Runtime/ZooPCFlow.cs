@@ -28,6 +28,7 @@ namespace ADayAtTheZoo.PC
         GameObject eventSystem;
         Text loadingText, dayLabel;
         Button next,previous,enter;
+        RectTransform tabMarker;
         AudioSource audioSource;
         AudioClip clickSound;
         string pendingMenu="Home";
@@ -39,6 +40,7 @@ namespace ADayAtTheZoo.PC
             Instance=this; DontDestroyOnLoad(gameObject);
             if(!assets)assets=Resources.Load<ZooMenuAssets>("ZooPCMenu/MenuAssets");
             ZooMenuUI.Heading=assets.headingFont;ZooMenuUI.Body=assets.bodyFont;
+            ZooMenuUI.Notes=assets.noteFont;ZooMenuUI.LeafTexture=assets.leafButton;ZooMenuUI.LinenTexture=assets.linenButton;
             AudioListener.volume=PlayerPrefs.GetFloat("ZooPC.Volume",.8f);
             if(PlayerPrefs.HasKey("ZooPC.Fullscreen"))Screen.fullScreen=PlayerPrefs.GetInt("ZooPC.Fullscreen")==1;
             audioSource=gameObject.AddComponent<AudioSource>();audioSource.playOnAwake=false;audioSource.ignoreListenerPause=true;
@@ -73,28 +75,31 @@ namespace ADayAtTheZoo.PC
         void BuildHome()
         {
             home=ZooMenuUI.Group("Main Menu",UiRoot);
-            Background(home,1);
-            ZooMenuUI.Panel("Edition patch",home,100,98,520,47,ZooMenuUI.Cream,14);
-            ZooMenuUI.Label("Edition",home,"A LITTLE CARE. A BIG ADVENTURE.",117,102,486,38,22,ZooMenuUI.Ink);
-            var title=ZooMenuUI.Label("Game title",home,"A DAY AT\nTHE ZOO",92,154,580,245,94,ZooMenuUI.Cream,TextAnchor.MiddleLeft,true);
-            var outline=title.gameObject.AddComponent<Outline>();outline.effectColor=ZooMenuUI.Ink;outline.effectDistance=new Vector2(3,-3);
-            var shadow=title.gameObject.AddComponent<Shadow>();shadow.effectColor=new Color(.1f,.18f,.08f,.7f);shadow.effectDistance=new Vector2(5,-6);
-            title.lineSpacing=.88f;
-            ZooMenuUI.Panel("Title underline",home,100,414,110,7,ZooMenuUI.Orange,3);
-            var invitation=ZooMenuUI.Label("Invitation",home,"Your first day as a zookeeper awaits.",102,443,540,64,27,ZooMenuUI.Cream);
-            invitation.gameObject.AddComponent<Shadow>().effectColor=ZooMenuUI.Brown;
-            ZooMenuUI.Button("Start Game",home,"START GAME",104,548,500,94,ShowJournal,ZooMenuUI.Leaf,36);
-            ZooMenuUI.Button("Continue",home,"CONTINUE",104,666,500,94,ShowJournal,null,36);
-            ZooMenuUI.Button("Settings",home,"SETTINGS",104,789,238,76,()=>ShowSettings("Home"),null,26);
-            ZooMenuUI.Button("Quit",home,"QUIT",366,789,238,76,ShowQuit,ZooMenuUI.Orange,26);
-            ZooMenuUI.Label("Menu note",home,"ONE LITTLE ZOO  /  ONE NEW ADVENTURE",102,972,690,40,22,ZooMenuUI.Cream);
-            ZooMenuUI.Label("PC edition",home,"PC EDITION  •  DAY 01",1510,985,330,40,22,ZooMenuUI.Cream,TextAnchor.MiddleRight);
+            var background=Background(home,1);
+            var logo=ZooMenuUI.Picture("Handcrafted game title",home,assets.titleLogo,43,43,635,401);
+            ZooMenuUI.Handwriting("Invitation",home,"A little care. A big adventure.",87,430,550,64,43,ZooMenuUI.Cream);
+            for(int side=0;side<2;side++)
+            {
+                float x=125+side*477;ZooMenuUI.Panel("Rope shadow",home,x+4,490,9,353,ZooMenuUI.Brown,4);ZooMenuUI.Panel("Hanging rope",home,x,488,9,353,ZooMenuUI.Hex("DEB77C"),4);
+                for(int y=490;y<839;y+=11){var knot=ZooMenuUI.Panel("Rope twist",home,x-1,y,11,3,ZooMenuUI.Hex("AD8153"),1);knot.rectTransform.localRotation=Quaternion.Euler(0,0,-22);}
+            }
+            var start=ZooMenuUI.Button("Start Game",home,"Start Game",95,523,550,132,ShowJournal,ZooMenuUI.Leaf,44);
+            ZooMenuUI.Glyph("Start paw",start.transform,ZooGlyphGraphic.Kind.Paw,47,48,32,32,ZooMenuUI.Cream);
+            ZooMenuUI.Button("Continue",home,"Continue",98,687,550,126,ShowJournal,null,44);
+            ZooMenuUI.Button("Settings",home,"Settings",100,867,252,89,()=>ShowSettings("Home"),null,31);
+            ZooMenuUI.Button("Quit",home,"Quit Game",377,867,252,89,ShowQuit,ZooMenuUI.Orange,30);
+            ZooMenuUI.Handwriting("Menu note",home,"Every keeper starts with one little day.",92,1000,650,50,33,ZooMenuUI.Cream,TextAnchor.MiddleLeft);
+            ZooMenuUI.Panel("Edition patch",home,1570,980,280,52,new Color(.2f,.29f,.12f,.82f),20);ZooMenuUI.Stitches(home,1580,989,260,31,new Color(1,.92f,.67f,.55f));
+            ZooMenuUI.Label("PC edition",home,"PC EDITION  /  DAY 01",1590,986,240,40,20,ZooMenuUI.Cream,TextAnchor.MiddleCenter,true);
+            home.gameObject.AddComponent<ZooMenuAtmosphere>().Initialize(background.rectTransform,logo.rectTransform);
+            home.gameObject.AddComponent<ZooScreenReveal>();
         }
-        void Background(Transform parent,float brightness)
+        RawImage Background(Transform parent,float brightness)
         {
             var pic=ZooMenuUI.Picture("Zoo morning",parent,assets.cover,0,0,1920,1080,Color.white*brightness);
             ZooMenuUI.Stretch(pic.rectTransform);
             var fitter=pic.gameObject.AddComponent<AspectRatioFitter>();fitter.aspectMode=AspectRatioFitter.AspectMode.EnvelopeParent;fitter.aspectRatio=(float)assets.cover.width/assets.cover.height;
+            return pic;
         }
         void BuildJournal()
         {
@@ -106,15 +111,18 @@ namespace ADayAtTheZoo.PC
             ZooMenuUI.Button("Journal settings",journal,"SETTINGS",1635,42,235,70,()=>ShowSettings("Journal"),null,25);
             Journal=new GameObject("Animated keeper book").AddComponent<ZooJournal>();Journal.transform.SetParent(transform,false);
             Journal.Initialize(assets,journal);
-            ZooMenuUI.Button("Logs tab",journal,"LOGS",64,328,226,98,()=>SelectSection(0),ZooMenuUI.Orange,29);
-            ZooMenuUI.Button("Animals tab",journal,"ANIMALS",64,450,226,98,()=>SelectSection(1),ZooMenuUI.Hex("B38A3C"),29);
-            ZooMenuUI.Button("Facilities tab",journal,"FACILITIES",64,572,226,98,()=>SelectSection(2),ZooMenuUI.Leaf,25);
-            ZooMenuUI.Label("Tabs caption",journal,"KEEPER'S\nFIELD GUIDE",73,709,210,100,23,ZooMenuUI.Cream,TextAnchor.MiddleCenter);
+            ZooMenuUI.Button("Logs tab",journal,"Logs",64,328,226,98,()=>SelectSection(0),ZooMenuUI.Orange,31);
+            ZooMenuUI.Button("Animals tab",journal,"Animals",64,450,226,98,()=>SelectSection(1),ZooMenuUI.Hex("B38A3C"),31);
+            ZooMenuUI.Button("Facilities tab",journal,"Facilities",64,572,226,98,()=>SelectSection(2),ZooMenuUI.Leaf,27);
+            tabMarker=ZooMenuUI.Glyph("Current collection bookmark",journal,ZooGlyphGraphic.Kind.Paw,15,360,35,35,ZooMenuUI.Hex("E5BF64")).rectTransform;
+            ZooMenuUI.Handwriting("Tabs caption",journal,"Little discoveries,\nbig memories.",48,713,250,108,35,ZooMenuUI.Cream);
+            ZooMenuUI.Glyph("Journal paw seal",journal,ZooGlyphGraphic.Kind.Paw,140,851,58,58,new Color(.93f,.79f,.43f,.75f));
             previous=ZooMenuUI.Button("Previous day",journal,"<  PREVIOUS",380,960,265,74,()=>TurnDay(-1),null,26);
             enter=ZooMenuUI.Button("Play Day 1",journal,"BEGIN DAY 01  >",816,945,430,92,EnterDay,ZooMenuUI.Leaf,32);
             next=ZooMenuUI.Button("Next day",journal,"NEXT  >",1454,960,250,74,()=>TurnDay(1),null,26);
             dayLabel=ZooMenuUI.Label("Current entry",journal,"",790,1043,480,32,19,ZooMenuUI.Cream,TextAnchor.MiddleCenter);
             Journal.Changed=RefreshJournal;
+            journal.gameObject.AddComponent<ZooScreenReveal>();
             journal.gameObject.SetActive(false);
         }
         public void ShowHome()
@@ -135,11 +143,12 @@ namespace ADayAtTheZoo.PC
         void RefreshJournal()
         {
             bool logs=Journal.Section==0;
+            if(tabMarker)tabMarker.anchoredPosition=new Vector2(15,-360-Journal.Section*122);
             previous.interactable=logs&&Journal.Day==1&&!Journal.Busy;
             next.interactable=logs&&Journal.Day==0&&!Journal.Busy;
             enter.gameObject.SetActive(logs);enter.interactable=Journal.Day==0&&!Journal.Busy;
             enter.GetComponentInChildren<Text>().text=Journal.Day==0?"BEGIN DAY 01  >":"DAY 02  •  COMING SOON";
-            dayLabel.text=logs?(Journal.Day==0?"DAY 01 / 02  •  MONKEY MEADOW":"DAY 02 / 02  •  NOT YET AVAILABLE"):(Journal.Section==1?"ANIMALS  /  MEET YOUR TROOP":"FACILITIES  /  AROUND THE MEADOW");
+            dayLabel.text=logs?(Journal.Day==0?"DAY 01 / 02  •  MONKEY MEADOW":"DAY 02 / 02  •  NOT YET AVAILABLE"):(Journal.Section==1?"ANIMALS  /  YOUR COLLECTION":"FACILITIES  /  YOUR COLLECTION");
         }
         public void EnterDay()
         {
@@ -183,8 +192,10 @@ namespace ADayAtTheZoo.PC
             var bg=ZooMenuUI.Panel("Dim",modal,0,0,1920,1080,new Color(.08f,.12f,.06f,.8f),0);ZooMenuUI.Stretch(bg.rectTransform);bg.raycastTarget=true;
             ZooMenuUI.Panel("Paper frame",modal,510,190,900,720,ZooMenuUI.Brown,35);
             ZooMenuUI.Panel("Paper",modal,520,200,880,695,ZooMenuUI.Cream,30);
+            ZooMenuUI.Picture("Textured dialog paper",modal,assets.paper,535,215,850,665);
             ZooMenuUI.Label("Dialog title",modal,title,590,243,740,85,49,ZooMenuUI.Ink,TextAnchor.MiddleCenter,true);
             ZooMenuUI.Label("Dialog description",modal,description,595,337,730,90,25,ZooMenuUI.Brown,TextAnchor.MiddleCenter);
+            modal.gameObject.AddComponent<ZooScreenReveal>();
             return modal;
         }
         public void ShowSettings(string from)

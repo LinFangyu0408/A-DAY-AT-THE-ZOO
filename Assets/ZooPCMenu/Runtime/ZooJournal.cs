@@ -98,10 +98,10 @@ namespace ADayAtTheZoo.PC
             if(index==1)DayOne(rect);
             if(index==2)FieldNotes(rect);
             if(index==3)DayTwo(rect);
-            if(index==4)AnimalPortrait(rect);
-            if(index==5)AnimalGuide(rect);
-            if(index==6)FacilityPortrait(rect);
-            if(index==7)FacilityGuide(rect);
+            if(index==4)CollectionPortrait(rect,true);
+            if(index==5)CollectionGrid(rect,true);
+            if(index==6)CollectionPortrait(rect,false);
+            if(index==7)CollectionGrid(rect,false);
             ZooMenuUI.Label("Page number",rect,(index+1).ToString("00"),420,1187,184,46,28,ZooMenuUI.Brown,TextAnchor.MiddleCenter);
             Layer(root,31);
             var cameraGo=new GameObject("Print camera",typeof(Camera));var camera=cameraGo.GetComponent<Camera>();camera.transform.position=new Vector3(0,0,-5);camera.orthographic=true;camera.orthographicSize=.64f;camera.aspect=.8f;camera.nearClipPlane=.1f;camera.farClipPlane=10;camera.clearFlags=CameraClearFlags.SolidColor;camera.backgroundColor=ZooMenuUI.Cream;camera.cullingMask=1<<31;camera.allowHDR=false;
@@ -166,31 +166,54 @@ namespace ADayAtTheZoo.PC
             Paragraph(p,"The next shift is still being prepared.\n\nFor now, return to Day 01 to meet\nthe troop and improve your record.",850,32);
             ZooMenuUI.Label("Locked note",p,"THIS DAY CANNOT BE STARTED YET",102,1110,815,48,27,ZooMenuUI.Brown,TextAnchor.MiddleCenter,true);
         }
-        void AnimalPortrait(Transform p)
+        public ZooCollectionEntry[] Collection(bool animals)=>animals?assets.animals:assets.facilities;
+        public int DiscoveredCount(bool animals){int count=0;foreach(var entry in Collection(animals))if(entry!=null&&entry.unlocked)count++;return count;}
+        void CollectionPortrait(Transform p,bool animals)
         {
-            Eyebrow(p,"ANIMALS  /  FIELD GUIDE");Heading(p,"Meet your\nmonkey troop");Photo(p,370,"Curious faces. Very hungry tummies.");
-            Paragraph(p,"Three monkeys share the meadow.\nLook for their hunger cues and give\neach of them your attention.",850,33);
+            var entries=Collection(animals);ZooCollectionEntry featured=null;
+            foreach(var entry in entries)if(entry!=null&&entry.unlocked){featured=entry;break;}
+            Eyebrow(p,animals?"ANIMALS  /  NO. 001":"FACILITIES  /  NO. 001");
+            if(featured==null){Heading(p,"Still a\nmystery...");ZooMenuUI.Glyph("Undiscovered",p,ZooGlyphGraphic.Kind.Lock,350,500,320,320,ZooMenuUI.Brown);return;}
+            Heading(p,featured.displayName);
+            ZooMenuUI.Handwriting("Collection subtitle",p,"A little discovery, kept forever.",95,285,830,65,39,ZooMenuUI.Brown,TextAnchor.MiddleLeft);
+            ZooMenuUI.Panel("Portrait shadow",p,123,376,780,622,new Color(.29f,.22f,.12f,.18f),15);
+            ZooMenuUI.Panel("Linen portrait mount",p,112,365,780,622,ZooMenuUI.Hex("FFF9E9"),15);
+            ZooMenuUI.Stitches(p,130,384,744,583,ZooMenuUI.Hex("D5C69F"));
+            ZooMenuUI.Panel("Sage portrait field",p,185,407,632,512,ZooMenuUI.Hex("E4E7C7"),220);
+            ZooMenuUI.Glyph("Pressed leaf",p,ZooGlyphGraphic.Kind.Leaf,735,805,90,120,new Color(.37f,.48f,.24f,.2f));
+            ZooMenuUI.Picture("Discovered model",p,featured.portrait,220,380,565,565);
+            ZooMenuUI.Panel("Tape",p,400,348,210,41,new Color(.74f,.6f,.29f,.75f),3);
+            ZooMenuUI.Handwriting("Specimen name",p,featured.subtitle,155,921,690,68,42,ZooMenuUI.Brown);
+            ZooMenuUI.Glyph("Discovery paw",p,ZooGlyphGraphic.Kind.Paw,144,1044,67,67,ZooMenuUI.Leaf);
+            ZooMenuUI.Label("Unlock date",p,"DISCOVERED  /  DAY "+featured.discoveredDay.ToString("00"),238,1044,645,67,32,ZooMenuUI.Leaf,TextAnchor.MiddleLeft,true);
+            ZooMenuUI.Handwriting("Collection signature",p,"Keeper's collection",120,1120,775,55,36,ZooMenuUI.Brown);
         }
-        void AnimalGuide(Transform p)
+        void CollectionGrid(Transform p,bool animals)
         {
-            Eyebrow(p,"CARE NOTES");Heading(p,"Happy monkeys,\nhappy keeper.");
-            Entry(p,"01","Read the signs","A hungry monkey needs a banana.\nKeep an eye on the care prompts.",395);
-            Entry(p,"02","Take your time","Let a feeding finish before moving\non to the next hungry friend.",614);
-            Entry(p,"03","Share the care","Walk around the meadow and\ncheck in with the whole troop.",833);
-            Rule(p,1060);ZooMenuUI.Label("Guide scope",p,"YOUR DAY 01 FIELD GUIDE",100,1090,820,60,27,ZooMenuUI.Leaf,TextAnchor.MiddleCenter,true);
-        }
-        void FacilityPortrait(Transform p)
-        {
-            Eyebrow(p,"FACILITIES  /  FIELD GUIDE");Heading(p,"Everything\na keeper needs");Photo(p,370,"Find your way around the meadow");
-            Paragraph(p,"The meadow is small enough to explore\nand full of places to discover.\nYour supplies are never far away.",850,32);
-        }
-        void FacilityGuide(Transform p)
-        {
-            Eyebrow(p,"AROUND THE MEADOW");Heading(p,"A place for\neverything.");
-            Entry(p,"01","Banana supplies","Return to the supply point when\nyour keeper's bag runs low.",395);
-            Entry(p,"02","Keeper's bag","Open your bag, choose a banana\nand get ready to feed the troop.",614);
-            Entry(p,"03","Monkey habitat","Follow the paths around the island\nto reach each hungry monkey.",833);
-            Rule(p,1060);ZooMenuUI.Label("Guide scope",p,"EXPLORE IT ALL IN DAY 01",100,1090,820,60,27,ZooMenuUI.Leaf,TextAnchor.MiddleCenter,true);
+            Eyebrow(p,"YOUR COLLECTION");Heading(p,animals?"Monkey types":"Equipment");
+            ZooMenuUI.Handwriting("Collection count",p,DiscoveredCount(animals)+" discovered • more stories to come",98,282,824,62,37,ZooMenuUI.Brown,TextAnchor.MiddleLeft);
+            var entries=Collection(animals);
+            for(int i=0;i<entries.Length&&i<6;i++)
+            {
+                var entry=entries[i];bool unlocked=entry!=null&&entry.unlocked;float x=102+(i%2)*418,y=380+(i/2)*246;
+                ZooMenuUI.Panel("Card shadow",p,x+4,y+7,386,220,new Color(.32f,.25f,.14f,.13f),18);
+                ZooMenuUI.Panel("Card border",p,x,y,386,220,unlocked?ZooMenuUI.Leaf:ZooMenuUI.Hex("B9AD8D"),18);
+                ZooMenuUI.Panel("Collection card",p,x+4,y+4,378,212,unlocked?ZooMenuUI.Hex("F7F5DC"):ZooMenuUI.Hex("DDD3B7"),15);
+                if(unlocked)
+                {
+                    ZooMenuUI.Picture("Unlocked entry portrait",p,entry.portrait,x+112,y+8,162,162);
+                    ZooMenuUI.Glyph("Registered paw",p,ZooGlyphGraphic.Kind.Paw,x+20,y+19,34,34,ZooMenuUI.Leaf);
+                    ZooMenuUI.Label("Known type",p,entry.displayName,x+15,y+169,356,40,29,ZooMenuUI.Ink,TextAnchor.MiddleCenter,true);
+                }
+                else
+                {
+                    // Unknown slots deliberately expose neither a future name nor its silhouette.
+                    ZooMenuUI.Glyph("Locked unknown entry",p,ZooGlyphGraphic.Kind.Lock,x+154,y+31,79,89,ZooMenuUI.Hex("9D8B65"));
+                    ZooMenuUI.Label("Unknown type",p,"???",x+15,y+128,356,44,34,ZooMenuUI.Hex("9D8B65"),TextAnchor.MiddleCenter,true);
+                    ZooMenuUI.Label("Locked caption",p,"UNDISCOVERED",x+15,y+178,356,30,20,ZooMenuUI.Hex("9D8B65"),TextAnchor.MiddleCenter,true);
+                }
+            }
+            ZooMenuUI.Handwriting("Collection footer",p,"Some pages are still waiting for their story.",95,1123,830,60,31,ZooMenuUI.Brown);
         }
         static void Layer(GameObject go,int layer){go.layer=layer;foreach(Transform child in go.transform)Layer(child.gameObject,layer);}
         void OnDestroy(){foreach(var rt in paperImages){rt.Release();Destroy(rt);}foreach(var mat in materials)Destroy(mat);if(bookImage){bookImage.Release();Destroy(bookImage);}}
