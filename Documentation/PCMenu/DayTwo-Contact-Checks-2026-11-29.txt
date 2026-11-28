@@ -1,0 +1,59 @@
+PASS: Briefing time never consumes shift time
+PASS: Shift opens with one request
+PASS: Busy phase allows two simultaneous requests
+PASS: Concurrent requests never exceed two
+PASS: Late feeding remains recoverable with one extra second
+PASS: All twenty mixed tasks produce three stars
+PASS: Finished shifts reject inventory and care mutations
+PASS: Untended shift ends at the deadline with zero stars
+PASS: Day 02 is configured without replacing Day 01
+PASS: Button available: Start Game
+PASS: Mouse ray reaches: Start Game
+PASS: Start still opens Day 01
+PASS: Button available: Next day
+PASS: Mouse ray reaches: Next day
+PASS: Button available: Play Day 1
+PASS: Mouse ray reaches: Play Day 1
+PASS: Journal loads the dedicated Day 02 scene
+PASS: Day 02 runs without the Day 01 session
+PASS: Tool artwork and all five animals are bound
+PASS: Button available: Begin Day 02 shift
+PASS: Mouse ray reaches: Begin Day 02 shift
+PASS: Beginning the shift discovers the reusable care tool
+PASS: Three monkeys actually stroll, at gentle walking speeds
+PASS: Two resting monkeys remain in their clearings
+PASS: Walking speed stays between 0.4 and 0.6 metres per second
+PASS: Actual aimed banana throw launched at a roaming monkey
+PASS: Throw consumes exactly one banana
+PASS: Flight arrival and eating animation resolve a real feeding
+PASS: Scratching is rejected outside close range
+PASS: Nearby scratch animation starts
+PASS: Starting a swing does not award a stroke before contact
+PASS: Switching tools cancels a swing without awarding care
+PASS: First nearby scratch stroke accepted
+PASS: Repeated stroke in the same frame is rejected
+PASS: Central claw tip contacts the animated body within 15 millimetres
+PASS: A stroke is awarded only after visible mesh contact
+PASS: Second separate stroke accepted
+PASS: Third separate stroke accepted
+PASS: Scratching and feeding both increase the care score
+PASS: Pause freezes the shift and blocks care actions
+PASS: Pause also freezes all wandering monkeys
+PASS: Restocking is rejected away from the stand
+PASS: Walking to the stand refills the bag
+PASS: Day 02 result saved independently
+PASS: Day 02 does not overwrite Day 01 progress
+PASS: Real playthrough completes all twenty tasks for three stars
+PASS: All ten scratching tasks are resolved by physical claw contact
+PASS: Wandering monkeys stay inside their nearby patrol areas
+PASS: Button available: Day 02 retry
+PASS: Mouse ray reaches: Day 02 retry
+PASS: Retry resets Day 02 without loading Day 01
+PASS: Return opens the Day 02 journal entry
+PASS: Button available: Facilities tab
+PASS: Mouse ray reaches: Facilities tab
+PASS: Facilities reveals the discovered tool and keeps the other slots locked
+PASS: Button available: Play Day 1
+PASS: Mouse ray reaches: Play Day 1
+PASS: Original PC Day 01 still loads from the book
+PASS: Day 01 return route remains on Day 01

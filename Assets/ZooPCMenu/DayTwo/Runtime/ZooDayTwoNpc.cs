@@ -5,7 +5,7 @@ using ADayAtTheZoo.Monkeys.Care;
 
 namespace ADayAtTheZoo.PC
 {
-    public sealed class ZooDayTwoNpc : MonoBehaviour
+    public sealed partial class ZooDayTwoNpc : MonoBehaviour
     {
         public MonkeyNpcAnimator animationDriver;
         public int index;
@@ -16,6 +16,7 @@ namespace ADayAtTheZoo.PC
         RectTransform plate, patienceFill;
         Text request, progress, celebration;
         ZooCareState previous = (ZooCareState)(-1);
+        MonkeyAction previousAction = (MonkeyAction)(-1);
         MonkeyFace face;
         float popupAt;
 
@@ -24,6 +25,7 @@ namespace ADayAtTheZoo.PC
             session = owner; index = number;
             if (!animationDriver) animationDriver = GetComponent<MonkeyNpcAnimator>();
             face = GetComponent<MonkeyFace>();
+            InitializeRoaming();
             var renderers = GetComponentsInChildren<Renderer>();
             if (renderers.Length > 0)
             {
@@ -52,19 +54,24 @@ namespace ADayAtTheZoo.PC
         {
             if (!session || session.Round == null) return;
             var a = session.Round.animals[index];
+            UpdateRoaming(a);
+            var action = IsWalking ? MonkeyAction.Walking : MonkeyAction.StandingIdle;
+            if (!IsWalking && a.state == ZooCareState.Waiting) action = a.need == CareNeed.Hunger ? MonkeyAction.Hungry : MonkeyAction.Scratching;
+            if (a.state == ZooCareState.Eating) action = MonkeyAction.Eating;
+            if (a.state == ZooCareState.Celebrating) action = a.need == CareNeed.Hunger ? MonkeyAction.Happy : MonkeyAction.Cute1;
             if (a.state != previous)
             {
-                var action = MonkeyAction.StandingIdle;
-                if (a.state == ZooCareState.Waiting) action = a.need == CareNeed.Hunger ? MonkeyAction.Hungry : MonkeyAction.Scratching;
-                if (a.state == ZooCareState.Eating) action = MonkeyAction.Eating;
                 if (a.state == ZooCareState.Celebrating)
                 {
-                    action = a.need == CareNeed.Hunger ? MonkeyAction.Happy : MonkeyAction.Cute1;
                     popupAt = Time.time; face?.ShowReaction(action, 3);
                     session.PlayCareSound(a.need == CareNeed.Hunger ? "feedSuccess" : "scratchSuccess", AimPoint);
                 }
-                if (animationDriver) animationDriver.TryPlay(action);
                 previous = a.state;
+            }
+            if (action != previousAction)
+            {
+                if (animationDriver) { animationDriver.TryPlay(action); animationDriver.Animator.speed = IsWalking ? .68f : 1; }
+                previousAction = action;
             }
             bool pending = a.state == ZooCareState.Waiting || a.state == ZooCareState.Eating;
             bool happy = a.state == ZooCareState.Celebrating;

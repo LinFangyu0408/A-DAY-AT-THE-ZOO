@@ -12,7 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0a3d386f75fcc4f4a85a2e157d24b667, type: 3}
   m_Name: DayTwoRules
   m_EditorClassIdentifier: Assembly-CSharp::ADayAtTheZoo.PC.ZooDayTwoRules
-  duration: 120
+  duration: 180
+  monkeyCount: 5
   tasksPerMonkey: 4
   bananaCapacity: 6
   patience: 28
@@ -23,6 +24,6 @@ MonoBehaviour:
   requestGap: 2
   scratchReach: 3
   throwReach: 14
-  oneStar: 4
-  twoStars: 8
-  threeStars: 12
+  oneStar: 7
+  twoStars: 14
+  threeStars: 20

@@ -15,5 +15,6 @@ namespace ADayAtTheZoo.PC
         public string menuScene = "Assets/ZooPCMenu/Scenes/PC_MainMenu.unity";
         public string dayTwoScene = "";
         public Texture2D dayTwoPhoto;
+        public ZooDayTwoRules dayTwoRules;
     }
 }

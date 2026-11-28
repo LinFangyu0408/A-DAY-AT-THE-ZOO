@@ -62,58 +62,74 @@ namespace ADayAtTheZoo.PC.Editor
             var session = FindFirstObjectByType<ZooDayTwoSession>();
             Require(session && session.Round != null && flow.ActiveDay == 2, "Journal loads the dedicated Day 02 scene");
             Require(!FindObjectsByType<MonkeyCareSession>(FindObjectsSortMode.None).Any(s => s.isActiveAndEnabled), "Day 02 runs without the Day 01 session");
-            Require(session.bananaIcon && session.scratcherIcon && session.monkeys.Length == 3, "Tool artwork and all three animals are bound");
+            Require(session.bananaIcon && session.scratcherIcon && session.monkeys.Length == 5, "Tool artwork and all five animals are bound");
             Snapshot("02-day2-briefing"); yield return Frames(80);
             Click("Begin Day 02 shift"); yield return Frames(50);
             Require(session.Round.Started && ZooPCFlow.CollectionUnlocked("back-scratcher"), "Beginning the shift discovers the reusable care tool");
+            var stationaryPositions = session.monkeys.Where(n => !n.roams).Select(n => n.transform.position).ToArray();
+            yield return Frames(110); Snapshot("02b-five-monkeys-strolling");
+            Require(session.monkeys.Count(n => n.roams) == 3 && session.monkeys.Where(n => n.roams).All(n => n.DistanceWalked > .5f), "Three monkeys actually stroll, at gentle walking speeds");
+            Require(session.monkeys.Where(n => !n.roams).Select(n => n.transform.position).SequenceEqual(stationaryPositions), "Two resting monkeys remain in their clearings");
+            Require(session.monkeys.Where(n => n.roams).All(n => n.walkSpeed >= .4f && n.walkSpeed <= .6f), "Walking speed stays between 0.4 and 0.6 metres per second");
             var first = session.monkeys.First(n => session.Round.animals[n.index].state == ZooCareState.Waiting);
-            Aim(session, first); yield return Frames(35); Snapshot("03-hunger-request");
+            yield return Approach(session, first, 7); Aim(session, first); yield return Frames(35); Snapshot("03-hunger-request");
             Debug.Log("[Day 02 aim probe] " + session.playerCamera.transform.position + " -> " + first.AimPoint + " target=" + session.Target + " ray hits=" + string.Join("; ", Physics.RaycastAll(session.playerCamera.transform.position, (first.AimPoint-session.playerCamera.transform.position).normalized, Vector3.Distance(session.playerCamera.transform.position,first.AimPoint),~0,QueryTriggerInteraction.Ignore).Select(h=>h.collider.name+" parent="+h.collider.transform.parent?.name+" distance="+h.distance+" npc="+h.collider.GetComponentInParent<ZooDayTwoNpc>())));
             int beforeBananas = session.Round.Bananas;
-            Require(session.TryThrow(first), "Actual aimed banana throw launched");
+            Require(session.TryThrow(first), "Actual aimed banana throw launched at a roaming monkey");
             Require(session.Round.Bananas == beforeBananas - 1, "Throw consumes exactly one banana");
             yield return Frames(150);
             Require(session.Round.Feedings == 1, "Flight arrival and eating animation resolve a real feeding"); Snapshot("04-feeding-success");
             var itchy = session.monkeys.First(n => session.Round.animals[n.index].state == ZooCareState.Waiting && session.Round.animals[n.index].need == CareNeed.Itch);
             session.SelectTool(1); Aim(session, itchy);
             Require(!session.TryScratch(itchy), "Scratching is rejected outside close range");
-            yield return WalkTo(session, itchy.AimPoint, 2.2f); Aim(session, itchy); yield return Frames(20); Snapshot("05-close-scratch");
-            Require(session.TryScratch(itchy), "First nearby scratch stroke accepted");
-            Require(!session.TryScratch(itchy), "Repeated stroke in the same frame is rejected"); yield return Frames(22);
+            yield return Approach(session, itchy, 2.2f); Aim(session, itchy); yield return Frames(20); Snapshot("05-close-scratch");
+            int beforeStrokes = session.Round.animals[itchy.index].strokes;
+            Require(session.TryScratch(itchy), "Nearby scratch animation starts");
+            Require(session.Round.animals[itchy.index].strokes == beforeStrokes, "Starting a swing does not award a stroke before contact");
+            session.SelectTool(0); yield return Frames(25);
+            Require(session.Round.animals[itchy.index].strokes == beforeStrokes && !session.ScratchInProgress, "Switching tools cancels a swing without awarding care");
+            session.SelectTool(1); Require(session.TryScratch(itchy), "First nearby scratch stroke accepted");
+            Require(!session.TryScratch(itchy), "Repeated stroke in the same frame is rejected"); yield return Frames(10);
+            Require(session.ConfirmedScratchContacts == 1 && session.LastScratchContactDistance < .015f, "Central claw tip contacts the animated body within 15 millimetres");
+            Require(session.Round.animals[itchy.index].strokes == beforeStrokes + 1, "A stroke is awarded only after visible mesh contact");
+            Snapshot("05b-claw-touching-body"); yield return Frames(12);
             Require(session.TryScratch(itchy), "Second separate stroke accepted"); yield return Frames(22);
             Require(session.TryScratch(itchy), "Third separate stroke accepted"); yield return Frames(25);
             Require(session.Round.Scratches == 1 && session.Round.Completed == 2, "Scratching and feeding both increase the care score"); Snapshot("06-scratch-success");
+            var pausedPositions = session.monkeys.Select(n => n.transform.position).ToArray();
             flow.ShowPause(); float elapsed = session.Round.Elapsed; yield return Frames(40);
-            Require(Mathf.Approximately(elapsed, session.Round.Elapsed) && !session.TryThrow(first), "Pause freezes the shift and blocks care actions"); Snapshot("07-day2-pause");
+            Require(Mathf.Approximately(elapsed, session.Round.Elapsed) && !session.TryThrow(first), "Pause freezes the shift and blocks care actions"); Require(session.monkeys.Select(n => n.transform.position).SequenceEqual(pausedPositions), "Pause also freezes all wandering monkeys"); Snapshot("07-day2-pause");
             flow.Resume(); yield return Frames(15);
             session.SelectTool(0); Require(!session.TryRestock(), "Restocking is rejected away from the stand");
             yield return WalkTo(session, session.supply.position, 2.7f); session.playerCamera.transform.LookAt(session.supply.position + Vector3.up * 1.3f);
             Require(session.TryRestock() && session.Round.Bananas == session.rules.bananaCapacity, "Walking to the stand refills the bag"); Snapshot("08-restock"); yield return Frames(35);
             if (!SessionState.GetBool("ZooDay2.Full", false)) { Finish(); yield break; }
             int safety = 0;
-            while (!session.Round.Finished && safety++ < 40)
+            while (!session.Round.Finished && safety++ < 100)
             {
                 var pending = session.monkeys.Where(n => session.Round.animals[n.index].state == ZooCareState.Waiting).OrderBy(n => session.Round.animals[n.index].requestedAt).FirstOrDefault();
                 if (!pending) { yield return Frames(15); continue; }
                 var animal = session.Round.animals[pending.index];
                 float range = animal.need == CareNeed.Itch ? 2.2f : 7;
-                yield return WalkTo(session, pending.AimPoint, range); Aim(session, pending); yield return Frames(5);
+                yield return Approach(session, pending, range); Aim(session, pending); yield return Frames(5);
                 if (animal.need == CareNeed.Hunger)
                 {
-                    session.SelectTool(0); if (session.Round.Bananas == 0) { yield return WalkTo(session, session.supply.position, 2.7f); session.TryRestock(); yield return WalkTo(session, pending.AimPoint, 7); Aim(session, pending); }
+                    session.SelectTool(0); if (session.Round.Bananas == 0) { yield return WalkTo(session, session.supply.position, 2.7f); session.TryRestock(); yield return Approach(session, pending, 7); Aim(session, pending); }
                     session.TryThrow(pending); yield return Frames(140);
                 }
                 else
                 {
                     session.SelectTool(1);
-                    for (int i = 0; i < 4 && animal.state == ZooCareState.Waiting && !session.Round.Finished; i++) { session.TryScratch(pending); yield return Frames(20); }
+                    for (int i = 0; i < 4 && animal.state == ZooCareState.Waiting && !session.Round.Finished; i++) { session.TryScratch(pending); yield return Frames(22); }
                 }
             }
             while (!session.Round.Finished) yield return Frames(10);
             yield return Frames(45); Snapshot("09-day2-results");
             Require(ZooPCFlow.DayIsCompleted(2), "Day 02 result saved independently");
             Require(!ZooPCFlow.DayIsCompleted(1), "Day 02 does not overwrite Day 01 progress");
-            Require(session.Round.Feedings > 0 && session.Round.Scratches > 0, "Standalone care loop exercises both task types");
+            Require(session.Round.Feedings == 10 && session.Round.Scratches == 10 && session.Round.Stars == 3, "Real playthrough completes all twenty tasks for three stars");
+            Require(session.ConfirmedScratchContacts >= 30, "All ten scratching tasks are resolved by physical claw contact");
+            Require(session.monkeys.Where(n => n.roams).All(n => Vector3.Distance(n.Home, n.transform.position) < 1.7f), "Wandering monkeys stay inside their nearby patrol areas");
             Click("Day 02 retry"); yield return WaitLoad(); yield return Frames(35);
             session = FindFirstObjectByType<ZooDayTwoSession>(); Require(session && !session.Round.Started && session.Round.Completed == 0 && session.Round.Bananas == session.rules.bananaCapacity, "Retry resets Day 02 without loading Day 01");
             flow.ReturnToJournal(); yield return WaitLoad(); yield return Frames(45);
@@ -136,14 +152,14 @@ namespace ADayAtTheZoo.PC.Editor
             for (int step = 0; step < 1200 && !perfect.Finished; step++)
             {
                 perfect.Tick(.1f);
-                for (int i = 0; i < 3; i++)
+                for (int i = 0; i < perfect.animals.Length; i++)
                 {
                     var a = perfect.animals[i]; if (a.state != ZooCareState.Waiting) continue;
                     if (a.need == CareNeed.Hunger) { if (perfect.Bananas == 0) perfect.Refill(); perfect.SpendBanana(); perfect.ReceiveBanana(i, a.completed); }
                     else perfect.Stroke(i);
                 }
             }
-            Require(perfect.Feedings == 6 && perfect.Scratches == 6 && perfect.Stars == 3, "All twelve mixed tasks produce three stars");
+            Require(perfect.Feedings == 10 && perfect.Scratches == 10 && perfect.Stars == 3, "All twenty mixed tasks produce three stars");
             Require(!perfect.SpendBanana() && !perfect.Refill() && !perfect.Stroke(0), "Finished shifts reject inventory and care mutations");
             var timeout = new ZooDayTwoRound(rules); timeout.Start(); timeout.Tick(rules.duration + 1);
             Require(timeout.Finished && timeout.Elapsed == rules.duration && timeout.Stars == 0, "Untended shift ends at the deadline with zero stars");
@@ -155,6 +171,21 @@ namespace ADayAtTheZoo.PC.Editor
             session.player.transform.rotation = Quaternion.LookRotation(offset);
             session.playerCamera.transform.LookAt(npc.AimPoint);
         }
+        IEnumerator Approach(ZooDayTwoSession session, ZooDayTwoNpc npc, float range)
+        {
+            var controller = session.player.GetComponent<CharacterController>();
+            for (int frames = 0; frames < 500 && !session.Round.Finished; frames++)
+            {
+                Vector3 direction = npc.transform.position - session.player.transform.position; direction.y = 0;
+                if (direction.magnitude <= range && session.ClearPath(session.playerCamera.transform.position, npc.AimPoint, npc)) yield break;
+                if (direction.magnitude <= range) direction = Vector3.Cross(Vector3.up, direction);
+                direction = AvoidObstacle(session, direction);
+                session.player.transform.rotation = Quaternion.LookRotation(direction);
+                session.playerCamera.transform.localRotation = Quaternion.Euler(5, 0, 0);
+                controller.Move(direction.normalized * (4.5f / 30)); yield return null;
+            }
+            if (!session.Round.Finished) throw new Exception("Unable to approach moving monkey: " + npc.name);
+        }
         IEnumerator WalkTo(ZooDayTwoSession session, Vector3 destination, float range)
         {
             var controller = session.player.GetComponent<CharacterController>(); int frames = 0;
@@ -162,10 +193,22 @@ namespace ADayAtTheZoo.PC.Editor
             {
                 Vector3 direction = destination - session.player.transform.position; direction.y = 0;
                 if (direction.magnitude <= range) yield break;
+                direction = AvoidObstacle(session, direction);
                 session.player.transform.rotation = Quaternion.LookRotation(direction); session.playerCamera.transform.localRotation = Quaternion.Euler(5, 0, 0);
                 controller.Move(direction.normalized * (4.5f / 30)); yield return null;
             }
             if (!session.Round.Finished) throw new Exception("Unable to walk to care target: " + destination);
+        }
+        static Vector3 AvoidObstacle(ZooDayTwoSession session, Vector3 direction)
+        {
+            foreach (float angle in new[] { 0f, 45f, -45f, 90f, -90f, 135f, -135f })
+            {
+                var candidate = Quaternion.Euler(0, angle, 0) * direction.normalized;
+                bool blocked = Physics.SphereCastAll(session.player.transform.position + Vector3.up * .85f, .32f, candidate, .65f, ~((1 << 2) | (1 << 5)), QueryTriggerInteraction.Ignore)
+                    .Any(h => !h.transform.IsChildOf(session.player.transform) && h.normal.y < .65f);
+                if (!blocked) return candidate;
+            }
+            return -direction.normalized;
         }
         IEnumerator Frames(int count) { for (int i = 0; i < count; i++) yield return null; }
         IEnumerator WaitLoad() { int count = 0; do { yield return null; if (++count > 18000) throw new Exception("Day 02 scene load timed out"); } while (ZooPCFlow.Instance.IsLoading); }

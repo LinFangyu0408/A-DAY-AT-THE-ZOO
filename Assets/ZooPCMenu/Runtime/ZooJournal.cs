@@ -174,15 +174,16 @@ namespace ADayAtTheZoo.PC
         {
             if(!string.IsNullOrEmpty(assets.dayTwoScene))
             {
+                var rules = assets.dayTwoRules;
                 Eyebrow(p,"DAY 02  /  LAKESIDE CARE");Heading(p,"A little extra\ncare by the lake");
                 Stamp(p,ZooPCFlow.DayIsCompleted(2)?"SHIFT RECORDED  •  READY TO REPLAY":"YOUR NEXT SHIFT",375,ZooMenuUI.Leaf);
-                ZooMenuUI.Label("Round facts",p,"3 MONKEYS     •     2 MINUTES",105,475,815,70,33,ZooMenuUI.Brown,TextAnchor.MiddleCenter,true);
+                ZooMenuUI.Label("Round facts",p,rules.monkeyCount + " MONKEYS     •     " + (rules.duration / 60).ToString("0.#") + " MINUTES",105,475,815,70,33,ZooMenuUI.Brown,TextAnchor.MiddleCenter,true);
                 Rule(p,568);
                 Entry(p,"01","Feed and soothe", "Bring bananas and a back scratcher.\nMatch the tool to each monkey's request.",606);
-                Entry(p,"02","A busier afternoon", "Two requests can arrive together.\nVisit the stand when bananas run low.",780);
+                Entry(p,"02","A busier afternoon", "Some monkeys stroll around the clearing.\nMove close and they will stop for care.",780);
                 Rule(p,976);
-                ZooMenuUI.Label("Day two record",p,ZooPCFlow.DayIsCompleted(2)?"BEST RECORD   "+ZooPCFlow.BestStarsFor(2)+" / 3 STARS":"STAR GOALS   4 / 8 / 12 CARE TASKS",102,1012,815,64,31,ZooMenuUI.Leaf,TextAnchor.MiddleCenter,true);
-                ZooMenuUI.Label("Day two replay",p,"A new tool. The same little troop.",102,1095,815,50,26,ZooMenuUI.Brown,TextAnchor.MiddleCenter);
+                ZooMenuUI.Label("Day two record",p,ZooPCFlow.DayIsCompleted(2)?"BEST RECORD   "+ZooPCFlow.BestStarsFor(2)+" / 3 STARS":"STAR GOALS   " + rules.oneStar + " / " + rules.twoStars + " / " + rules.threeStars + " CARE TASKS",102,1012,815,64,31,ZooMenuUI.Leaf,TextAnchor.MiddleCenter,true);
+                ZooMenuUI.Label("Day two replay",p,"Five little friends. Take care of them all.",102,1095,815,50,26,ZooMenuUI.Brown,TextAnchor.MiddleCenter);
                 return;
             }
             Eyebrow(p,"DAY 02  /  NEXT CHAPTER");Heading(p,"Tomorrow's\nadventure");

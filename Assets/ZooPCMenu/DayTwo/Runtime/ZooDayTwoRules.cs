@@ -7,7 +7,8 @@ namespace ADayAtTheZoo.PC
     [CreateAssetMenu(menuName = "Zoo/Day Two Rules")]
     public sealed class ZooDayTwoRules : ScriptableObject
     {
-        public float duration = 120;
+        public float duration = 180;
+        public int monkeyCount = 5;
         public int tasksPerMonkey = 4;
         public int bananaCapacity = 6;
         public float patience = 28;
@@ -18,7 +19,7 @@ namespace ADayAtTheZoo.PC
         public float requestGap = 2;
         public float scratchReach = 3;
         public float throwReach = 14;
-        public int oneStar = 4, twoStars = 8, threeStars = 12;
+        public int oneStar = 7, twoStars = 14, threeStars = 20;
     }
 
     public enum ZooCareState { Resting, Waiting, Eating, Celebrating, Done }
@@ -35,7 +36,7 @@ namespace ADayAtTheZoo.PC
         }
 
         public readonly ZooDayTwoRules rules;
-        public readonly Animal[] animals = { new Animal(), new Animal(), new Animal() };
+        public readonly Animal[] animals;
         public float Elapsed { get; private set; }
         public int Bananas { get; private set; }
         public int Feedings { get; private set; }
@@ -51,7 +52,12 @@ namespace ADayAtTheZoo.PC
         int cursor = -1;
         float nextRequest = 1;
 
-        public ZooDayTwoRound(ZooDayTwoRules settings) { rules = settings; Bananas = rules.bananaCapacity; }
+        public ZooDayTwoRound(ZooDayTwoRules settings)
+        {
+            rules = settings; Bananas = rules.bananaCapacity;
+            animals = new Animal[Mathf.Max(1, rules.monkeyCount)];
+            for (int i = 0; i < animals.Length; i++) animals[i] = new Animal();
+        }
         public bool Start() { if (Started) return false; Started = true; return true; }
         public int StrokeGoal(Animal animal) => rules.scratchStrokes + (animal.late ? 1 : 0);
         public float FeedGoal(Animal animal) => rules.feedSeconds + (animal.late ? 1 : 0);

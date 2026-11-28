@@ -46,12 +46,14 @@ namespace ADayAtTheZoo.PC.Editor
             var session = root.AddComponent<ZooDayTwoSession>();
             var rules = AssetDatabase.LoadAssetAtPath<ZooDayTwoRules>(Root + "Generated/DayTwoRules.asset");
             if (!rules) { rules = ScriptableObject.CreateInstance<ZooDayTwoRules>(); AssetDatabase.CreateAsset(rules, Root + "Generated/DayTwoRules.asset"); }
+            rules.monkeyCount = 5; rules.duration = 180; rules.oneStar = 7; rules.twoStars = 14; rules.threeStars = 20;
+            EditorUtility.SetDirty(rules);
             session.rules = rules; session.bananaPrefab = banana; session.scratcherPrefab = scratcher;
             session.bananaIcon = Resources.Load<Texture2D>("UI/Backpack/banana");
             if (!session.bananaIcon) session.bananaIcon = Resources.Load<Texture2D>("UI/GameUI2/banana");
             session.scratcherIcon = Resources.Load<Texture2D>("UI/Backpack/back_scratcher");
             var player = new GameObject("Day 02 PC keeper", typeof(CharacterController)); player.transform.SetParent(root.transform);
-            player.transform.position = Ground(new Vector3(0, 0, -20)) + Vector3.up * .05f;
+            player.transform.position = Ground(new Vector3(0, 0, -24)) + Vector3.up * .05f;
             var character = player.GetComponent<CharacterController>(); character.height = 1.8f; character.radius = .3f; character.center = Vector3.up * .9f;
             var cameraGo = new GameObject("Day 02 keeper camera", typeof(Camera), typeof(AudioListener)); cameraGo.transform.SetParent(player.transform, false);
             cameraGo.transform.localPosition = Vector3.up * 1.65f; cameraGo.tag = "MainCamera";
@@ -61,11 +63,13 @@ namespace ADayAtTheZoo.PC.Editor
             session.supply = stand;
             var stone = Material("Care yard stone", new Color(.66f, .65f, .51f));
             var wood = Material("Care stand wood", new Color(.46f, .29f, .12f));
-            session.monkeys = new ZooDayTwoNpc[3];
-            var positions = new[] { new Vector3(-5.1f, 0, -16.1f), new Vector3(0, 0, -13.36f), new Vector3(5.8f, 0, -16.3f) };
-            for (int i = 0; i < originalMonkeys.Length; i++)
+            session.monkeys = new ZooDayTwoNpc[rules.monkeyCount];
+            var troop = originalMonkeys.Concat(new[] { UnityEngine.Object.Instantiate(originalMonkeys[0]), UnityEngine.Object.Instantiate(originalMonkeys[2]) }).ToArray();
+            var positions = new[] { new Vector3(-5.1f, 0, -16.1f), new Vector3(0, 0, -13.36f), new Vector3(5.8f, 0, -16.3f), new Vector3(-3.5f, 0, -20), new Vector3(3.8f, 0, -20) };
+            for (int i = 0; i < troop.Length; i++)
             {
-                var old = originalMonkeys[i]; var model = old.gameObject; var animator = old.animator;
+                var old = troop[i]; var model = old.gameObject; var animator = old.animator;
+                model.name = "Day 02 monkey " + (i + 1); model.SetActive(true);
                 var point = old.teleportPoint; if (point) point.gameObject.SetActive(false);
                 UnityEngine.Object.DestroyImmediate(old);
                 foreach (var collider in model.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
@@ -78,6 +82,7 @@ namespace ADayAtTheZoo.PC.Editor
                 animator.runtimeAnimatorController = controller;
                 var driver = model.GetComponent<MonkeyNpcAnimator>(); if (!driver) driver = model.AddComponent<MonkeyNpcAnimator>(); driver.Configure(library); driver.enabled = true;
                 var npc = model.AddComponent<ZooDayTwoNpc>(); npc.animationDriver = driver; session.monkeys[i] = npc;
+                npc.roams = i == 0 || i >= 3; npc.walkSpeed = .45f + i * .025f; npc.roamRadius = i == 0 ? 1.2f : 1.35f;
                 var colliderObject = new GameObject("Day 02 animal body", typeof(CapsuleCollider)); colliderObject.transform.SetParent(model.transform, false);
                 var body = colliderObject.GetComponent<CapsuleCollider>(); body.center = Vector3.up * .75f; body.height = 1.4f; body.radius = .45f;
                 for (int step = 1; step <= 4; step++)
@@ -97,6 +102,7 @@ namespace ADayAtTheZoo.PC.Editor
                 if (light.type == LightType.Directional) { light.color = new Color(1, .94f, .82f); light.intensity = Mathf.Clamp(light.intensity, .9f, 1.2f); }
             var assets = Resources.Load<ZooMenuAssets>("ZooPCMenu/MenuAssets");
             assets.dayTwoScene = Root + "Scenes/PC_DayTwoLakeside.unity";
+            assets.dayTwoRules = rules;
             EditorUtility.SetDirty(assets); AssetDatabase.SaveAssets();
             EditorSceneManager.SaveScene(scene, assets.dayTwoScene);
 
@@ -147,6 +153,17 @@ namespace ADayAtTheZoo.PC.Editor
             foreach (var r in model.GetComponentsInChildren<Renderer>(true)) r.enabled = true;
             var bounds = BoundsOf(wrapper); model.transform.position -= bounds.center;
             float size = Mathf.Max(bounds.size.x, Mathf.Max(bounds.size.y, bounds.size.z)); wrapper.transform.localScale = Vector3.one / Mathf.Max(.001f, size);
+            if (name == "BackScratcher")
+            {
+                // Calibrate against the central metal claw, not the handle pivot.
+                var vertices = wrapper.GetComponentsInChildren<MeshFilter>().SelectMany(m => m.sharedMesh.vertices.Select(v => m.transform.TransformPoint(v))).ToArray();
+                var normalized = BoundsOf(wrapper);
+                var head = vertices.Where(v => v.y > normalized.min.y + normalized.size.y * .8f && Mathf.Abs(v.x - normalized.center.x) < normalized.size.y * .035f).ToArray();
+                float front = head.Min(v => v.z);
+                var tips = head.Where(v => v.z <= front + .008f).ToArray();
+                Vector3 tip = Vector3.zero; foreach (var v in tips) tip += v; tip /= tips.Length;
+                var contact = new GameObject("Scratch contact tip"); contact.transform.SetParent(wrapper.transform); contact.transform.position = tip;
+            }
             SetLayer(wrapper, 2);
             var prefab = PrefabUtility.SaveAsPrefabAsset(wrapper, Root + "Generated/" + name + ".prefab"); UnityEngine.Object.DestroyImmediate(wrapper); return prefab;
         }

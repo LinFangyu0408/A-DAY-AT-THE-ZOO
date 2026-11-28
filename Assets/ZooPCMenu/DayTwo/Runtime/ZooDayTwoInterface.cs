@@ -24,10 +24,10 @@ namespace ADayAtTheZoo.PC
             ZooMenuUI.Label("Day name", hud, "DAY 02 / LAKESIDE CARE", 60, 46, 365, 43, 27, ZooMenuUI.Ink, TextAnchor.MiddleLeft, true);
             paceText = ZooMenuUI.Label("Shift pace", hud, "ONE REQUEST AT A TIME", 60, 96, 365, 32, 20, ZooMenuUI.Brown);
             ZooMenuUI.Panel("Score paper", hud, 550, 30, 820, 122, ZooMenuUI.Cream, 25);
-            scoreText = ZooMenuUI.Label("Care total", hud, "CARE 0 / 12", 578, 44, 755, 42, 30, ZooMenuUI.Ink, TextAnchor.MiddleCenter, true);
+            scoreText = ZooMenuUI.Label("Care total", hud, "CARE 0 / " + Round.Total, 578, 44, 755, 42, 30, ZooMenuUI.Ink, TextAnchor.MiddleCenter, true);
             ZooMenuUI.Panel("Score track", hud, 588, 108, 744, 18, ZooMenuUI.Hex("D7C9A7"), 9);
             scoreFill = ZooMenuUI.Panel("Care progress", hud, 588, 108, 0, 18, ZooMenuUI.Leaf, 9).rectTransform;
-            for (int i = 1; i <= 3; i++) ZooMenuUI.Glyph("Star goal marker", hud, ZooGlyphGraphic.Kind.Sparkle, 578 + 248 * i, 96, 22, 40, ZooMenuUI.Orange);
+            foreach (int goal in new[] { rules.oneStar, rules.twoStars, rules.threeStars }) ZooMenuUI.Glyph("Star goal marker", hud, ZooGlyphGraphic.Kind.Sparkle, 578 + 744f * goal / rules.threeStars, 96, 22, 40, ZooMenuUI.Orange);
             ZooMenuUI.Panel("Clock paper", hud, 1520, 30, 360, 122, ZooMenuUI.Cream, 25);
             clockText = ZooMenuUI.Label("Shift clock", hud, "02:00", 1540, 42, 320, 80, 63, ZooMenuUI.Ink, TextAnchor.MiddleCenter, true);
             reticle = ZooMenuUI.Label("Aim reticle", hud, "+", 936, 516, 48, 48, 39, Color.white, TextAnchor.MiddleCenter, true);
@@ -60,10 +60,10 @@ namespace ADayAtTheZoo.PC
             ZooMenuUI.Panel("Briefing binding", briefing, 408, 155, 1104, 765, ZooMenuUI.Brown, 36);
             ZooMenuUI.Picture("Briefing paper", briefing, ZooPCFlow.Instance.assets.paper, 420, 167, 1080, 741);
             ZooMenuUI.Label("Briefing heading", briefing, "DAY 02  /  LAKESIDE CARE", 490, 200, 940, 85, 53, ZooMenuUI.Ink, TextAnchor.MiddleCenter, true);
-            ZooMenuUI.Handwriting("Briefing invitation", briefing, "More little needs. More ways to help.", 500, 294, 920, 70, 44);
+            ZooMenuUI.Handwriting("Briefing invitation", briefing, "A bigger troop. A gentle afternoon stroll.", 500, 294, 920, 70, 44);
             BriefingTip(briefing, bananaIcon, "01  FEED THE HUNGRY ONES", "Choose banana [1], aim, then click to throw.\nCarry six bananas; restock at the stand with [E].", 400);
-            BriefingTip(briefing, scratcherIcon, "02  A BRAND-NEW CARE TOOL", "Choose scratcher [2] and move close.\nClick three separate strokes to soothe an itchy monkey.", 560);
-            ZooMenuUI.Label("Briefing goal", briefing, "2 MINUTES  •  12 CARE TASKS  •  STAR GOALS 4 / 8 / 12", 485, 722, 950, 50, 29, ZooMenuUI.Leaf, TextAnchor.MiddleCenter, true);
+            BriefingTip(briefing, scratcherIcon, "02  A BRAND-NEW CARE TOOL", "Choose scratcher [2] and move close.\nClick three times; the claw must touch their body.", 560);
+            ZooMenuUI.Label("Briefing goal", briefing, rules.monkeyCount + " MONKEYS  •  " + (rules.duration / 60).ToString("0.#") + " MINUTES  •  STAR GOALS " + rules.oneStar + " / " + rules.twoStars + " / " + rules.threeStars, 485, 722, 950, 50, 29, ZooMenuUI.Leaf, TextAnchor.MiddleCenter, true);
             ZooMenuUI.Button("Begin Day 02 shift", briefing, "LET'S HELP!", 770, 808, 380, 76, StartShift, ZooMenuUI.Leaf, 32);
             ZooMenuUI.Label("Start shortcut", briefing, "SPACE / GAMEPAD A", 810, 932, 300, 40, 21, ZooMenuUI.Cream, TextAnchor.MiddleCenter);
         }
@@ -121,6 +121,7 @@ namespace ADayAtTheZoo.PC
         }
         void LateUpdate()
         {
+            UpdateScratchMotion();
             if (supplyLabel && playerCamera)
             {
                 supplyLabel.position = supply.position + Vector3.up * 1.8f;
@@ -141,7 +142,7 @@ namespace ADayAtTheZoo.PC
                 var star = ZooMenuUI.Rect("Result star " + (i + 1), p, 720 + i * 170, 350, 140, 140).gameObject.AddComponent<Image>();
                 star.sprite = CareUiSkin.Art("star_gold"); star.color = i < Round.Stars ? Color.white : new Color(.55f, .52f, .44f, .45f); star.raycastTarget = false;
             }
-            ZooMenuUI.Label("Task breakdown", p, "FEEDINGS             SCRATCHING             TOTAL CARE\n" + Round.Feedings + " / 6                     " + Round.Scratches + " / 6                     " + Round.Completed + " / " + Round.Total, 560, 520, 800, 115, 29, ZooMenuUI.Ink, TextAnchor.MiddleCenter, true);
+            ZooMenuUI.Label("Task breakdown", p, "FEEDINGS             SCRATCHING             TOTAL CARE\n" + Round.Feedings + " / " + (Round.Total / 2) + "                     " + Round.Scratches + " / " + (Round.Total / 2) + "                     " + Round.Completed + " / " + Round.Total, 560, 520, 800, 115, 29, ZooMenuUI.Ink, TextAnchor.MiddleCenter, true);
             ZooMenuUI.Label("Best stars", p, "BEST RECORD  " + ZooPCFlow.BestStarsFor(2) + " / 3 STARS", 560, 654, 800, 60, 29, ZooMenuUI.Leaf, TextAnchor.MiddleCenter, true);
             ZooMenuUI.Button("Day 02 retry", p, "RETRY DAY 02", 570, 775, 350, 82, () => ZooPCFlow.Instance.RetryDay(), null, 28);
             ZooMenuUI.Button("Day 02 work log", p, "WORK LOG  >", 1000, 775, 350, 82, () => ZooPCFlow.Instance.ReturnToJournal(), ZooMenuUI.Leaf, 28);

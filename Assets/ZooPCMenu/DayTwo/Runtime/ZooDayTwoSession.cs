@@ -27,7 +27,7 @@ namespace ADayAtTheZoo.PC
         readonly Dictionary<string, AudioClip> sounds = new();
         readonly List<BananaFlight> flights = new();
         Vector3 yardCenter;
-        float yardRadius, strokeAt = -100, nextThrow, inputArmedAt;
+        float yardRadius, nextThrow, inputArmedAt;
         bool resultsShown;
         string feedback = "";
         float feedbackUntil;
@@ -50,7 +50,7 @@ namespace ADayAtTheZoo.PC
             yardRadius = Mathf.Max(yardRadius, Vector3.Distance(yardCenter, supply.position) + 3);
             BuildViewModels(); BuildInterface();
             music = gameObject.AddComponent<AudioSource>(); music.playOnAwake = false; music.volume = .35f;
-            music.clip = Resources.Load<AudioClip>("HighlandLakeAudio/music_care");
+            music.clip = Resources.Load<AudioClip>("HighlandLakeAudio/music_care"); music.loop = true;
             foreach (string name in new[] { "feedSuccess", "scratchSuccess", "stroke", "bananaGrab", "scratchGrab", "bite", "jingle_victory_sting" })
                 sounds[name] = Resources.Load<AudioClip>("HighlandLakeAudio/" + name);
             player.inputLocked = true;
@@ -104,6 +104,7 @@ namespace ADayAtTheZoo.PC
         {
             if (!IsRunning) return;
             SelectedTool = Mathf.Clamp(tool, 0, 1);
+            if (SelectedTool != 1) CancelScratch();
             PlayCareSound(SelectedTool == 0 ? "bananaGrab" : "scratchGrab", playerCamera.transform.position);
             EventSystem.current?.SetSelectedGameObject(null);
         }
@@ -123,6 +124,7 @@ namespace ADayAtTheZoo.PC
             bool valid = target && Round.animals[target.index].state == ZooCareState.Waiting && Round.animals[target.index].need == CareNeed.Hunger &&
                 Vector3.Distance(playerCamera.transform.position, target.AimPoint) <= rules.throwReach && ClearPath(playerCamera.transform.position, target.AimPoint, target);
             Vector3 destination = valid ? target.AimPoint : playerCamera.transform.position + playerCamera.transform.forward * 7 - Vector3.up * .9f;
+            if (valid) target.HoldForCare(1.5f);
             var model = Instantiate(bananaPrefab, from, bananaView.transform.rotation);
             float size = .3f; FitModel(model, size);
             flights.Add(new BananaFlight { model = model, origin = from, destination = destination, duration = Mathf.Clamp(Vector3.Distance(from, destination) / 10, .35f, 1), monkey = valid ? target.index : -1, task = valid ? Round.animals[target.index].completed : -1 });
@@ -131,11 +133,12 @@ namespace ADayAtTheZoo.PC
         }
         public bool TryScratch(ZooDayTwoNpc target)
         {
-            if (!IsRunning || SelectedTool != 1 || !target) return false;
+            if (!IsRunning || SelectedTool != 1 || !target || ScratchInProgress) return false;
             if (Vector3.Distance(playerCamera.transform.position, target.AimPoint) > rules.scratchReach) { Notify("MOVE CLOSER TO SCRATCH", 1.4f); return false; }
             if (!ClearPath(playerCamera.transform.position, target.AimPoint, target)) return false;
-            if (!Round.Stroke(target.index)) return false;
-            strokeAt = Time.time; PlayCareSound("stroke", target.AimPoint); return true;
+            var animal = Round.animals[target.index];
+            if (animal.state != ZooCareState.Waiting || animal.need != CareNeed.Itch) return false;
+            return BeginScratch(target);
         }
         public ZooDayTwoNpc AimTarget(Vector3 origin, Vector3 direction)
         {
@@ -162,6 +165,7 @@ namespace ADayAtTheZoo.PC
             for (int i = flights.Count - 1; i >= 0; i--)
             {
                 var f = flights[i]; f.age += delta; float t = Mathf.Clamp01(f.age / f.duration);
+                if (f.monkey >= 0 && monkeys[f.monkey]) f.destination = monkeys[f.monkey].AimPoint;
                 f.model.transform.position = Vector3.Lerp(f.origin, f.destination, t) + Vector3.up * (Mathf.Sin(t * Mathf.PI) * .7f);
                 f.model.transform.Rotate(Vector3.right, delta * 280);
                 if (t < 1) continue;
@@ -177,6 +181,8 @@ namespace ADayAtTheZoo.PC
             bananaView = Instantiate(bananaPrefab, heldRoot); bananaView.transform.localPosition = Vector3.zero; FitModel(bananaView, .21f);
             scratcherView = Instantiate(scratcherPrefab, heldRoot); scratcherView.transform.localPosition = Vector3.zero; FitModel(scratcherView, .48f);
             scratcherView.transform.localRotation = Quaternion.Euler(-15, 0, -30);
+            scratchTip = scratcherView.transform.Find("Scratch contact tip");
+            scratchRestScale = scratcherView.transform.localScale;
             bananaView.transform.localRotation = Quaternion.Euler(10, -35, -30);
             UpdateViewModels();
         }
@@ -191,13 +197,12 @@ namespace ADayAtTheZoo.PC
             bool visible = Round != null && Round.Started && !Round.Finished;
             bananaView.SetActive(visible && SelectedTool == 0 && Round.Bananas > 0);
             scratcherView.SetActive(visible && SelectedTool == 1);
-            float swing = Mathf.Clamp01((Time.time - strokeAt) / .42f);
-            heldRoot.localPosition = new Vector3(.32f, -.28f - Mathf.Sin(swing * Mathf.PI) * .1f, .63f + Mathf.Sin(swing * Mathf.PI) * .12f);
-            heldRoot.localRotation = Quaternion.Euler(Mathf.Sin(swing * Mathf.PI) * 35, 0, 0);
+            if (!visible) CancelScratch();
         }
         void FinishShift()
         {
             resultsShown = true; player.inputLocked = true; music.Stop();
+            CancelScratch();
             ZooPCFlow.SaveDay(2, Round.Stars, Round.Feedings, Round.Scratches);
             foreach (var f in flights) if (f.model) Destroy(f.model); flights.Clear();
             PlayCareSound("jingle_victory_sting", playerCamera.transform.position); ShowResults();
