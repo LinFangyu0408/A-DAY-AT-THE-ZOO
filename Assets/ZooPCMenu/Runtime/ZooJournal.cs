@@ -59,11 +59,15 @@ namespace ADayAtTheZoo.PC
         public void SetVisible(bool value){if(stage)stage.SetActive(value);}
         public void OpenFirstDay()
         {
-            Day=0;Section=0;
+            OpenDay(0);
+        }
+        public void OpenDay(int day)
+        {
+            Day=Mathf.Clamp(day,0,1);Section=0;
             if(book.IsTurningPages)book.StopTurningPages();
-            book.SetState(EndlessBook.StateEnum.OpenMiddle,0);book.SetPageNumber(2);
+            book.SetState(EndlessBook.StateEnum.OpenMiddle,0);book.SetPageNumber(Day==0?2:4);
             // Refresh the day record after returning from an actual completed round.
-            ReplacePage(1);Changed?.Invoke();
+            ReplacePage(1);ReplacePage(3);for(int i=4;i<8;i++)ReplacePage(i);Changed?.Invoke();
         }
         void ReplacePage(int index)
         {
@@ -152,6 +156,14 @@ namespace ADayAtTheZoo.PC
         }
         void FieldNotes(Transform p)
         {
+            if(!string.IsNullOrEmpty(assets.dayTwoScene))
+            {
+                Eyebrow(p,"KEEPER'S FIELD NOTES");Heading(p,"Two ways to\nmake their day.");
+                var photo=ZooMenuUI.Picture("Day two photograph",p,assets.dayTwoPhoto?assets.dayTwoPhoto:assets.levelPhoto,105,390,815,459);
+                ZooMenuUI.Handwriting("Day two photo note",p,"An afternoon beside the lake.",105,858,815,65,39);
+                Paragraph(p,"A banana for a hungry friend.\nA gentle scratch for an itchy one.\nWatch both requests as the shift gets busier.",958,29);
+                return;
+            }
             Eyebrow(p,"FIELD NOTES");Heading(p,"A little better,\nevery day.");
             ZooMenuUI.Picture("Keeper note card",p,assets.journalCard,90,381,840,306);
             ZooMenuUI.Label("Card message",p,"GOOD CARE\nTAKES PRACTICE",145,440,435,145,37,ZooMenuUI.Ink,TextAnchor.MiddleLeft,true);
@@ -160,6 +172,19 @@ namespace ADayAtTheZoo.PC
         }
         void DayTwo(Transform p)
         {
+            if(!string.IsNullOrEmpty(assets.dayTwoScene))
+            {
+                Eyebrow(p,"DAY 02  /  LAKESIDE CARE");Heading(p,"A little extra\ncare by the lake");
+                Stamp(p,ZooPCFlow.DayIsCompleted(2)?"SHIFT RECORDED  •  READY TO REPLAY":"YOUR NEXT SHIFT",375,ZooMenuUI.Leaf);
+                ZooMenuUI.Label("Round facts",p,"3 MONKEYS     •     2 MINUTES",105,475,815,70,33,ZooMenuUI.Brown,TextAnchor.MiddleCenter,true);
+                Rule(p,568);
+                Entry(p,"01","Feed and soothe", "Bring bananas and a back scratcher.\nMatch the tool to each monkey's request.",606);
+                Entry(p,"02","A busier afternoon", "Two requests can arrive together.\nVisit the stand when bananas run low.",780);
+                Rule(p,976);
+                ZooMenuUI.Label("Day two record",p,ZooPCFlow.DayIsCompleted(2)?"BEST RECORD   "+ZooPCFlow.BestStarsFor(2)+" / 3 STARS":"STAR GOALS   4 / 8 / 12 CARE TASKS",102,1012,815,64,31,ZooMenuUI.Leaf,TextAnchor.MiddleCenter,true);
+                ZooMenuUI.Label("Day two replay",p,"A new tool. The same little troop.",102,1095,815,50,26,ZooMenuUI.Brown,TextAnchor.MiddleCenter);
+                return;
+            }
             Eyebrow(p,"DAY 02  /  NEXT CHAPTER");Heading(p,"Tomorrow's\nadventure");
             Stamp(p,"COMING SOON",399,ZooMenuUI.Hex("A29474"));
             ZooMenuUI.Label("Large day",p,"02",210,530,600,250,180,ZooMenuUI.Hex("BEB18F"),TextAnchor.MiddleCenter,true);
@@ -167,12 +192,13 @@ namespace ADayAtTheZoo.PC
             ZooMenuUI.Label("Locked note",p,"THIS DAY CANNOT BE STARTED YET",102,1110,815,48,27,ZooMenuUI.Brown,TextAnchor.MiddleCenter,true);
         }
         public ZooCollectionEntry[] Collection(bool animals)=>animals?assets.animals:assets.facilities;
-        public int DiscoveredCount(bool animals){int count=0;foreach(var entry in Collection(animals))if(entry!=null&&entry.unlocked)count++;return count;}
+        public int DiscoveredCount(bool animals){int count=0;foreach(var entry in Collection(animals))if(entry!=null&&entry.IsUnlocked)count++;return count;}
         void CollectionPortrait(Transform p,bool animals)
         {
             var entries=Collection(animals);ZooCollectionEntry featured=null;
-            foreach(var entry in entries)if(entry!=null&&entry.unlocked){featured=entry;break;}
-            Eyebrow(p,animals?"ANIMALS  /  NO. 001":"FACILITIES  /  NO. 001");
+            foreach(var entry in entries)if(entry!=null&&entry.IsUnlocked)featured=entry;
+            int entryNumber=featured==null?1:System.Array.IndexOf(entries,featured)+1;
+            Eyebrow(p,(animals?"ANIMALS":"FACILITIES")+"  /  NO. "+entryNumber.ToString("000"));
             if(featured==null){Heading(p,"Still a\nmystery...");ZooMenuUI.Glyph("Undiscovered",p,ZooGlyphGraphic.Kind.Lock,350,500,320,320,ZooMenuUI.Brown);return;}
             Heading(p,featured.displayName);
             ZooMenuUI.Handwriting("Collection subtitle",p,"A little discovery, kept forever.",95,285,830,65,39,ZooMenuUI.Brown,TextAnchor.MiddleLeft);
@@ -195,7 +221,7 @@ namespace ADayAtTheZoo.PC
             var entries=Collection(animals);
             for(int i=0;i<entries.Length&&i<6;i++)
             {
-                var entry=entries[i];bool unlocked=entry!=null&&entry.unlocked;float x=102+(i%2)*418,y=380+(i/2)*246;
+                var entry=entries[i];bool unlocked=entry!=null&&entry.IsUnlocked;float x=102+(i%2)*418,y=380+(i/2)*246;
                 ZooMenuUI.Panel("Card shadow",p,x+4,y+7,386,220,new Color(.32f,.25f,.14f,.13f),18);
                 ZooMenuUI.Panel("Card border",p,x,y,386,220,unlocked?ZooMenuUI.Leaf:ZooMenuUI.Hex("B9AD8D"),18);
                 ZooMenuUI.Panel("Collection card",p,x+4,y+4,378,212,unlocked?ZooMenuUI.Hex("F7F5DC"):ZooMenuUI.Hex("DDD3B7"),15);

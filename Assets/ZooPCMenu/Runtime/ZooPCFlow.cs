@@ -20,7 +20,9 @@ namespace ADayAtTheZoo.PC
         public ZooMenuAssets assets;
         public bool IsLoading {get;private set;}
         public bool Paused {get;private set;}
-        public bool InGameplay => SceneManager.GetActiveScene().path==assets.tutorialScene;
+        public bool HasDayTwo => !string.IsNullOrEmpty(assets.dayTwoScene);
+        public int ActiveDay => HasDayTwo && SceneManager.GetActiveScene().path==assets.dayTwoScene ? 2 : 1;
+        public bool InGameplay => SceneManager.GetActiveScene().path==assets.tutorialScene || (HasDayTwo && SceneManager.GetActiveScene().path==assets.dayTwoScene);
         public string VisibleScreen {get;private set;}
         public ZooJournal Journal {get;private set;}
         public RectTransform UiRoot {get;private set;}
@@ -32,6 +34,7 @@ namespace ADayAtTheZoo.PC
         AudioSource audioSource;
         AudioClip clickSound;
         string pendingMenu="Home";
+        int returnDay;
         float previousTimeScale=1;
         Action closeModal;
         void Awake()
@@ -59,9 +62,9 @@ namespace ADayAtTheZoo.PC
         {
             if(scene.path==assets.menuScene)
             {
-                if(pendingMenu=="Journal")ShowJournal();else ShowHome();
+                if(pendingMenu=="Journal")OpenJournal(returnDay);else ShowHome();
             }
-            else if(scene.path==assets.tutorialScene)
+            else if(scene.path==assets.tutorialScene || (HasDayTwo && scene.path==assets.dayTwoScene))
             {
                 EnterGameplay();
             }
@@ -90,7 +93,7 @@ namespace ADayAtTheZoo.PC
             ZooMenuUI.Button("Quit",home,"Quit Game",377,867,252,89,ShowQuit,ZooMenuUI.Orange,30);
             ZooMenuUI.Handwriting("Menu note",home,"Every keeper starts with one little day.",92,1000,650,50,33,ZooMenuUI.Cream,TextAnchor.MiddleLeft);
             ZooMenuUI.Panel("Edition patch",home,1570,980,280,52,new Color(.2f,.29f,.12f,.82f),20);ZooMenuUI.Stitches(home,1580,989,260,31,new Color(1,.92f,.67f,.55f));
-            ZooMenuUI.Label("PC edition",home,"PC EDITION  /  DAY 01",1590,986,240,40,20,ZooMenuUI.Cream,TextAnchor.MiddleCenter,true);
+            ZooMenuUI.Label("PC edition",home,HasDayTwo?"PC EDITION  /  DAYS 01–02":"PC EDITION  /  DAY 01",1590,986,240,40,20,ZooMenuUI.Cream,TextAnchor.MiddleCenter,true);
             home.gameObject.AddComponent<ZooMenuAtmosphere>().Initialize(background.rectTransform,logo.rectTransform);
             home.gameObject.AddComponent<ZooScreenReveal>();
         }
@@ -134,9 +137,13 @@ namespace ADayAtTheZoo.PC
         }
         public void ShowJournal()
         {
+            OpenJournal(0);
+        }
+        void OpenJournal(int day)
+        {
             CloseModal();home.gameObject.SetActive(false);journal.gameObject.SetActive(true);eventSystem.SetActive(true);
             Cursor.lockState=CursorLockMode.None;Cursor.visible=true;VisibleScreen="Journal";
-            Journal.SetVisible(true);Journal.OpenFirstDay();RefreshJournal();Select(enter.gameObject);
+            Journal.SetVisible(true);Journal.OpenDay(day);RefreshJournal();Select(enter.gameObject);
         }
         public void SelectSection(int section){if(!IsLoading)Journal.SelectSection(section);}
         public void TurnDay(int delta){if(!IsLoading)Journal.TurnDay(delta);}
@@ -146,19 +153,18 @@ namespace ADayAtTheZoo.PC
             if(tabMarker)tabMarker.anchoredPosition=new Vector2(15,-360-Journal.Section*122);
             previous.interactable=logs&&Journal.Day==1&&!Journal.Busy;
             next.interactable=logs&&Journal.Day==0&&!Journal.Busy;
-            enter.gameObject.SetActive(logs);enter.interactable=Journal.Day==0&&!Journal.Busy;
-            enter.GetComponentInChildren<Text>().text=Journal.Day==0?"BEGIN DAY 01  >":"DAY 02  •  COMING SOON";
-            dayLabel.text=logs?(Journal.Day==0?"DAY 01 / 02  •  MONKEY MEADOW":"DAY 02 / 02  •  NOT YET AVAILABLE"):(Journal.Section==1?"ANIMALS  /  YOUR COLLECTION":"FACILITIES  /  YOUR COLLECTION");
+            enter.gameObject.SetActive(logs);enter.interactable=(Journal.Day==0||HasDayTwo)&&!Journal.Busy;
+            enter.GetComponentInChildren<Text>().text=Journal.Day==0?"BEGIN DAY 01  >":HasDayTwo?"BEGIN DAY 02  >":"DAY 02  •  COMING SOON";
+            dayLabel.text=logs?(Journal.Day==0?"DAY 01 / 02  •  MONKEY MEADOW":HasDayTwo?"DAY 02 / 02  •  LAKESIDE CARE":"DAY 02 / 02  •  NOT YET AVAILABLE"):(Journal.Section==1?"ANIMALS  /  YOUR COLLECTION":"FACILITIES  /  YOUR COLLECTION");
         }
         public void EnterDay()
         {
-            // Guard the route as well as the visual button. An unfinished day never loads a scene.
-            if(Journal.Section!=0||Journal.Day!=0||Journal.Busy||IsLoading)return;
-            Load(assets.tutorialScene,"Preparing Monkey Meadow...");
+            if(Journal.Section!=0||Journal.Busy||IsLoading||(Journal.Day==1&&!HasDayTwo))return;
+            Load(Journal.Day==0?assets.tutorialScene:assets.dayTwoScene,Journal.Day==0?"Preparing Monkey Meadow...":"Preparing Lakeside Care...");
         }
-        public void ReturnToJournal(){pendingMenu="Journal";Load(assets.menuScene,"Opening your work log...");}
+        public void ReturnToJournal(){returnDay=ActiveDay-1;pendingMenu="Journal";Load(assets.menuScene,"Opening your work log...");}
         public void ReturnToMenu(){pendingMenu="Home";Load(assets.menuScene,"Returning to the zoo gate...");}
-        public void RetryDay(){Load(assets.tutorialScene,"A fresh start for Day 01...");}
+        public void RetryDay(){int day=ActiveDay;Load(day==2?assets.dayTwoScene:assets.tutorialScene,"A fresh start for Day "+day.ToString("00")+"...");}
         public void Load(string scene,string caption)
         {
             if(IsLoading)return;StartCoroutine(LoadRoutine(scene,caption));
@@ -225,7 +231,7 @@ namespace ADayAtTheZoo.PC
             var p=Modal("TAKE A BREATHER","Your shift is paused. The monkeys can wait a moment.");
             VisibleScreen="Pause";eventSystem.SetActive(true);Cursor.lockState=CursorLockMode.None;Cursor.visible=true;
             var resume=ZooMenuUI.Button("Resume",p,"BACK TO WORK",635,460,650,70,Resume,ZooMenuUI.Leaf,29);
-            ZooMenuUI.Button("Retry",p,"RETRY DAY 01",635,553,650,65,()=>ConfirmLeave(true),null,26);
+            ZooMenuUI.Button("Retry",p,"RETRY DAY "+ActiveDay.ToString("00"),635,553,650,65,()=>ConfirmLeave(true),null,26);
             ZooMenuUI.Button("Pause settings",p,"SETTINGS",635,640,650,65,()=>ShowSettings("Pause"),null,26);
             ZooMenuUI.Button("Pause journal",p,"RETURN TO WORK LOG",635,727,650,65,()=>ConfirmLeave(false),null,26);
             closeModal=Resume;Select(resume.gameObject);
@@ -233,7 +239,7 @@ namespace ADayAtTheZoo.PC
         void ConfirmLeave(bool retry)
         {
             var p=Modal(retry?"A FRESH START?":"CLOSE THIS SHIFT?","This round's unfinished progress will not be saved.");
-            ZooMenuUI.Button("Confirm leave",p,retry?"RETRY DAY 01":"RETURN TO WORK LOG",620,520,680,85,retry?(Action)RetryDay:ReturnToJournal,ZooMenuUI.Orange,29);
+            ZooMenuUI.Button("Confirm leave",p,retry?"RETRY DAY "+ActiveDay.ToString("00"):"RETURN TO WORK LOG",620,520,680,85,retry?(Action)RetryDay:ReturnToJournal,ZooMenuUI.Orange,29);
             var cancel=ZooMenuUI.Button("Keep playing",p,"GO BACK",750,660,420,80,ShowPause,null,29);closeModal=ShowPause;Select(cancel.gameObject);
         }
         public void Resume(){CloseModal();Paused=false;Time.timeScale=previousTimeScale;AudioListener.pause=false;eventSystem.SetActive(true);VisibleScreen="Gameplay";}
@@ -254,8 +260,18 @@ namespace ADayAtTheZoo.PC
         public void PaperSound(){if(assets.pageTurn)audioSource.PlayOneShot(assets.pageTurn,.45f);else Click();}
         public static void SaveDay(int stars,int feedings)
         {
-            PlayerPrefs.SetInt("ZooPC.Day1.Completed",1);PlayerPrefs.SetInt("ZooPC.Day1.Stars",Mathf.Max(BestStars,stars));
-            PlayerPrefs.SetInt("ZooPC.Day1.Feedings",Mathf.Max(PlayerPrefs.GetInt("ZooPC.Day1.Feedings",0),feedings));PlayerPrefs.Save();
+            SaveDay(1,stars,feedings,0);
+        }
+        public static int BestStarsFor(int day)=>PlayerPrefs.GetInt("ZooPC.Day"+day+".Stars",0);
+        public static bool DayIsCompleted(int day)=>PlayerPrefs.GetInt("ZooPC.Day"+day+".Completed",0)!=0;
+        public static bool CollectionUnlocked(string id)=>!string.IsNullOrEmpty(id)&&PlayerPrefs.GetInt("ZooPC.Collection."+id,0)!=0;
+        public static void UnlockCollection(string id){if(string.IsNullOrEmpty(id))return;PlayerPrefs.SetInt("ZooPC.Collection."+id,1);PlayerPrefs.Save();}
+        public static void SaveDay(int day,int stars,int feedings,int scratches)
+        {
+            string key="ZooPC.Day"+Mathf.Clamp(day,1,2)+".";
+            PlayerPrefs.SetInt(key+"Completed",1);PlayerPrefs.SetInt(key+"Stars",Mathf.Max(PlayerPrefs.GetInt(key+"Stars",0),Mathf.Clamp(stars,0,3)));
+            PlayerPrefs.SetInt(key+"Feedings",Mathf.Max(PlayerPrefs.GetInt(key+"Feedings",0),feedings));
+            PlayerPrefs.SetInt(key+"Scratches",Mathf.Max(PlayerPrefs.GetInt(key+"Scratches",0),scratches));PlayerPrefs.Save();
         }
         void Select(GameObject target){StartCoroutine(SelectLater(target));}
         IEnumerator SelectLater(GameObject target){yield return null;if(EventSystem.current&&target&&target.activeInHierarchy)EventSystem.current.SetSelectedGameObject(target);}

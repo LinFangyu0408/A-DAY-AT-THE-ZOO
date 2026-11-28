@@ -38,6 +38,7 @@ namespace ADayAtTheZoo.PC.Editor
             var session=UnityEngine.Object.FindFirstObjectByType<MonkeyCareSession>(FindObjectsInactive.Include);
             if(session)session.desktopPreview=true;
             EditorSceneManager.SaveScene(scene,assets.tutorialScene);
+            ZooPCSceneScriptRepair.RemoveEmbeddedPickupMarker(assets.tutorialScene);
             // A real view from the tutorial, used as the journal's location photograph.
             Vector3 photoCenter=Vector3.zero;int monkeyCount=0;
             var idle=AssetDatabase.LoadAssetAtPath<AnimationClip>("Assets/MonkeyCare/Generated/Care_StandingIdle.anim");
@@ -76,10 +77,16 @@ namespace ADayAtTheZoo.PC.Editor
         [MenuItem("Zoo/PC Menu/Open main menu")]
         public static void Open(){EditorSceneManager.OpenScene(Root+"Scenes/PC_MainMenu.unity");}
         [MenuItem("Zoo/PC Menu/Build Windows preview")]
-        public static void Build()
+        public static void Build() => Build(false);
+        [MenuItem("Zoo/PC Menu/Clean build Windows preview")]
+        public static void CleanBuild() => Build(true);
+        static void Build(bool clean)
         {
             var assets=Resources.Load<ZooMenuAssets>("ZooPCMenu/MenuAssets");
-            Directory.CreateDirectory(PreviewDirectory);
+            ZooPCSceneScriptRepair.RemoveEmbeddedPickupMarker(assets.tutorialScene);
+            ZooPCSceneScriptRepair.RemoveEmbeddedPickupMarker(assets.dayTwoScene);
+            string previewDirectory=string.IsNullOrEmpty(assets.dayTwoScene)?PreviewDirectory:"Builds/PCDayTwo";
+            Directory.CreateDirectory(previewDirectory);
             var xr=XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.Standalone);
             bool xrAuto=xr&&xr.InitManagerOnStart;bool native=PlayerSettings.defaultIsNativeResolution;
             var mode=PlayerSettings.fullScreenMode;int width=PlayerSettings.defaultScreenWidth,height=PlayerSettings.defaultScreenHeight;
@@ -90,7 +97,8 @@ namespace ADayAtTheZoo.PC.Editor
                 PlayerSettings.defaultIsNativeResolution=false;PlayerSettings.fullScreenMode=FullScreenMode.Windowed;PlayerSettings.defaultScreenWidth=1600;PlayerSettings.defaultScreenHeight=900;
                 using(var shaders=new ZooPCShaderBuildScope())
                 {
-                    var report=BuildPipeline.BuildPlayer(new BuildPlayerOptions{scenes=new[]{assets.menuScene,assets.tutorialScene},locationPathName=PreviewDirectory+"/A-Day-At-The-Zoo.exe",target=BuildTarget.StandaloneWindows64,options=BuildOptions.None});
+                    var scenes=string.IsNullOrEmpty(assets.dayTwoScene)?new[]{assets.menuScene,assets.tutorialScene}:new[]{assets.menuScene,assets.tutorialScene,assets.dayTwoScene};
+                    var report=BuildPipeline.BuildPlayer(new BuildPlayerOptions{scenes=scenes,locationPathName=previewDirectory+"/A-Day-At-The-Zoo.exe",target=BuildTarget.StandaloneWindows64,options=clean?BuildOptions.CleanBuildCache:BuildOptions.None});
                     if(report.summary.result!=BuildResult.Succeeded)throw new Exception("PC build failed: "+report.summary.result);
                 }
             }
@@ -102,6 +110,7 @@ namespace ADayAtTheZoo.PC.Editor
             Debug.Log("[Zoo PC Menu] Windows preview build succeeded.");
         }
         public static void BuildBatch(){Build();EditorApplication.Exit(0);}
+        public static void CleanBuildBatch(){CleanBuild();EditorApplication.Exit(0);}
         public static void ValidateAndBuild(){SessionState.SetBool("ZooMenu.BuildAfter",true);ZooPCMenuValidation.Full();}
         [InitializeOnLoadMethod]
         static void ContinueValidatedBuild()

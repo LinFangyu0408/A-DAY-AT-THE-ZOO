@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a3d386f75fcc4f4a85a2e157d24b667, type: 3}
+  m_Name: DayTwoRules
+  m_EditorClassIdentifier: Assembly-CSharp::ADayAtTheZoo.PC.ZooDayTwoRules
+  duration: 120
+  tasksPerMonkey: 4
+  bananaCapacity: 6
+  patience: 28
+  feedSeconds: 3.5
+  scratchStrokes: 3
+  strokeInterval: 0.45
+  secondRequestAt: 45
+  requestGap: 2
+  scratchReach: 3
+  throwReach: 14
+  oneStar: 4
+  twoStars: 8
+  threeStars: 12

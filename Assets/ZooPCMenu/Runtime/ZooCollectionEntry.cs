@@ -12,5 +12,6 @@ namespace ADayAtTheZoo.PC
         public Texture2D portrait;
         public bool unlocked;
         public int discoveredDay=1;
+        public bool IsUnlocked => unlocked || ZooPCFlow.CollectionUnlocked(id);
     }
 }

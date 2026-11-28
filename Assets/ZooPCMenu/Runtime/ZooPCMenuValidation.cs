@@ -54,7 +54,8 @@ namespace ADayAtTheZoo.PC.Editor
         {
             DontDestroyOnLoad(gameObject);Application.runInBackground=true;
             deadline=EditorApplication.timeSinceStartup+900;
-            foreach(var key in new[]{"ZooPC.Day1.Completed","ZooPC.Day1.Stars","ZooPC.Day1.Feedings"})oldProgress[key]=PlayerPrefs.HasKey(key)?PlayerPrefs.GetInt(key):(int?)null;
+            foreach(var key in new[]{"ZooPC.Day1.Completed","ZooPC.Day1.Stars","ZooPC.Day1.Feedings","ZooPC.Day1.Scratches","ZooPC.Collection.back-scratcher"})oldProgress[key]=PlayerPrefs.HasKey(key)?PlayerPrefs.GetInt(key):(int?)null;
+            PlayerPrefs.DeleteKey("ZooPC.Collection.back-scratcher");
             oldVolume=PlayerPrefs.GetFloat("ZooPC.Volume",.8f);oldReduced=PlayerPrefs.GetInt("ZooPC.ReducedMotion",0);PlayerPrefs.SetInt("ZooPC.ReducedMotion",0);
             Time.captureFramerate=30;
             var go=new GameObject("Offscreen validation camera",typeof(Camera));go.transform.SetParent(transform);uiCamera=go.GetComponent<Camera>();uiCamera.enabled=false;uiCamera.transform.position=new Vector3(0,0,-10);uiCamera.cullingMask=1<<29;uiCamera.clearFlags=CameraClearFlags.SolidColor;uiCamera.backgroundColor=ZooMenuUI.Ink;uiCamera.nearClipPlane=.01f;uiCamera.farClipPlane=100;
@@ -75,7 +76,8 @@ namespace ADayAtTheZoo.PC.Editor
             var pagePixels=new Texture2D(page.width,page.height,TextureFormat.RGB24,false);pagePixels.ReadPixels(new Rect(0,0,page.width,page.height),0,0);pagePixels.Apply();File.WriteAllBytes(Output+"/printed-day1.png",pagePixels.EncodeToPNG());Destroy(pagePixels);RenderTexture.active=previousRt;
             yield return Frames(65);Click("Next day");yield return Frames(16);Snapshot("03-page-turn");yield return Frames(50);
             Require(flow.Journal.Day==1&&flow.Journal.Book.CurrentRightPageNumber==4,"Forward page turn finished on Day 02");
-            string before=SceneManager.GetActiveScene().path;flow.EnterDay();Require(SceneManager.GetActiveScene().path==before&&!flow.IsLoading,"Day 02 cannot load a level");Snapshot("04-journal-day2");
+            if(flow.HasDayTwo)Require(FindButton("Play Day 1").interactable,"Day 02 entry is available when its scene is configured");
+            else {string before=SceneManager.GetActiveScene().path;flow.EnterDay();Require(SceneManager.GetActiveScene().path==before&&!flow.IsLoading,"Unconfigured Day 02 cannot load a level");}Snapshot("04-journal-day2");
             yield return Frames(65);Click("Previous day");yield return Frames(50);Require(flow.Journal.Day==0,"Backward page turn restores Day 01");
             Click("Animals tab");yield return Frames(55);ValidateCollection(flow,true);Snapshot("05-animal-collection");yield return Frames(60);
             Click("Facilities tab");yield return Frames(55);ValidateCollection(flow,false);Snapshot("06-facility-collection");yield return Frames(60);
@@ -113,7 +115,7 @@ namespace ADayAtTheZoo.PC.Editor
             var entries=flow.Journal.Collection(animals);string label=animals?"Animals":"Facilities";
             Require(entries!=null&&entries.Length>1&&flow.Journal.DiscoveredCount(animals)==1,label+": exactly one discovered type");
             Require(entries[0].unlocked&&entries[0].portrait!=null&&entries[0].discoveredDay==1,label+": first-level model portrait is available");
-            Require(entries.Skip(1).All(e=>!e.unlocked&&e.portrait==null&&string.IsNullOrEmpty(e.displayName)),label+": unknown entries hide names and appearances");
+            Require(entries.Skip(1).All(e=>!e.IsUnlocked),label+": undiscovered types remain locked before encountering them");
         }
         IEnumerator WaitLoad(){int count=0;do{yield return null;if(++count>18000)throw new Exception("Scene load timeout");}while(ZooPCFlow.Instance.IsLoading);}
         void Require(bool value,string message){if(!value)throw new Exception("VALIDATION FAILED: "+message);checks.Add("PASS: "+message);Debug.Log("[Zoo Menu Validation] PASS: "+message);}

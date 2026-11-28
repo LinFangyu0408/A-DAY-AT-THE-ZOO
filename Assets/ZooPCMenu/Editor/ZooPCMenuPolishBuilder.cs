@@ -55,7 +55,7 @@ namespace ADayAtTheZoo.PC.Editor
             if(importer){importer.textureType=TextureImporterType.Default;importer.alphaIsTransparency=true;importer.maxTextureSize=2048;importer.textureCompression=TextureImporterCompression.Uncompressed;importer.mipmapEnabled=false;importer.SaveAndReimport();}
             return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         }
-        static void Capture(GameObject source,string name,bool animated)
+        public static void Capture(GameObject source,string name,bool animated)
         {
             var stage=new GameObject("Collection portrait studio");stage.transform.position=new Vector3(2000,0,0);
             var model=UnityEngine.Object.Instantiate(source,stage.transform);model.SetActive(true);model.transform.localPosition=Vector3.zero;model.transform.localRotation=Quaternion.identity;

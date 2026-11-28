@@ -3,26 +3,28 @@
 入口场景：`Assets/ZooPCMenu/Scenes/PC_MainMenu.unity`。
 
 在 Unity 打开入口场景后按 Play，或使用菜单 **Zoo → PC Menu → Open main menu**。
-Windows 打包使用 **Zoo → PC Menu → Build Windows preview**，输出到 `Builds/PCMenuPolished/`。
-这个构建命令明确只包含新的 PC 菜单和 PC 新手关，不替换项目的全局 Build Settings。
+Windows 打包使用 **Zoo → PC Menu → Build Windows preview**，当前输出到 `Builds/PCDayTwo/`。
+这个构建命令包含 PC 菜单、PC 新手关和第二关，不替换项目的全局 Build Settings。
+第二关操作、规则与场景重建说明见 [DayTwo-Handoff.md](../../Documentation/PCMenu/DayTwo-Handoff.md)。
 
 ## 当前流程
 
 - Start Game 和 Continue 都打开日志的 Day 01。
 - Day 01 是现有 PC 新手关。Begin Day 01 进入试玩。
-- Next / Previous 运行 EndlessBook 的真实骨骼翻页动画。Day 02 显示 Coming Soon，入口禁用，路由也会拒绝加载。
-- Animals / Facilities 是已解锁类型的收藏图鉴。当前仅解锁第一关的普通猴子和香蕉箱；其余卡片显示锁、`???`，不显示未知类型的名称或外形。可以切回 Logs。
+- Next / Previous 运行 EndlessBook 的真实骨骼翻页动画。Day 02 可进入独立的湖畔照顾关：两分钟内完成三只猴子的六次喂食、六次挠痒任务。
+- Animals / Facilities 是已解锁类型的收藏图鉴。初始解锁普通猴子和香蕉箱；开始第二关后解锁痒痒挠。其余卡片显示锁、`???`，不显示未知类型的名称或外形。可以切回 Logs。
 - 设置包含主音量、全屏、减少动态效果。设置保存在 PlayerPrefs。
 - PC 关卡中按 Esc 或手柄 Start 暂停；可以继续、重试、调整设置、返回日志。
-- 结算后的 Continue 已接为 Work Log，回到 Day 01。Restart 保留现有立即重试行为，并恢复显示按钮。
-- 完成一局后保存 Day 01 的最佳星级、最佳喂食数。Continue 当前不是关卡中途存档，不恢复未完成的一局。
+- 结算的 Work Log 返回当前关卡的日志页；Retry 重开当前关卡。第一关原有 Restart 行为保留。
+- 两关分别保存最佳星级和照顾记录，互不覆盖。Continue 当前不是关卡中途存档，不恢复未完成的一局。
 
 ## 接入范围
 
-开发基线是 `handoff/2026-11-23` 的 `2fbb68d775bf1a95c97ce7423f6c8cccc446f622`。
+开发基线是 `v2-final` 的 `2fbb68d775bf1a95c97ce7423f6c8cccc446f622`，与此前 `handoff/2026-11-23` 指向同一提交。
 `PC_TutorialDay1.unity` 由交接分支指定的 `HighlandLake_Backup_2026-11-23.unity` 复制生成，添加 PC 导航组件。
 原场景、共享 MonkeyCare 玩法脚本和 VR 场景没有为此功能修改。
 新增 `ZooPCSessionBridge` 只放在 PC 场景，绑定结算按钮和快捷键。
+PC 新手关副本还移除了一个无效的场景内 `CarePickupMarker` 脚本记录，避免独立程序读取缺失字段时崩溃；原有玩法会在运行时重新创建拾取提示。PC 构建前会检查并修复这类记录，处理范围限定在本目录的 PC 场景。
 
 如果组员更新了原新手关，可使用 **Zoo → PC Menu → Rebuild dedicated PC scenes** 重新生成 PC 副本。
 注意：该命令会重建本功能的两个场景，手动修改 PC 副本前请先保存自己的版本。
@@ -47,10 +49,10 @@ Windows 打包使用 **Zoo → PC Menu → Build Windows preview**，输出到 `
 `Resources/ZooPCMenu/MenuAssets.asset` 保存图片、字体、书本 prefab 和场景引用。
 `ZooJournal.cs` 管理八个纸面（两天日志、动物图鉴、设施图鉴）与实际翻页。
 `ZooPCFlow.cs` 管理菜单、设置、暂停、加载和本地记录。
-`MenuAssets.asset` 的 `animals` / `facilities` 数组配置图鉴条目。仅 `unlocked` 为 true 的条目显示名称和模型，其他条目隐藏这些信息；预留卡片不是已公布的新类型。
+`MenuAssets.asset` 的 `animals` / `facilities` 数组配置图鉴条目。`IsUnlocked` 综合初始 `unlocked` 字段与 `ZooPC.Collection.*` 发现记录决定是否显示名称和模型；预留卡片不是已公布的新类型。
 使用 **Zoo → PC Menu → Refresh menu art and collection portraits** 可从 PC 关卡重新拍摄第一只猴子及名为 `banana box` 的箱子。此命令重置当前图鉴为第一关的默认解锁状态；增加后续关卡内容前请改用实际游戏的解锁数据源。
 菜单具有视差、漂浮叶片、光点、字标轻摆、按钮悬停缩放／高光和画面淡入；减少动态效果选项会停用运动并立即翻页。
-新增正式 Day 02 时，必须同时添加实际关卡场景、构建场景列表和路由；目前不会把 Day 02 指向 Day 01 冒充新关卡。
+Day 02 使用独立场景 `DayTwo/Scenes/PC_DayTwoLakeside.unity`、独立回合状态和进度键；场景、构建列表和日志路由已接入。第一关与原始 VR 内容不为第二关修改。
 
 `Runtime/ZooPCMenuValidation.cs`（整份代码受 `UNITY_EDITOR` 条件限制，不进入玩家构建）提供 Play mode 自动验证与 Unity 相机录制。
 完整验证会用测试代码将真实回合时钟推进到结束来检查结算跳转，不把该步骤当作人工完成喂食的证据。
@@ -58,7 +60,8 @@ Windows 打包使用 **Zoo → PC Menu → Build Windows preview**，输出到 `
 
 ## 验证与构建说明
 
-2026-11-27 视觉改版后，在本机已安装的 Unity 6000.4.8f1 上完成 61 项 Play mode 检查，覆盖新素材和字体、悬停反馈、图鉴解锁与信息隐藏、减少动态效果、鼠标命中、前后翻页、Day 02 禁用、设置保存、进入 PC 新手关、暂停计时、重试和结算返回日志。
+2026-11-28 第二关在本机已安装的 Unity 6000.4.8f1 上完成 48 项 Play mode 检查，实际受控游玩完成 6 次喂食、6 次挠痒并获得三星；覆盖补给、距离限制、暂停、重试、记录独立保存、图鉴解锁及第一关回归。详细证据见 `Documentation/PCMenu/DayTwo-Validation-2026-11-28.md`。
+此前 2026-11-27 的 61 项菜单视觉改版检查保留为历史记录，本次回归已将 Day 02 检查更新为入口可用。
 项目原来的 Unity 版本声明与包配置保留；尚未在交接项目声明的 6000.3.28f1 上运行验证。
 Windows x64 新版预览已经构建并启动成功；独立窗口的开始按钮、图鉴翻页、动物与设备内容已检查。新版记录位于 `Documentation/PCMenu/Polish-Validation-2026-11-27.md`，初版记录保留在 `Documentation/PCMenu/Validation-2026-11-27.md`。
 

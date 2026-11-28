@@ -39122,7 +39122,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 896824781}
-  - component: {fileID: 896824782}
   m_Layer: 0
   m_Name: Banana Pickup Marker
   m_TagString: Untagged
@@ -39146,21 +39145,6 @@ Transform:
   - {fileID: 1627916816}
   m_Father: {fileID: 1081814669}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &896824782
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 896824780}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 1947676819}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ADayAtTheZoo.Monkeys.Care.CarePickupMarker
-  anchor: {x: -0.00000011920929, y: 2.865452, z: -25.65}
-  phase: 2.700704
-  anchorReady: 1
 --- !u!1001 &897792028
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -91344,21 +91328,6 @@ MeshCollider:
   m_Convex: 0
   m_CookingOptions: 30
   m_Mesh: {fileID: -1617218438445635312, guid: 5ba969fb84682c54b80cc7e95a81187d, type: 3}
---- !u!115 &1947676819
-MonoScript:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: 
-  serializedVersion: 7
-  m_DefaultReferences: {}
-  m_Icon: {fileID: 0}
-  m_Type: 0
-  m_ExecutionOrder: 0
-  m_ClassName: CarePickupMarker
-  m_Namespace: ADayAtTheZoo.Monkeys.Care
-  m_AssemblyName: Assembly-CSharp
 --- !u!1001 &1947864792
 PrefabInstance:
   m_ObjectHideFlags: 0

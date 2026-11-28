@@ -71,12 +71,12 @@ MonoBehaviour:
     portrait: {fileID: 2800000, guid: 826388e1fb327ce4ca26d990706a47e1, type: 3}
     unlocked: 1
     discoveredDay: 1
-  - id: undiscovered-1
-    displayName: 
-    subtitle: 
-    portrait: {fileID: 0}
+  - id: back-scratcher
+    displayName: Back scratcher
+    subtitle: Reusable care tool
+    portrait: {fileID: 2800000, guid: 0f7cc83fe9054b9409a42bd1ccabc8fe, type: 3}
     unlocked: 0
-    discoveredDay: 1
+    discoveredDay: 2
   - id: undiscovered-2
     displayName: 
     subtitle: 
@@ -104,3 +104,5 @@ MonoBehaviour:
   pageTurn: {fileID: 8300000, guid: bf2146b31ccddcc4eac59258b4c97599, type: 3}
   tutorialScene: Assets/ZooPCMenu/Scenes/PC_TutorialDay1.unity
   menuScene: Assets/ZooPCMenu/Scenes/PC_MainMenu.unity
+  dayTwoScene: Assets/ZooPCMenu/DayTwo/Scenes/PC_DayTwoLakeside.unity
+  dayTwoPhoto: {fileID: 2800000, guid: 57a254da924851f43a0b8d16632a75ad, type: 3}
