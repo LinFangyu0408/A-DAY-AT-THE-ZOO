@@ -14,9 +14,9 @@ using ADayAtTheZoo.Monkeys.Care;
 namespace ADayAtTheZoo.PC.Editor
 {
     [DefaultExecutionOrder(10000)]
-    public sealed class ZooDayTwoValidation : MonoBehaviour
+    public sealed partial class ZooDayTwoValidation : MonoBehaviour
     {
-        static readonly string Output = Path.GetFullPath("../.menu-tools/day2-validation");
+        static string Output => Path.GetFullPath(SessionState.GetBool("ZooDay2.Attack", false) ? "../.menu-tools/day2-attack-validation" : "../.menu-tools/day2-validation");
         readonly List<string> checks = new();
         readonly Dictionary<string, int?> saved = new();
         Camera captureCamera;
@@ -25,8 +25,8 @@ namespace ADayAtTheZoo.PC.Editor
         int frame;
         bool record, finishing;
         double deadline;
-        public static void Preview() { Launch(false); }
-        public static void Full() { Launch(true); }
+        public static void Preview() { SessionState.SetBool("ZooDay2.Attack", false); Launch(false); }
+        public static void Full() { SessionState.SetBool("ZooDay2.Attack", false); Launch(true); }
         static void Launch(bool full)
         {
             Directory.CreateDirectory(Output); SessionState.SetBool("ZooDay2.Validate", true); SessionState.SetBool("ZooDay2.Full", full);
@@ -53,6 +53,7 @@ namespace ADayAtTheZoo.PC.Editor
             captureCamera.clearFlags = CameraClearFlags.SolidColor; captureCamera.backgroundColor = ZooMenuUI.Ink; captureCamera.nearClipPlane = .01f;
             target = new RenderTexture(1600, 900, 24, RenderTextureFormat.ARGB32) { antiAliasing = 2 }; target.Create(); pixels = new Texture2D(1600, 900, TextureFormat.RGB24, false);
             ModelChecks(); yield return Frames(40);
+            if (SessionState.GetBool("ZooDay2.Attack", false)) { yield return AttackChecks(); Finish(); yield break; }
             var flow = ZooPCFlow.Instance;
             Require(flow && flow.HasDayTwo, "Day 02 is configured without replacing Day 01");
             record = SessionState.GetBool("ZooDay2.Full", false); if (record) Directory.CreateDirectory(Output + "/frames");
@@ -258,7 +259,7 @@ namespace ADayAtTheZoo.PC.Editor
             ExecuteEvents.Execute(b.gameObject, data, ExecuteEvents.pointerClickHandler);
         }
         void Snapshot(string name) { Capture(); File.WriteAllBytes(Output + "/" + name + ".png", pixels.EncodeToPNG()); }
-        void LateUpdate() { if (record) { Capture(); File.WriteAllBytes(Output + "/frames/" + (frame++).ToString("D5") + ".jpg", pixels.EncodeToJPG(88)); } }
+        void LateUpdate() { if (record) { Capture(); File.WriteAllBytes(Output + "/frames/" + (frame++).ToString("D5") + ".jpg", pixels.EncodeToJPG(88)); CaptureAttackAudio(); } }
         void Capture()
         {
             var flow = ZooPCFlow.Instance; if (!flow) return;
@@ -282,14 +283,14 @@ namespace ADayAtTheZoo.PC.Editor
         void RestorePrefs() { foreach (var item in saved) { if (item.Value.HasValue) PlayerPrefs.SetInt(item.Key, item.Value.Value); else PlayerPrefs.DeleteKey(item.Key); } PlayerPrefs.Save(); Time.captureFramerate = 0; Time.timeScale = 1; AudioListener.pause = false; }
         void Finish()
         {
-            finishing = true; record = false; RestorePrefs(); Application.logMessageReceived -= Error;
+            finishing = true; record = false; FinishAttackAudio(); RestorePrefs(); Application.logMessageReceived -= Error;
             File.WriteAllLines(Output + "/validation.txt", checks); File.WriteAllText(Output + "/frame-count.txt", frame.ToString());
             Debug.Log("[Zoo Day 2 Validation] COMPLETE " + checks.Count + " checks, " + frame + " frames."); EditorApplication.Exit(0);
         }
         void Error(string message, string stack, LogType type)
         {
             if (finishing || type != LogType.Exception) return; finishing = true; record = false;
-            File.WriteAllLines(Output + "/failed-checks.txt", checks); File.WriteAllText(Output + "/failure.txt", message + "\n" + stack); RestorePrefs(); EditorApplication.delayCall += () => EditorApplication.Exit(1);
+            File.WriteAllLines(Output + "/failed-checks.txt", checks); File.WriteAllText(Output + "/failure.txt", message + "\n" + stack); FinishAttackAudio(); RestorePrefs(); EditorApplication.delayCall += () => EditorApplication.Exit(1);
         }
         void Update() { if (!finishing && deadline > 0 && EditorApplication.timeSinceStartup > deadline) { Error("Validation timeout", "", LogType.Exception); } }
     }

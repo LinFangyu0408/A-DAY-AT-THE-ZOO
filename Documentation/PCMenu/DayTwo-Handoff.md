@@ -47,6 +47,8 @@ The old fixed stone circles and radial stepping stones have been removed. The sm
 
 The Play-mode validator `ZooDayTwoValidation` checks the actual menu, scene, movement, care calls, animation timing and persistence. It drives a controlled playthrough and restores test save data afterwards; it is excluded from the player build.
 
+Patience expiry now triggers a 4.2-second close-up monkey attack with five synchronized impacts and temporarily locked controls. The original task remains recoverable afterward. See `DayTwo-Patience-Attack-2026-11-29.md` for timing, input locks and recovery. The dedicated entry point `ADayAtTheZoo.PC.Editor.ZooDayTwoBuilder.ValidateAttack` prepares clip references and records an attack test with game audio.
+
 ## Contact and movement implementation
 
 `ZooDayTwoRoaming.cs` owns PC-only NavMeshAgent destinations, slow movement and stopping rules. `ZooDayTwoNavigation.cs` registers the dedicated baked navigation asset only while Day 02 is loaded; `ZooDayTwoBuilder.Navigation.cs` rebuilds it from environment render meshes, with water marked non-walkable. No global navigation settings or extra package dependencies are required. `ZooDayTwoTargetMarker.cs` follows the current target. `ZooDayTwoScratchContact.cs` samples one animated skin only while scratching; it does not add a live physics mesh collider or modify the shared monkey assets. `Scratch contact tip` in the generated tool prefab is calibrated from the actual central metal claw. The rules asset drives journal totals, briefing and results.

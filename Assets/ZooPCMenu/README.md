@@ -12,6 +12,7 @@ Windows 打包使用 **Zoo → PC Menu → Build Windows preview**，当前输�
 - Start Game 和 Continue 都打开日志的 Day 01。
 - Day 01 是现有 PC 新手关。Begin Day 01 进入试玩。
 - Next / Previous 运行 EndlessBook 的真实骨骼翻页动画。Day 02 可进入独立的湖畔照顾关：三分钟内完成五只猴子的十次喂食、十次挠痒任务；其中三只在约 6 米的目的地范围内缓慢散步并绕开环境障碍，靠近有需求的猴子时它会停下。固定地面圈已移除；细高亮圈只表示当前选中的猴子，并跟随它移动。
+- Day 02 耐心耗尽后会触发约 4.2 秒的猴子扑击近景，包含五次拍打、打击音效、镜头震动和闪屏，期间锁住移动和照顾操作。结束后可继续完成原需求；同一次需求只攻击一次。暂停和“减少动态效果”设置仍然有效。说明见 `Documentation/PCMenu/DayTwo-Patience-Attack-2026-11-29.md`。
 - Animals / Facilities 是已解锁类型的收藏图鉴。初始解锁普通猴子和香蕉箱；开始第二关后解锁痒痒挠。其余卡片显示锁、`???`，不显示未知类型的名称或外形。可以切回 Logs。
 - 设置包含主音量、全屏、减少动态效果。设置保存在 PlayerPrefs。
 - PC 关卡中按 Esc 或手柄 Start 暂停；可以继续、重试、调整设置、返回日志。
@@ -61,6 +62,7 @@ Day 02 使用独立场景 `DayTwo/Scenes/PC_DayTwoLakeside.unity`、独立回合
 ## 验证与构建说明
 
 2026-11-28 第二关初版曾完成 48 项 Play mode 检查；当前五只猴子版本新增游走、停步、工具真实接触后计分与取消动作的验证。工具头贴合当前骨骼动画的身体表面，不再仅在镜头前挥动。扩大活动范围后，最新 64 项关卡检查全部通过，完整完成 20 个任务并获三星；详细证据见 `Documentation/PCMenu/DayTwo-Free-Roaming-2026-11-29.md`。上一版接触修复及 61 项菜单回归的记录继续保留。
+耐心扑击版本另通过 48 项专项检查，并重新通过上述 64 项关卡回归；Windows 独立程序中已验证自然超时触发攻击、正常恢复和继续切换工具。带音效的 22 秒演示见 `C:/Users/xdm28/Desktop/5031/Zoo-PC-Day2-Patience-Attack-Preview.mp4`。
 此前 2026-11-27 的 61 项菜单视觉改版检查保留为历史记录，本次回归已将 Day 02 检查更新为入口可用。
 项目原来的 Unity 版本声明与包配置保留；尚未在交接项目声明的 6000.3.28f1 上运行验证。
 Windows x64 新版预览已经构建并启动成功；独立窗口的开始按钮、图鉴翻页、动物与设备内容已检查。新版记录位于 `Documentation/PCMenu/Polish-Validation-2026-11-27.md`，初版记录保留在 `Documentation/PCMenu/Validation-2026-11-27.md`。

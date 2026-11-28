@@ -32,6 +32,6 @@ namespace ADayAtTheZoo.PC
             Color color = SelectedTool == 1 ? new Color(.48f, .92f, 1, .9f) : new Color(1, .86f, .4f, .9f);
             targetMarker.startColor = targetMarker.endColor = color;
         }
-        void OnDestroy() { if (markerMaterial) Destroy(markerMaterial); }
+        void OnDestroy() { StopAttackPresentation(); if (markerMaterial) Destroy(markerMaterial); }
     }
 }

@@ -64,6 +64,7 @@ namespace ADayAtTheZoo.PC
             BriefingTip(briefing, bananaIcon, "01  FEED THE HUNGRY ONES", "Choose banana [1], aim, then click to throw.\nCarry six bananas; restock at the stand with [E].", 400);
             BriefingTip(briefing, scratcherIcon, "02  A BRAND-NEW CARE TOOL", "Choose scratcher [2] and move close.\nClick three times; the claw must touch their body.", 560);
             ZooMenuUI.Label("Briefing goal", briefing, rules.monkeyCount + " MONKEYS  •  " + (rules.duration / 60).ToString("0.#") + " MINUTES  •  STAR GOALS " + rules.oneStar + " / " + rules.twoStars + " / " + rules.threeStars, 485, 722, 950, 50, 29, ZooMenuUI.Leaf, TextAnchor.MiddleCenter, true);
+            ZooMenuUI.Label("Patience warning", briefing, "Watch their patience. Angry monkeys will pounce!", 485, 773, 950, 30, 22, ZooMenuUI.Orange, TextAnchor.MiddleCenter, true);
             ZooMenuUI.Button("Begin Day 02 shift", briefing, "LET'S HELP!", 770, 808, 380, 76, StartShift, ZooMenuUI.Leaf, 32);
             ZooMenuUI.Label("Start shortcut", briefing, "SPACE / GAMEPAD A", 810, 932, 300, 40, 21, ZooMenuUI.Cream, TextAnchor.MiddleCenter);
         }
@@ -121,6 +122,7 @@ namespace ADayAtTheZoo.PC
         }
         void LateUpdate()
         {
+            if (IsBeingAttacked) { attackView?.Present(); return; }
             UpdateScratchMotion();
             UpdateTargetMarker();
             if (supplyLabel && playerCamera)

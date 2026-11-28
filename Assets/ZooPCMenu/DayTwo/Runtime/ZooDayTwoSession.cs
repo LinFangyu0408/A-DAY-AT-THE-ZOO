@@ -21,7 +21,8 @@ namespace ADayAtTheZoo.PC
         public ZooDayTwoRound Round { get; private set; }
         public int SelectedTool { get; private set; }
         public ZooDayTwoNpc Target { get; private set; }
-        public bool IsRunning => Round != null && Round.Started && !Round.Finished && !(ZooPCFlow.Instance && ZooPCFlow.Instance.Paused);
+        public bool IsBeingAttacked => Round != null && Round.AttackActive;
+        public bool IsRunning => Round != null && Round.Started && !Round.Finished && !IsBeingAttacked && !(ZooPCFlow.Instance && (ZooPCFlow.Instance.Paused || ZooPCFlow.Instance.IsLoading));
         Transform heldRoot;
         GameObject bananaView, scratcherView;
         AudioSource music;
@@ -72,8 +73,8 @@ namespace ADayAtTheZoo.PC
         {
             if (Round == null) return;
             bool paused = ZooPCFlow.Instance && (ZooPCFlow.Instance.Paused || ZooPCFlow.Instance.IsLoading);
-            player.inputLocked = paused || !Round.Started || Round.Finished;
-            if (paused) return;
+            player.inputLocked = paused || !Round.Started || Round.Finished || IsBeingAttacked;
+            if (paused) { attackView?.SuspendFeedback(); return; }
             var k = Keyboard.current; var mouse = Mouse.current; var pad = Gamepad.current;
             if (!Round.Started)
             {
@@ -82,8 +83,20 @@ namespace ADayAtTheZoo.PC
             }
             if (!Round.Finished)
             {
+                if (IsBeingAttacked)
+                {
+                    AdvanceAttack(Time.deltaTime);
+                    foreach (var npc in monkeys) npc.Refresh();
+                    return;
+                }
                 Round.Tick(Time.deltaTime);
                 UpdateFlights(Time.deltaTime);
+                if (!Round.Finished && Time.time >= attackGraceUntil && Round.TryBeginAttack())
+                {
+                    BeginAttack();
+                    foreach (var npc in monkeys) npc.Refresh();
+                    return;
+                }
                 Target = AimTarget(playerCamera.transform.position, playerCamera.transform.forward);
                 if (Time.unscaledTime >= inputArmedAt)
                 {
@@ -198,7 +211,7 @@ namespace ADayAtTheZoo.PC
         }
         void UpdateViewModels()
         {
-            bool visible = Round != null && Round.Started && !Round.Finished;
+            bool visible = Round != null && Round.Started && !Round.Finished && !IsBeingAttacked;
             bananaView.SetActive(visible && SelectedTool == 0 && Round.Bananas > 0);
             scratcherView.SetActive(visible && SelectedTool == 1);
             if (!visible) CancelScratch();

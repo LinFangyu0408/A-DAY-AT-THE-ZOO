@@ -32,7 +32,7 @@ namespace ADayAtTheZoo.PC
             public CareNeed need;
             public int completed, strokes;
             public float requestedAt, eatingTime, availableAt, lastStroke = -100;
-            public bool late;
+            public bool late, attackPending;
         }
 
         public readonly ZooDayTwoRules rules;
@@ -46,6 +46,8 @@ namespace ADayAtTheZoo.PC
         public int Total => animals.Length * rules.tasksPerMonkey;
         public bool Finished { get; private set; }
         public bool Started { get; private set; }
+        public int AttackIndex { get; private set; } = -1;
+        public bool AttackActive => AttackIndex >= 0;
         public int Stars => Completed >= rules.threeStars ? 3 : Completed >= rules.twoStars ? 2 : Completed >= rules.oneStar ? 1 : 0;
         public bool Passing => Completed >= rules.twoStars;
         public int ActiveCount { get { int n = 0; foreach (var a in animals) if (a.state == ZooCareState.Waiting || a.state == ZooCareState.Eating) n++; return n; } }
@@ -64,7 +66,7 @@ namespace ADayAtTheZoo.PC
         public float Patience(Animal animal) => Mathf.Clamp01(1 - (Elapsed - animal.requestedAt) / rules.patience);
         public void Tick(float seconds)
         {
-            if (!Started || Finished || seconds <= 0) return;
+            if (!Started || Finished || AttackActive || seconds <= 0) return;
             float step = Mathf.Min(seconds, Mathf.Max(0, rules.duration - Elapsed));
             Elapsed += step;
             for (int i = 0; i < animals.Length; i++)
@@ -72,8 +74,8 @@ namespace ADayAtTheZoo.PC
                 var a = animals[i];
                 if (a.state == ZooCareState.Celebrating && Elapsed >= a.availableAt)
                     a.state = a.completed >= rules.tasksPerMonkey ? ZooCareState.Done : ZooCareState.Resting;
-                if (a.state == ZooCareState.Waiting && !a.late && Elapsed - a.requestedAt > rules.patience)
-                { a.late = true; LateRequests++; }
+                if (a.state == ZooCareState.Waiting && !a.late && Elapsed - a.requestedAt >= rules.patience)
+                { a.late = true; a.attackPending = true; LateRequests++; }
                 if (a.state == ZooCareState.Eating)
                 {
                     a.eatingTime += step;
@@ -90,18 +92,18 @@ namespace ADayAtTheZoo.PC
                 if (a.state != ZooCareState.Resting || a.completed >= rules.tasksPerMonkey || Elapsed < a.availableAt) continue;
                 a.state = ZooCareState.Waiting;
                 a.need = (i + a.completed) % 2 == 0 ? CareNeed.Hunger : CareNeed.Itch;
-                a.requestedAt = Elapsed; a.strokes = 0; a.eatingTime = 0; a.late = false; a.lastStroke = -100;
+                a.requestedAt = Elapsed; a.strokes = 0; a.eatingTime = 0; a.late = false; a.attackPending = false; a.lastStroke = -100;
                 cursor = i; nextRequest = Elapsed + rules.requestGap; break;
             }
         }
         public bool SpendBanana()
         {
-            if (!Started || Finished || Bananas <= 0) return false;
+            if (!Started || Finished || AttackActive || Bananas <= 0) return false;
             Bananas--; return true;
         }
         public bool Refill()
         {
-            if (!Started || Finished || Bananas >= rules.bananaCapacity) return false;
+            if (!Started || Finished || AttackActive || Bananas >= rules.bananaCapacity) return false;
             Bananas = rules.bananaCapacity; return true;
         }
         public bool ReceiveBanana(int index, int task)
@@ -120,7 +122,21 @@ namespace ADayAtTheZoo.PC
             if (a.strokes >= StrokeGoal(a)) Complete(index);
             return true;
         }
-        bool Valid(int index) => Started && !Finished && index >= 0 && index < animals.Length;
+        public bool TryBeginAttack()
+        {
+            if (!Started || Finished || AttackActive) return false;
+            int next = -1;
+            for (int i = 0; i < animals.Length; i++)
+            {
+                var a = animals[i];
+                if (!a.attackPending || a.state != ZooCareState.Waiting) continue;
+                if (next < 0 || a.requestedAt < animals[next].requestedAt) next = i;
+            }
+            if (next < 0) return false;
+            AttackIndex = next; animals[next].attackPending = false; return true;
+        }
+        public void EndAttack() { AttackIndex = -1; }
+        bool Valid(int index) => Started && !Finished && !AttackActive && index >= 0 && index < animals.Length;
         void Complete(int index)
         {
             var a = animals[index];

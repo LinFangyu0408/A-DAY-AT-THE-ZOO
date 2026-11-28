@@ -1,0 +1,48 @@
+PASS: Briefing time never consumes shift time
+PASS: Shift opens with one request
+PASS: Busy phase allows two simultaneous requests
+PASS: Concurrent requests never exceed two
+PASS: Late feeding remains recoverable with one extra second
+PASS: All twenty mixed tasks produce three stars
+PASS: Finished shifts reject inventory and care mutations
+PASS: Untended shift ends at the deadline with zero stars
+PASS: No attack before patience reaches zero
+PASS: Expired request selects the correct attacker
+PASS: Attack cannot stack or advance other request timers
+PASS: Same expired request only attacks once and remains recoverable
+PASS: Simultaneous overdue requests pick the oldest first
+PASS: Another overdue monkey waits its turn instead of overlapping
+PASS: Handled attacks are not queued again
+PASS: Round completion takes priority over a pending attack
+PASS: Button available: Start Game
+PASS: Mouse ray reaches: Start Game
+PASS: Button available: Next day
+PASS: Mouse ray reaches: Next day
+PASS: Button available: Play Day 1
+PASS: Mouse ray reaches: Play Day 1
+PASS: Attack test loads the roaming Day 02 scene
+PASS: Button available: Begin Day 02 shift
+PASS: Mouse ray reaches: Begin Day 02 shift
+PASS: The real patience timer triggers exactly one attack at expiry
+PASS: Attacker close-up is active and player movement is locked
+PASS: Attack blocks throw, scratch, refill and tool selection
+PASS: Round model also rejects care and inventory changes during attack
+PASS: Blocked interactions do not consume stock or award points
+PASS: Attack cancels scratch motion and hides the target indicator
+PASS: Impact synchronizes visible flash and camera shake
+PASS: Impact graphic submits flash and speed-line geometry to the canvas renderer
+PASS: Injected movement, refill and tool keys are ignored during attack
+PASS: Pause freezes attack timing, impacts and round clock
+PASS: Player stays in place during the close-up
+PASS: Five impacts finish after 4.2 active seconds and release presentation resources
+PASS: Interaction resumes without consuming patience or shift time during the forced sequence
+PASS: Exact camera pose, field of view and world rendering are restored
+PASS: The real monkey keeps its navigation registration
+PASS: The same late monkey can be fed after attacking
+PASS: Late care still completes, without retriggering the same attack
+PASS: Reduced motion suppresses shake and softens the flash
+PASS: Leaving mid-attack removes close-up actor and effects
+PASS: Leaving mid-attack restores the normal global pause state
+PASS: Button available: Play Day 1
+PASS: Mouse ray reaches: Play Day 1
+PASS: Re-entering Day 02 starts without stale attack state

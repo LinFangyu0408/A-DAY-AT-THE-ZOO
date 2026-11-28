@@ -75,7 +75,7 @@ namespace ADayAtTheZoo.PC
             }
             bool pending = a.state == ZooCareState.Waiting || a.state == ZooCareState.Eating;
             bool happy = a.state == ZooCareState.Celebrating;
-            plate.gameObject.SetActive(session.Round.Started && !session.Round.Finished && (pending || happy));
+            plate.gameObject.SetActive(session.Round.Started && !session.Round.Finished && !session.IsBeingAttacked && (pending || happy));
             if (!plate.gameObject.activeSelf) return;
             request.text = happy ? "THANK YOU!" : a.need == CareNeed.Hunger ? "BANANA, PLEASE" : "ITCHY!";
             if (a.state == ZooCareState.Eating) progress.text = "MUNCHING...";
@@ -83,7 +83,7 @@ namespace ADayAtTheZoo.PC
             else if (a.need == CareNeed.Itch) progress.text = a.strokes + " / " + session.Round.StrokeGoal(a) + " STROKES" + (a.late ? "  •  NEEDS EXTRA CARE" : "");
             else progress.text = a.late ? "NEEDS EXTRA CARE" : "FEED WITH A BANANA";
             patienceFill.sizeDelta = new Vector2(810 * (happy ? 1 : session.Round.Patience(a)), 29);
-            patienceFill.GetComponent<ZooRoundedPanel>().color = a.late ? ZooMenuUI.Orange : ZooMenuUI.Leaf;
+            patienceFill.GetComponent<ZooRoundedPanel>().color = a.late || session.Round.Patience(a) < .2f ? ZooMenuUI.Orange : ZooMenuUI.Leaf;
             celebration.gameObject.SetActive(happy && Time.time - popupAt < 1.4f);
             celebration.rectTransform.anchoredPosition = new Vector2(80, 105 + Mathf.Min(1.4f, Time.time - popupAt) * 45);
         }
