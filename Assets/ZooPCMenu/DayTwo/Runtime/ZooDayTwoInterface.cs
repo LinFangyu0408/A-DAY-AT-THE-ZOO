@@ -122,6 +122,7 @@ namespace ADayAtTheZoo.PC
         void LateUpdate()
         {
             UpdateScratchMotion();
+            UpdateTargetMarker();
             if (supplyLabel && playerCamera)
             {
                 supplyLabel.position = supply.position + Vector3.up * 1.8f;

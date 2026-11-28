@@ -55,13 +55,14 @@ namespace ADayAtTheZoo.PC.Editor
             var player = new GameObject("Day 02 PC keeper", typeof(CharacterController)); player.transform.SetParent(root.transform);
             player.transform.position = Ground(new Vector3(0, 0, -24)) + Vector3.up * .05f;
             var character = player.GetComponent<CharacterController>(); character.height = 1.8f; character.radius = .3f; character.center = Vector3.up * .9f;
+            var playerObstacle = player.AddComponent<UnityEngine.AI.NavMeshObstacle>(); playerObstacle.shape = UnityEngine.AI.NavMeshObstacleShape.Capsule;
+            playerObstacle.center = Vector3.up * .9f; playerObstacle.height = 1.8f; playerObstacle.radius = .4f; playerObstacle.carving = false;
             var cameraGo = new GameObject("Day 02 keeper camera", typeof(Camera), typeof(AudioListener)); cameraGo.transform.SetParent(player.transform, false);
             cameraGo.transform.localPosition = Vector3.up * 1.65f; cameraGo.tag = "MainCamera";
             session.playerCamera = cameraGo.GetComponent<Camera>(); session.playerCamera.fieldOfView = 65; session.playerCamera.nearClipPlane = .06f; session.playerCamera.farClipPlane = 1500;
             session.player = player.AddComponent<DesktopPlayerController>();
             var stand = UnityEngine.Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None).First(t => t.name == "Banana Market Stand");
             session.supply = stand;
-            var stone = Material("Care yard stone", new Color(.66f, .65f, .51f));
             var wood = Material("Care stand wood", new Color(.46f, .29f, .12f));
             session.monkeys = new ZooDayTwoNpc[rules.monkeyCount];
             var troop = originalMonkeys.Concat(new[] { UnityEngine.Object.Instantiate(originalMonkeys[0]), UnityEngine.Object.Instantiate(originalMonkeys[2]) }).ToArray();
@@ -74,25 +75,14 @@ namespace ADayAtTheZoo.PC.Editor
                 UnityEngine.Object.DestroyImmediate(old);
                 foreach (var collider in model.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
                 var ground = Ground(positions[i]);
-                var pad = GameObject.CreatePrimitive(PrimitiveType.Cylinder); pad.name = "Day 02 care clearing " + (i + 1); pad.transform.SetParent(root.transform);
-                pad.transform.position = ground + Vector3.up * .045f; pad.transform.localScale = new Vector3(2.5f, .045f, 2.1f); pad.GetComponent<Renderer>().sharedMaterial = stone;
-                ReplaceCylinderCollider(pad);
-                model.transform.position = ground + Vector3.up * .11f;
+                model.transform.position = ground + Vector3.up * .025f;
                 model.transform.rotation = Quaternion.LookRotation(new Vector3(0, 0, -20) - new Vector3(positions[i].x, 0, positions[i].z));
                 animator.runtimeAnimatorController = controller;
                 var driver = model.GetComponent<MonkeyNpcAnimator>(); if (!driver) driver = model.AddComponent<MonkeyNpcAnimator>(); driver.Configure(library); driver.enabled = true;
                 var npc = model.AddComponent<ZooDayTwoNpc>(); npc.animationDriver = driver; session.monkeys[i] = npc;
-                npc.roams = i == 0 || i >= 3; npc.walkSpeed = .45f + i * .025f; npc.roamRadius = i == 0 ? 1.2f : 1.35f;
+                npc.roams = i == 0 || i >= 3; npc.walkSpeed = .45f + i * .025f; npc.roamRadius = 6;
                 var colliderObject = new GameObject("Day 02 animal body", typeof(CapsuleCollider)); colliderObject.transform.SetParent(model.transform, false);
                 var body = colliderObject.GetComponent<CapsuleCollider>(); body.center = Vector3.up * .75f; body.height = 1.4f; body.radius = .45f;
-                for (int step = 1; step <= 4; step++)
-                {
-                    var at = Vector3.Lerp(player.transform.position, ground, step / 5f);
-                    var pebble = GameObject.CreatePrimitive(PrimitiveType.Cylinder); pebble.name = "Day 02 stepping stone"; pebble.transform.SetParent(root.transform);
-                    pebble.transform.position = Ground(at) + Vector3.up * .025f; pebble.transform.localScale = new Vector3(.65f, .025f, .48f); pebble.transform.rotation = Quaternion.Euler(0, step * 31 + i * 17, 0);
-                    pebble.GetComponent<Renderer>().sharedMaterial = stone;
-                    ReplaceCylinderCollider(pebble);
-                }
             }
             var toolStand = GameObject.CreatePrimitive(PrimitiveType.Cube); toolStand.name = "Day 02 reusable tool station"; toolStand.transform.SetParent(root.transform);
             toolStand.transform.position = Ground(new Vector3(-2.6f, 0, -22.6f)) + Vector3.up * .48f; toolStand.transform.localScale = new Vector3(.85f, .95f, .55f); toolStand.GetComponent<Renderer>().sharedMaterial = wood;
@@ -100,6 +90,7 @@ namespace ADayAtTheZoo.PC.Editor
             display.transform.position = toolStand.transform.position + Vector3.up * .65f; display.transform.localScale = Vector3.one * .45f; display.transform.rotation = Quaternion.Euler(0, 20, -25);
             foreach (var light in UnityEngine.Object.FindObjectsByType<Light>(FindObjectsSortMode.None))
                 if (light.type == LightType.Directional) { light.color = new Color(1, .94f, .82f); light.intensity = Mathf.Clamp(light.intensity, .9f, 1.2f); }
+            BuildNavigation(session);
             var assets = Resources.Load<ZooMenuAssets>("ZooPCMenu/MenuAssets");
             assets.dayTwoScene = Root + "Scenes/PC_DayTwoLakeside.unity";
             assets.dayTwoRules = rules;
@@ -188,13 +179,6 @@ namespace ADayAtTheZoo.PC.Editor
             var material = AssetDatabase.LoadAssetAtPath<Material>(path);
             if (!material) { material = new Material(Shader.Find("Standard")); material.color = color; material.SetFloat("_Glossiness", .05f); AssetDatabase.CreateAsset(material, path); }
             return material;
-        }
-        static void ReplaceCylinderCollider(GameObject cylinder)
-        {
-            // A very flat primitive's CapsuleCollider expands to its radius,
-            // creating an invisible dome above the stone. Use its actual mesh.
-            UnityEngine.Object.DestroyImmediate(cylinder.GetComponent<Collider>());
-            cylinder.AddComponent<MeshCollider>().sharedMesh = cylinder.GetComponent<MeshFilter>().sharedMesh;
         }
         static Vector3 Ground(Vector3 at)
         {

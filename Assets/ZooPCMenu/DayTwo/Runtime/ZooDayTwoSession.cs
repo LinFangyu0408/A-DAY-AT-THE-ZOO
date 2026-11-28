@@ -11,6 +11,7 @@ namespace ADayAtTheZoo.PC
     public sealed partial class ZooDayTwoSession : MonoBehaviour
     {
         public ZooDayTwoRules rules;
+        public ZooDayTwoNavigation navigation;
         public ZooDayTwoNpc[] monkeys;
         public DesktopPlayerController player;
         public Camera playerCamera;
@@ -48,7 +49,7 @@ namespace ADayAtTheZoo.PC
             yardRadius = 12;
             foreach (var npc in monkeys) yardRadius = Mathf.Max(yardRadius, Vector3.Distance(yardCenter, npc.transform.position) + 2.5f);
             yardRadius = Mathf.Max(yardRadius, Vector3.Distance(yardCenter, supply.position) + 3);
-            BuildViewModels(); BuildInterface();
+            BuildViewModels(); BuildInterface(); BuildTargetMarker();
             music = gameObject.AddComponent<AudioSource>(); music.playOnAwake = false; music.volume = .35f;
             music.clip = Resources.Load<AudioClip>("HighlandLakeAudio/music_care"); music.loop = true;
             foreach (string name in new[] { "feedSuccess", "scratchSuccess", "stroke", "bananaGrab", "scratchGrab", "bite", "jingle_victory_sting" })
@@ -142,6 +143,9 @@ namespace ADayAtTheZoo.PC
         }
         public ZooDayTwoNpc AimTarget(Vector3 origin, Vector3 direction)
         {
+            // NavMesh agents move between physics steps. Query their current
+            // body positions rather than the preceding physics snapshot.
+            Physics.SyncTransforms();
             ZooDayTwoNpc best = null; float angle = 9;
             foreach (var npc in monkeys)
             {
@@ -209,6 +213,13 @@ namespace ADayAtTheZoo.PC
         }
         void ClampToYard()
         {
+            if (navigation)
+            {
+                var bounds = navigation.playArea; var position = player.transform.position;
+                Vector3 clamped = new Vector3(Mathf.Clamp(position.x, bounds.min.x, bounds.max.x), position.y, Mathf.Clamp(position.z, bounds.min.z, bounds.max.z));
+                player.GetComponent<CharacterController>().Move(clamped - position);
+                return;
+            }
             Vector3 offset = player.transform.position - yardCenter; offset.y = 0;
             if (offset.magnitude <= yardRadius) return;
             var controller = player.GetComponent<CharacterController>();

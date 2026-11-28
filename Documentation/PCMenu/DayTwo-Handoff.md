@@ -23,7 +23,7 @@ The briefing explains the new tool before the timer starts. Day 02 is directly a
 
 Aim with the center reticle. Feeding works at range; scratching requires being within three meters. Each scratch requires a separate input and a complete 0.66-second reach, contact and retract cycle. The contact point follows the animated body mesh; a click alone does not count. The tool is reusable. The supply indicator gives direction and distance to the banana stand.
 
-Three monkeys wander slowly near their starting clearings. Move close and they stop for care. Throws hold the intended monkey still and follow its current aim point until arrival. Two monkeys remain stationary. Pausing freezes both roaming and care animations.
+Three monkeys wander slowly across the clearing, with destinations up to 6 m from their initial position. They navigate around trees and rocks on a separately baked Day 02 NavMesh. Move close to a requesting monkey and it stops for care. Throws hold the intended monkey still and follow its current aim point until arrival. Two monkeys remain stationary. Pausing freezes both roaming and care animations.
 
 ## Rules and integration
 
@@ -43,10 +43,10 @@ Use **Zoo → PC Menu → Build Windows preview**. With Day 02 configured, the o
 
 The Day 02 gameplay is isolated under `Assets/ZooPCMenu/DayTwo`. It reuses the team's models, clips, sound files and desktop movement controller. The original `MonkeyCare` runtime, VR files and original level scenes are not modified. Only the copied Day 02 scene disables its original care/VR components and binds the new PC session.
 
-The dedicated stone pads use mesh colliders. Do not replace them with a primitive cylinder's default capsule collider: flattening the mesh does not flatten that capsule and can leave an invisible dome blocking throws and movement.
+The old fixed stone circles and radial stepping stones have been removed. The small colored ring is a selection cue that follows the currently aimed-at monkey; it is not the hit area. Interaction uses the monkey's moving body collider/aim point and the live skinned surface for scratching.
 
 The Play-mode validator `ZooDayTwoValidation` checks the actual menu, scene, movement, care calls, animation timing and persistence. It drives a controlled playthrough and restores test save data afterwards; it is excluded from the player build.
 
 ## Contact and movement implementation
 
-`ZooDayTwoRoaming.cs` owns the PC-only patrol and stopping rules. `ZooDayTwoScratchContact.cs` samples one animated skin only while scratching; it does not add a live physics mesh collider or modify the shared monkey assets. `Scratch contact tip` in the generated tool prefab is calibrated from the actual central metal claw. The rules asset drives journal totals, briefing and results.
+`ZooDayTwoRoaming.cs` owns PC-only NavMeshAgent destinations, slow movement and stopping rules. `ZooDayTwoNavigation.cs` registers the dedicated baked navigation asset only while Day 02 is loaded; `ZooDayTwoBuilder.Navigation.cs` rebuilds it from environment render meshes, with water marked non-walkable. No global navigation settings or extra package dependencies are required. `ZooDayTwoTargetMarker.cs` follows the current target. `ZooDayTwoScratchContact.cs` samples one animated skin only while scratching; it does not add a live physics mesh collider or modify the shared monkey assets. `Scratch contact tip` in the generated tool prefab is calibrated from the actual central metal claw. The rules asset drives journal totals, briefing and results.

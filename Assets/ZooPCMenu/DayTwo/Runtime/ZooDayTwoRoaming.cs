@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace ADayAtTheZoo.PC
 {
@@ -6,73 +7,87 @@ namespace ADayAtTheZoo.PC
     {
         public bool roams;
         [Range(.2f, .8f)] public float walkSpeed = .5f;
-        public float roamRadius = 1.3f;
+        public float roamRadius = 6;
         public bool IsWalking { get; private set; }
         public float DistanceWalked { get; private set; }
+        public float FarthestFromHome { get; private set; }
         public Vector3 Home { get; private set; }
-        Vector3 destination;
-        int waypoint;
-        float idleUntil, heldUntil;
-        static readonly Vector2[] Route = { new(.95f, .1f), new(.15f, .75f), new(-.95f, -.1f), new(-.15f, -.75f) };
+        public bool OnWalkableGround => agent && agent.isOnNavMesh;
+        NavMeshAgent agent;
+        Vector3 previousPosition;
+        int destinationNumber;
+        float idleUntil, heldUntil, blockedTime;
 
         void InitializeRoaming()
         {
-            Home = transform.position;
-            waypoint = index % Route.Length;
-            SetDestination();
+            Home = transform.position; previousPosition = Home;
+            if (!session.navigation || !session.navigation.Ready) return;
+            if (!NavMesh.SamplePosition(Home, out var spawn, .8f, NavMesh.AllAreas)) return;
+            transform.position = spawn.position + Vector3.up * .025f;
+            Home = previousPosition = transform.position;
+            agent = gameObject.AddComponent<NavMeshAgent>();
+            agent.agentTypeID = session.navigation.agentTypeID;
+            agent.radius = .43f; agent.height = 1.5f; agent.baseOffset = .025f;
+            agent.speed = walkSpeed; agent.acceleration = 2; agent.angularSpeed = 105;
+            agent.updateRotation = false; agent.stoppingDistance = .12f;
+            agent.avoidancePriority = 30 + index * 8;
+            agent.isStopped = true;
         }
 
         public void HoldForCare(float seconds) => heldUntil = Mathf.Max(heldUntil, Time.time + seconds);
 
-        void SetDestination()
+        bool PickDestination()
         {
-            var offset = Route[waypoint % Route.Length] * roamRadius;
-            destination = Home + new Vector3(offset.x, 0, offset.y);
+            var path = new NavMeshPath();
+            // Sample destinations across the clearing, not a tiny orbit at spawn.
+            for (int attempt = 0; attempt < 32; attempt++)
+            {
+                float angle = (index * 103 + destinationNumber * 137.5f + attempt * 47) * Mathf.Deg2Rad;
+                float distance = roamRadius * (.75f + .25f * ((attempt + destinationNumber) % 3) / 2);
+                Vector3 candidate = Home + new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle)) * distance;
+                if (!session.navigation.Contains(candidate)) continue;
+                if (!NavMesh.SamplePosition(candidate, out var hit, .65f, agent.areaMask)) continue;
+                if (Mathf.Abs(hit.position.y - Home.y) > .7f || !session.navigation.Contains(hit.position)) continue;
+                if (Vector3.Distance(hit.position, transform.position) < 3.5f || Vector3.Distance(hit.position, Home) > roamRadius + .1f) continue;
+                if (!agent.CalculatePath(hit.position, path) || path.status != NavMeshPathStatus.PathComplete) continue;
+                agent.SetPath(path); destinationNumber++; blockedTime = 0; return true;
+            }
+            destinationNumber++; return false;
         }
 
         void UpdateRoaming(ZooDayTwoRound.Animal animal)
         {
+            float moved = Vector3.Distance(previousPosition, transform.position);
+            if (session.IsRunning) { DistanceWalked += moved; FarthestFromHome = Mathf.Max(FarthestFromHome, Vector3.Distance(Home, transform.position)); }
+            previousPosition = transform.position;
             IsWalking = false;
-            if (!session.IsRunning) return;
+            if (!agent || !agent.isOnNavMesh) return;
             Vector3 toKeeper = session.player.transform.position - transform.position; toKeeper.y = 0;
             bool receivingCare = animal.state == ZooCareState.Eating || animal.state == ZooCareState.Celebrating || Time.time < heldUntil;
-            bool nearby = toKeeper.sqrMagnitude < 3.6f * 3.6f;
-            if (receivingCare || nearby || !roams)
+            // Only requesting animals wait for an approaching keeper. Merely
+            // passing a resting animal does not freeze the surrounding troop.
+            bool nearby = animal.state == ZooCareState.Waiting && toKeeper.sqrMagnitude < 3.6f * 3.6f;
+            bool stop = !session.IsRunning || !roams || receivingCare || nearby || Time.time < idleUntil;
+            agent.isStopped = stop;
+            if (stop)
             {
-                if (nearby && animal.state != ZooCareState.Celebrating && toKeeper.sqrMagnitude > .1f)
+                if (session.IsRunning && (nearby || receivingCare) && animal.state != ZooCareState.Celebrating && toKeeper.sqrMagnitude > .1f)
                     transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(toKeeper), 125 * Time.deltaTime);
                 return;
             }
-            if (Time.time < idleUntil) return;
-            Vector3 delta = destination - transform.position; delta.y = 0;
-            if (delta.magnitude < .09f) { waypoint++; SetDestination(); idleUntil = Time.time + 1.2f + (index % 3) * .35f; return; }
-            Vector3 direction = delta.normalized;
-            // Kinematic stroll on the actual terrain, with a conservative body sweep.
-            // Nearby keepers and animals block movement; no navigation changes to Day 01.
-            float step = Mathf.Min(walkSpeed * Time.deltaTime, delta.magnitude);
-            foreach (var hit in Physics.SphereCastAll(transform.position + Vector3.up * .7f, .33f, direction, step + .12f, ~((1 << 2) | (1 << 5)), QueryTriggerInteraction.Ignore))
+            if (!agent.hasPath || (!agent.pathPending && agent.remainingDistance <= .2f))
             {
-                if (hit.transform.IsChildOf(transform) || hit.normal.y > .65f) continue;
-                waypoint++; SetDestination(); idleUntil = Time.time + .6f; return;
+                bool arrived = agent.hasPath;
+                agent.ResetPath();
+                if (arrived) idleUntil = Time.time + 1.3f + index * .15f;
+                if (!PickDestination()) idleUntil = Time.time + 1;
+                return;
             }
-            Vector3 next = transform.position + direction * step;
-            if (!TryGround(next, out float ground)) { waypoint++; SetDestination(); idleUntil = Time.time + .6f; return; }
-            next.y = ground + .025f;
-            if (Mathf.Abs(next.y - transform.position.y) > .28f) { waypoint++; SetDestination(); idleUntil = Time.time + .6f; return; }
-            DistanceWalked += step; transform.position = next;
-            transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(direction), 105 * Time.deltaTime);
-            IsWalking = true;
-        }
-
-        bool TryGround(Vector3 at, out float height)
-        {
-            height = float.NegativeInfinity;
-            foreach (var hit in Physics.RaycastAll(at + Vector3.up * 1.1f, Vector3.down, 2.2f, ~((1 << 2) | (1 << 5)), QueryTriggerInteraction.Ignore))
-            {
-                if (hit.normal.y < .75f || hit.collider.GetComponentInParent<ZooDayTwoNpc>() || hit.collider.GetComponentInParent<CharacterController>()) continue;
-                height = Mathf.Max(height, hit.point.y);
-            }
-            return !float.IsNegativeInfinity(height);
+            IsWalking = moved > .001f;
+            blockedTime = IsWalking ? 0 : blockedTime + Time.deltaTime;
+            if (blockedTime > 2) { agent.ResetPath(); PickDestination(); }
+            Vector3 direction = agent.velocity; direction.y = 0;
+            if (direction.sqrMagnitude > .001f) transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(direction), 105 * Time.deltaTime);
         }
     }
 }

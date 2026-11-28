@@ -63,16 +63,34 @@ namespace ADayAtTheZoo.PC.Editor
             Require(session && session.Round != null && flow.ActiveDay == 2, "Journal loads the dedicated Day 02 scene");
             Require(!FindObjectsByType<MonkeyCareSession>(FindObjectsSortMode.None).Any(s => s.isActiveAndEnabled), "Day 02 runs without the Day 01 session");
             Require(session.bananaIcon && session.scratcherIcon && session.monkeys.Length == 5, "Tool artwork and all five animals are bound");
+            Require(session.navigation && session.navigation.Ready && session.monkeys.All(n => n.OnWalkableGround), "All five monkeys are registered on the baked walkable ground");
+            Require(!FindObjectsByType<Transform>(FindObjectsSortMode.None).Any(t => t.name.StartsWith("Day 02 care clearing") || t.name == "Day 02 stepping stone"), "Fixed decorative circles and radial stepping stones are removed");
             Snapshot("02-day2-briefing"); yield return Frames(80);
             Click("Begin Day 02 shift"); yield return Frames(50);
             Require(session.Round.Started && ZooPCFlow.CollectionUnlocked("back-scratcher"), "Beginning the shift discovers the reusable care tool");
             var stationaryPositions = session.monkeys.Where(n => !n.roams).Select(n => n.transform.position).ToArray();
-            yield return Frames(110); Snapshot("02b-five-monkeys-strolling");
+            yield return Frames(500); Snapshot("02b-five-monkeys-strolling");
             Require(session.monkeys.Count(n => n.roams) == 3 && session.monkeys.Where(n => n.roams).All(n => n.DistanceWalked > .5f), "Three monkeys actually stroll, at gentle walking speeds");
             Require(session.monkeys.Where(n => !n.roams).Select(n => n.transform.position).SequenceEqual(stationaryPositions), "Two resting monkeys remain in their clearings");
             Require(session.monkeys.Where(n => n.roams).All(n => n.walkSpeed >= .4f && n.walkSpeed <= .6f), "Walking speed stays between 0.4 and 0.6 metres per second");
+            Debug.Log("[Zoo Day 2 Roaming] " + string.Join("; ", session.monkeys.Where(n => n.roams).Select(n => n.name + " farthest=" + n.FarthestFromHome + " travel=" + n.DistanceWalked)));
+            Require(session.monkeys.Where(n => n.roams).All(n => n.FarthestFromHome > 3.5f), "Each roaming monkey travels more than 3.5 metres from its original position");
             var first = session.monkeys.First(n => session.Round.animals[n.index].state == ZooCareState.Waiting);
-            yield return Approach(session, first, 7); Aim(session, first); yield return Frames(35); Snapshot("03-hunger-request");
+            yield return Approach(session, first, 7); Aim(session, first); yield return Frames(10);
+            int trackedFrames = 0;
+            for (int follow = 0; follow < 25; follow++)
+            {
+                Aim(session, first); yield return null;
+                if (session.Target != first || !session.TargetMarker.gameObject.activeSelf) continue;
+                Vector3 difference = session.TargetMarker.position - first.transform.position; difference.y = 0;
+                if (difference.magnitude < .06f) trackedFrames++;
+            }
+            Require(trackedFrames >= 15, "Selection ring follows the moving target instead of remaining at spawn");
+            var body = first.GetComponentsInChildren<Collider>().First(c => c.name == "Day 02 animal body");
+            Vector3 bodyOffset = body.bounds.center - first.transform.position; bodyOffset.y = 0;
+            Debug.Log("[Zoo Day 2 Collider] world offset=" + bodyOffset + " magnitude=" + bodyOffset.magnitude);
+            Require(bodyOffset.magnitude < .01f, "Actual interaction collider travels with the monkey");
+            Snapshot("03-hunger-request");
             Debug.Log("[Day 02 aim probe] " + session.playerCamera.transform.position + " -> " + first.AimPoint + " target=" + session.Target + " ray hits=" + string.Join("; ", Physics.RaycastAll(session.playerCamera.transform.position, (first.AimPoint-session.playerCamera.transform.position).normalized, Vector3.Distance(session.playerCamera.transform.position,first.AimPoint),~0,QueryTriggerInteraction.Ignore).Select(h=>h.collider.name+" parent="+h.collider.transform.parent?.name+" distance="+h.distance+" npc="+h.collider.GetComponentInParent<ZooDayTwoNpc>())));
             int beforeBananas = session.Round.Bananas;
             Require(session.TryThrow(first), "Actual aimed banana throw launched at a roaming monkey");
@@ -129,7 +147,7 @@ namespace ADayAtTheZoo.PC.Editor
             Require(!ZooPCFlow.DayIsCompleted(1), "Day 02 does not overwrite Day 01 progress");
             Require(session.Round.Feedings == 10 && session.Round.Scratches == 10 && session.Round.Stars == 3, "Real playthrough completes all twenty tasks for three stars");
             Require(session.ConfirmedScratchContacts >= 30, "All ten scratching tasks are resolved by physical claw contact");
-            Require(session.monkeys.Where(n => n.roams).All(n => Vector3.Distance(n.Home, n.transform.position) < 1.7f), "Wandering monkeys stay inside their nearby patrol areas");
+            Require(session.monkeys.Where(n => n.roams).All(n => n.OnWalkableGround && session.navigation.Contains(n.transform.position, .05f)), "Roaming monkeys stay on walkable ground inside the larger playable area");
             Click("Day 02 retry"); yield return WaitLoad(); yield return Frames(35);
             session = FindFirstObjectByType<ZooDayTwoSession>(); Require(session && !session.Round.Started && session.Round.Completed == 0 && session.Round.Bananas == session.rules.bananaCapacity, "Retry resets Day 02 without loading Day 01");
             flow.ReturnToJournal(); yield return WaitLoad(); yield return Frames(45);
@@ -178,7 +196,7 @@ namespace ADayAtTheZoo.PC.Editor
             {
                 Vector3 direction = npc.transform.position - session.player.transform.position; direction.y = 0;
                 if (direction.magnitude <= range && session.ClearPath(session.playerCamera.transform.position, npc.AimPoint, npc)) yield break;
-                if (direction.magnitude <= range) direction = Vector3.Cross(Vector3.up, direction);
+                direction = PathDirection(session, npc.transform.position);
                 direction = AvoidObstacle(session, direction);
                 session.player.transform.rotation = Quaternion.LookRotation(direction);
                 session.playerCamera.transform.localRotation = Quaternion.Euler(5, 0, 0);
@@ -193,11 +211,28 @@ namespace ADayAtTheZoo.PC.Editor
             {
                 Vector3 direction = destination - session.player.transform.position; direction.y = 0;
                 if (direction.magnitude <= range) yield break;
+                direction = PathDirection(session, destination);
                 direction = AvoidObstacle(session, direction);
                 session.player.transform.rotation = Quaternion.LookRotation(direction); session.playerCamera.transform.localRotation = Quaternion.Euler(5, 0, 0);
                 controller.Move(direction.normalized * (4.5f / 30)); yield return null;
             }
             if (!session.Round.Finished) throw new Exception("Unable to walk to care target: " + destination);
+        }
+        static Vector3 PathDirection(ZooDayTwoSession session, Vector3 destination)
+        {
+            Vector3 direction = destination - session.player.transform.position; direction.y = 0;
+            var path = new UnityEngine.AI.NavMeshPath();
+            if (session.navigation && UnityEngine.AI.NavMesh.SamplePosition(session.player.transform.position, out var start, 1, UnityEngine.AI.NavMesh.AllAreas) &&
+                UnityEngine.AI.NavMesh.SamplePosition(destination, out var end, 2, UnityEngine.AI.NavMesh.AllAreas) &&
+                UnityEngine.AI.NavMesh.CalculatePath(start.position, end.position, UnityEngine.AI.NavMesh.AllAreas, path) && path.status == UnityEngine.AI.NavMeshPathStatus.PathComplete)
+            {
+                foreach (var corner in path.corners.Skip(1))
+                {
+                    var to = corner - session.player.transform.position; to.y = 0;
+                    if (to.magnitude > .4f) return to.normalized;
+                }
+            }
+            return direction.normalized;
         }
         static Vector3 AvoidObstacle(ZooDayTwoSession session, Vector3 direction)
         {
